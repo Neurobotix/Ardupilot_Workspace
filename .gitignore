@@ -1,0 +1,37 @@
+# Runtime output
+var/
+src/SIM_ARD_GAW/logs/
+**/*.BIN
+**/*.bin
+**/*.tlog
+**/*.tlog.raw
+**/runs/
+**/round_robin_logs/
+**/orchestrator_logs/
+**/*_sitl_state/
+
+# Local-only overlays and notes
+.private/
+*.local
+*.local.parm
+!evidence/curated_logs/recovered_param_stacks/**/private_overlay/**/*.local.parm
+.ai/
+.claude/
+.codex/
+.agents/
+# External dependencies and build outputs
+src/ardupilot/
+src/ardupilot_gazebo/
+src/SITL_Models/
+build/
+install/
+env/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
