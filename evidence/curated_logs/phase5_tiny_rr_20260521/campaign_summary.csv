@@ -1,0 +1,17 @@
+combo_key,x_wind_mps,y_wind_mps,accepted_runs,remaining_runs,attempt_count,pending_attempt_count,last_status,last_attempt_id
+wind_x_00_y_00,0,0,1,0,1,0,success_square_only,wind_x_00_y_00__rep_01__attempt_001
+wind_x_00_y_04,0,4,0,1,0,0,,
+wind_x_00_y_08,0,8,0,1,0,0,,
+wind_x_00_y_12,0,12,0,1,0,0,,
+wind_x_04_y_00,4,0,0,1,0,0,,
+wind_x_04_y_04,4,4,0,1,0,0,,
+wind_x_04_y_08,4,8,0,1,0,0,,
+wind_x_04_y_12,4,12,0,1,0,0,,
+wind_x_08_y_00,8,0,0,1,0,0,,
+wind_x_08_y_04,8,4,0,1,0,0,,
+wind_x_08_y_08,8,8,0,1,0,0,,
+wind_x_08_y_12,8,12,0,1,0,0,,
+wind_x_12_y_00,12,0,0,1,0,0,,
+wind_x_12_y_04,12,4,0,1,0,0,,
+wind_x_12_y_08,12,8,0,1,0,0,,
+wind_x_12_y_12,12,12,0,1,0,0,,

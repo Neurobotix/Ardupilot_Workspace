@@ -1,0 +1,142 @@
+{
+  "analysis_position_source": "sim",
+  "archived_gazebo_world_file": null,
+  "attempt_id": "wind_x_00_y_00__rep_01__attempt_001",
+  "attempt_index": 1,
+  "auto_arm_to_auto_settle_s": 5.0,
+  "auto_wind_injection_alt_timeout_s": 180.0,
+  "auto_wind_injection_min_relalt_m": 20.0,
+  "auto_wind_phase": "after-takeoff",
+  "bin_collection_method": "isolated_sitl_use_dir",
+  "entry_waypoint_max_pass_distance_m": 200,
+  "expected_named_bin_file": "wind_x_00_y_00__rep_01__attempt_001.BIN",
+  "experiment_lane": "Cross Tracking Error (CTE)",
+  "force_arm": true,
+  "gazebo_launch_command": "./launch.sh gazebo-plane-cte",
+  "gazebo_plugin_runtime": {
+    "gz_sim_system_plugin_path": "/usr/local/lib/ardupilot_gazebo",
+    "gz_sim_system_plugin_path_entries": [
+      "/usr/local/lib/ardupilot_gazebo"
+    ],
+    "known_ardupilot_plugin_binaries": [
+      {
+        "directory": "/home/ahmed/ardupilot_workspace_next/build/ardupilot_gazebo",
+        "exists": false,
+        "mtime_s": null,
+        "plugin_file": "/home/ahmed/ardupilot_workspace_next/build/ardupilot_gazebo/libArduPilotPlugin.so",
+        "sha256": null,
+        "size_bytes": null
+      },
+      {
+        "directory": "/usr/local/lib/ardupilot_gazebo",
+        "exists": true,
+        "mtime_s": 1769518136.9163158,
+        "plugin_file": "/usr/local/lib/ardupilot_gazebo/libArduPilotPlugin.so",
+        "sha256": "79a2a41cd2e68e979b0196002fb2d2345b66f19dd2493045d5f72bb2e206921f",
+        "size_bytes": 3392264
+      }
+    ]
+  },
+  "gazebo_world_file": null,
+  "local_param_override_present": false,
+  "manual_control": false,
+  "mavlink_addr": "udpin:0.0.0.0:14551",
+  "mission_contract": {
+    "contract": {
+      "expected_item_count": 30,
+      "final_seq": 29,
+      "loiter_seq": 23,
+      "loiter_to_alt_seq": 25,
+      "name": "square_500m_five_laps_loiter5_land",
+      "requirements": [
+        {
+          "command": 16,
+          "label": "QGC home row",
+          "seq": 0
+        },
+        {
+          "command": 22,
+          "label": "takeoff",
+          "seq": 1
+        },
+        {
+          "command": 16,
+          "label": "square entry",
+          "seq": 2
+        },
+        {
+          "command": 16,
+          "label": "square start",
+          "seq": 3
+        },
+        {
+          "command": 16,
+          "label": "square end",
+          "seq": 22
+        },
+        {
+          "command": 18,
+          "label": "loiter turns",
+          "seq": 23
+        },
+        {
+          "command": 189,
+          "label": "land start",
+          "seq": 24
+        },
+        {
+          "command": 31,
+          "label": "loiter to altitude",
+          "seq": 25
+        },
+        {
+          "command": 21,
+          "label": "land",
+          "seq": 29
+        }
+      ],
+      "square_end_seq": 22,
+      "square_start_seq": 3
+    },
+    "item_count": 30,
+    "mission_file": "/home/ahmed/ardupilot_workspace_next/assets/missions/square_500m_five_laps_loiter5_land.waypoints",
+    "mission_sha256": "de4f39f5adb156532a1e10048e565a4b92fa7941abdca48fdffdc64caf39af97"
+  },
+  "mission_file": "/home/ahmed/ardupilot_workspace_next/assets/missions/square_500m_five_laps_loiter5_land.waypoints",
+  "mission_timeout_s": 1262.0,
+  "param_file_provenance": [
+    {
+      "path": "/home/ahmed/ardupilot_workspace_next/config/vehicles/plane_base.parm",
+      "sha256": "8941fa559f762fb4111c150db04e4d36c0ad05d680f8cff2cd28219ba8ceaa01",
+      "size_bytes": 2828
+    },
+    {
+      "path": "/home/ahmed/ardupilot_workspace_next/config/overlays/plane_airspeed.parm",
+      "sha256": "ebf99c7e5b65e24ddfacb0bafa2295579c9cb073600c8548f6050f10d778e577",
+      "size_bytes": 1361
+    }
+  ],
+  "param_files_loaded_at_sitl_start": [
+    "/home/ahmed/ardupilot_workspace_next/config/vehicles/plane_base.parm",
+    "/home/ahmed/ardupilot_workspace_next/config/overlays/plane_airspeed.parm"
+  ],
+  "param_stack_order_note": "Files are applied in listed order; later files override earlier ones.",
+  "preloaded_wind_refresh": null,
+  "sitl_bin_dir": "/home/ahmed/ardupilot_workspace_next/var/runs/phase5_tiny_rr_20260521_escalated/scripts/round_robin_logs/wind_x_00_y_00__rep_01__pass_001__20260521T085955Z_sitl_state/logs",
+  "sitl_launch_command": "./launch.sh plane-cte",
+  "sitl_use_dir": "/home/ahmed/ardupilot_workspace_next/var/runs/phase5_tiny_rr_20260521_escalated/scripts/round_robin_logs/wind_x_00_y_00__rep_01__pass_001__20260521T085955Z_sitl_state",
+  "sitl_wipe_eeprom_expected": true,
+  "target_run_index": 1,
+  "wind_frame": "Gazebo world-frame ENU: +X=East, +Y=North. ArduPilot Gazebo plugin handles NED<->ENU internally.",
+  "wind_info_topic": "/world/mini_talon_wind_runway/wind_info",
+  "wind_injection_source": "run_one.py via Gazebo wind topic during after-takeoff",
+  "wind_topic": "/world/mini_talon_wind_runway/wind/",
+  "world_default_wind_mps": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0
+  },
+  "world_name": "mini_talon_wind_runway",
+  "x_wind_mps": 0,
+  "y_wind_mps": 0
+}
