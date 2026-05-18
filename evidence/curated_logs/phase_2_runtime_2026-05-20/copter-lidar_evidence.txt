@@ -1,0 +1,49 @@
+# Phase 2 runtime evidence: copter-lidar
+
+Captured: 2026-05-21T06:51:00+0300
+Source tlog (raw, under var/, disposable):
+  var/logs/mavproxy/copter-lidar/logs/2026-05-21/flight2/flight.tlog
+tlog size: 1.8M
+
+## Handshake proof
+HEARTBEAT messages received: 793
+First HEARTBEAT:
+  2026-05-21 06:44:01.94: HEARTBEAT {type : 6, autopilot : 8, base_mode : 0, custom_mode : 0, system_status : 0, mavlink_version : 3}
+Last HEARTBEAT:
+  2026-05-21 06:50:56.08: HEARTBEAT {type : 2, autopilot : 3, base_mode : 217, custom_mode : 4, system_status : 4, mavlink_version : 3}
+
+## GPS fix
+Last GPS_RAW_INT:
+  2026-05-21 06:50:55.76: GPS_RAW_INT {time_usec : 377833000, fix_type : 6, lat : -353632643, lon : 1491653278, alt : 588190, eph : 121, epv : 200, vel : 0, cog : 15718, satellites_visible : 10, alt_ellipsoid : 588190, h_acc : 300, v_acc : 300, vel_acc : 0, hdg_acc : 0, yaw : 0}
+
+## Boot / EKF / arming status messages
+  2026-05-21 06:44:12.48: STATUSTEXT {severity : 6, text : ArduCopter V4.7.0-dev (f198baa9), id : 0, chunk_seq : 0}
+  2026-05-21 06:44:12.48: STATUSTEXT {severity : 6, text : ArduCopter V4.7.0-dev (f198baa9), id : 0, chunk_seq : 0}
+  2026-05-21 06:44:12.68: STATUSTEXT {severity : 6, text : Calibrating barometer, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:13.31: STATUSTEXT {severity : 6, text : ArduCopter V4.7.0-dev (f198baa9), id : 0, chunk_seq : 0}
+  2026-05-21 06:44:14.28: STATUSTEXT {severity : 6, text : Barometer 1 calibration complete, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:14.28: STATUSTEXT {severity : 6, text : Barometer 2 calibration complete, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:14.28: STATUSTEXT {severity : 6, text : ArduPilot Ready, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:16.28: STATUSTEXT {severity : 6, text : EKF3 IMU0 initialised, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:16.28: STATUSTEXT {severity : 6, text : EKF3 IMU1 initialised, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:16.28: STATUSTEXT {severity : 6, text : AHRS: EKF3 active, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:17.64: STATUSTEXT {severity : 6, text : EKF3 IMU0 tilt alignment complete, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:17.65: STATUSTEXT {severity : 6, text : EKF3 IMU1 tilt alignment complete, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:17.72: STATUSTEXT {severity : 6, text : EKF3 IMU1 MAG0 initial yaw alignment complete, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:17.73: STATUSTEXT {severity : 6, text : EKF3 IMU0 MAG0 initial yaw alignment complete, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:21.62: STATUSTEXT {severity : 6, text : GPS 1: probing for u-blox at 230400 baud, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:21.64: STATUSTEXT {severity : 6, text : GPS 1: detected u-blox, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:31.83: STATUSTEXT {severity : 6, text : EKF3 IMU1 origin set, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:32.03: STATUSTEXT {severity : 6, text : EKF3 IMU0 origin set, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:53.43: STATUSTEXT {severity : 6, text : EKF3 IMU1 is using GPS, id : 0, chunk_seq : 0}
+  2026-05-21 06:44:53.43: STATUSTEXT {severity : 6, text : EKF3 IMU0 is using GPS, id : 0, chunk_seq : 0}
+  2026-05-21 06:45:17.91: STATUSTEXT {severity : 6, text : EKF3 IMU0 MAG0 in-flight yaw alignment complete, id : 0, chunk_seq : 0}
+  2026-05-21 06:45:18.03: STATUSTEXT {severity : 6, text : EKF3 IMU1 MAG0 in-flight yaw alignment complete, id : 0, chunk_seq : 0}
+
+## Altitude / speed (proves Gazebo physics coupling)
+Max relative_alt (mm):
+  4044
+Max VFR_HUD groundspeed (m/s):
+  2.4631686210632324
+
+## End of evidence for copter-lidar
