@@ -1,0 +1,67 @@
+[0;34m[i][0m Setting up environment...
+[0;32m[✓][0m Workspace environment loaded
+[0;32m[✓][0m Environment configured
+[0;34m[i][0m Launching LiDAR Bridge for Plane...
+
+[0;34m[i][0m Make sure:
+    1. ArduPlane SITL is running
+    2. Gazebo is running with plane LiDAR world
+    3. RNGFND1_TYPE is set to 10
+    4. RNGFND1_ORIENT is set to 25 (DOWN)
+
+==================================================
+Unified LiDAR Bridge - PLANE
+==================================================
+
+Connecting to ArduPilot on port 14550...
+Connected to system 1
+
+Mode: Plane (fast) - Downward RNGFND with Gazebo Transport
+--------------------------------------------------
+Subscribed to /lidar via Gazebo Transport
+[   10] AGL: out of range (>40m)
+[   20] AGL: out of range (>40m)
+[   30] AGL: out of range (>40m)
+[   40] AGL: out of range (>40m)
+[   50] AGL: out of range (>40m)
+[   60] AGL: out of range (>40m)
+[   70] AGL: out of range (>40m)
+[   80] AGL: out of range (>40m)
+[   90] AGL: out of range (>40m)
+[  100] AGL: out of range (>40m)
+[  110] AGL: out of range (>40m)
+[  120] AGL: out of range (>40m)
+[  130] AGL: out of range (>40m)
+[  140] AGL: 1.83m
+[  150] AGL: 6.04m
+[  160] AGL: 10.43m
+[  170] AGL: 15.99m
+[  180] AGL: 21.59m
+[  190] AGL: 27.84m
+[  200] AGL: 32.90m
+[  210] AGL: 35.60m
+[  220] AGL: out of range (>40m)
+[  230] AGL: out of range (>40m)
+[  240] AGL: out of range (>40m)
+[  250] AGL: out of range (>40m)
+[  260] AGL: out of range (>40m)
+[  270] AGL: out of range (>40m)
+[  280] AGL: out of range (>40m)
+[  290] AGL: out of range (>40m)
+[  300] AGL: out of range (>40m)
+[  310] AGL: out of range (>40m)
+[  320] AGL: out of range (>40m)
+[  330] AGL: out of range (>40m)
+[  340] AGL: out of range (>40m)
+[  350] AGL: out of range (>40m)
+[  360] AGL: out of range (>40m)
+[  370] AGL: out of range (>40m)
+[  380] AGL: out of range (>40m)
+[  390] AGL: out of range (>40m)
+[  400] AGL: out of range (>40m)
+[  410] AGL: out of range (>40m)
+[  420] AGL: out of range (>40m)
+[  430] AGL: out of range (>40m)
+[  440] AGL: out of range (>40m)
+[  450] AGL: out of range (>40m)
+[  460] AGL: out of range (>40m)
