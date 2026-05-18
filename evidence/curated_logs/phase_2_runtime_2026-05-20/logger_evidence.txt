@@ -1,0 +1,58 @@
+# Phase 2 runtime evidence: logger (curated summary)
+
+Captured: 2026-05-21T08:47:00+0300
+
+This is a curated summary. The raw logger log is runtime output and stays under
+var/ (ignored, disposable) per governance/standards/evidence.md. It is not
+promoted into evidence/.
+
+## Source (raw, under var/, NOT promoted)
+
+  var/logs/flight_logger/flight_20260521_065708.log
+  size:   48783 bytes (48K)
+  lines:  332
+  sha256: 73c391e54dcc11fb9ca26e525407542f69fb13e16eb482e1e2f1a7a26bf46789
+
+## Connection proof
+
+Captured from the logger console during the run. The full raw console is
+runtime output and stays under var/ (ignored, NOT promoted):
+var/logs/flight_logger/logger_console_20260521.txt
+
+  Connecting to udp:127.0.0.1:14551...
+  Waiting for heartbeat...
+  Connected to 1:0
+
+The logger connected to a live ArduPlane SITL MAVLink source on udp 14551.
+
+## Output path
+
+  Log file: var/logs/flight_logger/flight_20260521_065708.log
+
+Logger output landed under var/logs/flight_logger/ exactly as configured in
+log_flight_data.py (LOG_DIR = WORKSPACE_DIR / "var" / "logs" / "flight_logger").
+
+## Captured behavior
+
+The logger recorded live telemetry at 10 Hz and tracked mode transitions:
+
+  *** [06:57:09.878] EVENT: MODE: UNKNOWN -> MANUAL ***
+  *** [06:57:32.330] EVENT: MODE: MANUAL -> TAKEOFF ***
+
+## Bounded excerpt (raw log header + representative data lines)
+
+  ================================================================================
+  FLIGHT DATA LOG
+  ================================================================================
+  Session ID:    20260521_065708
+  Start Time:    2026-05-21 06:57:08
+  Connection:    udp:127.0.0.1:14551
+  Update Rate:   10.0 Hz
+  ================================================================================
+  06:57:08.624 | ALT: 0.0m | GS: 0.0 AS: 0.0m/s | HDG:359 | THR: 0% | UNKNOWN | DISARMED
+  06:57:32.374 | ALT: 0.0m | GS: 0.0 AS: 0.0m/s | HDG:359 | THR: 0% | TAKEOFF | DISARMED
+
+## Result
+
+logger: PASS. Connected to a live MAVLink source, captured telemetry, and wrote
+a flight log under var/logs/flight_logger/.
