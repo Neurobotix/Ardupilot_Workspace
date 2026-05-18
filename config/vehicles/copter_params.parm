@@ -1,0 +1,31 @@
+# ArduCopter Parameters for SITL Simulation
+# Load with: param load copter_params.parm
+
+# Enable JSON backend for Gazebo
+SIM_JSON_MASTER 1
+
+# Frame configuration (Quad-X)
+FRAME_CLASS 1
+FRAME_TYPE 1
+
+# Failsafe - disabled for simulation
+FS_THR_ENABLE 0
+FS_GCS_ENABLE 0
+
+# Position control tuning
+WPNAV_SPEED 500
+WPNAV_RADIUS 200
+WPNAV_SPEED_UP 250
+WPNAV_SPEED_DN 150
+
+# Loiter tuning
+LOIT_SPEED 1250
+LOIT_ACC_MAX 500
+
+# RTL settings
+RTL_ALT 1500
+RTL_SPEED 0
+
+# Altitude hold
+PILOT_SPEED_UP 250
+PILOT_SPEED_DN 150
