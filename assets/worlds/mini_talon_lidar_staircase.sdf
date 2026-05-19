@@ -1,0 +1,277 @@
+<?xml version="1.0" ?>
+<!--
+  Mini Talon LiDAR Staircase Test World
+  Phase 2 — Flight integration over 5 elevated platforms
+  
+  Platforms (20m x 20m each, spaced 100m apart along X-axis):
+    Platform 1: X=100m, top at Z=5m   → expect ~2500cm reading at 30m altitude
+    Platform 2: X=200m, top at Z=10m  → expect ~2000cm reading at 30m altitude
+    Platform 3: X=300m, top at Z=15m  → expect ~1500cm reading at 30m altitude
+    Platform 4: X=400m, top at Z=20m  → expect ~1000cm reading at 30m altitude
+    Platform 5: X=500m, top at Z=25m  → expect ~500cm reading at 30m altitude
+  
+  Aircraft flies at constant 30m altitude, LiDAR measures distance to ground/platforms.
+  Ground plane at Z=0 → expect ~3000cm reading between platforms.
+-->
+<sdf version="1.9">
+  <world name="plane_lidar_staircase">
+    <physics name="1ms" type="ignore">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system"
+      name="gz::sim::systems::Physics">
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system"
+      name="gz::sim::systems::UserCommands">
+    </plugin>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+      name="gz::sim::systems::Imu">
+    </plugin>
+    <plugin filename="gz-sim-navsat-system"
+      name="gz::sim::systems::NavSat">
+    </plugin>
+    <plugin filename="gz-sim-sensors-system"
+      name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <scene>
+      <ambient>1.0 1.0 1.0</ambient>
+      <background>0.8 0.8 0.8</background>
+      <sky></sky>
+    </scene>
+
+    <!-- Same origin as all other worlds in this project (CMAC) -->
+    <spherical_coordinates>
+      <latitude_deg>-35.363262</latitude_deg>
+      <longitude_deg>149.165237</longitude_deg>
+      <elevation>584</elevation>
+      <heading_deg>0</heading_deg>
+      <surface_model>EARTH_WGS84</surface_model>
+    </spherical_coordinates>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.8 0.8 0.8 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Ground plane -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>5000 5000</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>5000 5000</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.3 0.5 0.3 1</ambient>
+            <diffuse>0.3 0.5 0.3 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Runway visual (for takeoff reference) — oriented North-South -->
+    <model name="runway">
+      <static>true</static>
+      <pose>0 -50 0.01 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>10 100 0.01</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.2 0.2 1</ambient>
+            <diffuse>0.2 0.2 0.2 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!--
+      ==========================================================
+      STAIRCASE PLATFORMS
+      Each platform is 20m x 20m, centered on the flight path (X=0)
+      Spaced 100m apart along Y-axis (North direction)
+      Colors progress from blue (low) to red (high)
+      ==========================================================
+    -->
+
+    <!-- Platform 1: Y=100m, top at Z=5m (box height=5m, center at Z=2.5m) -->
+    <model name="platform_1">
+      <static>true</static>
+      <pose>0 100 2.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>20 20 5</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>20 20 5</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.2 0.8 1</ambient>
+            <diffuse>0.2 0.2 0.8 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Platform 2: Y=200m, top at Z=10m (box height=10m, center at Z=5m) -->
+    <model name="platform_2">
+      <static>true</static>
+      <pose>0 200 5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>20 20 10</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>20 20 10</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.6 0.8 1</ambient>
+            <diffuse>0.2 0.6 0.8 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Platform 3: Y=300m, top at Z=15m (box height=15m, center at Z=7.5m) -->
+    <model name="platform_3">
+      <static>true</static>
+      <pose>0 300 7.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>20 20 15</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>20 20 15</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.8 0.4 1</ambient>
+            <diffuse>0.2 0.8 0.4 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Platform 4: Y=400m, top at Z=20m (box height=20m, center at Z=10m) -->
+    <model name="platform_4">
+      <static>true</static>
+      <pose>0 400 10 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>20 20 20</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>20 20 20</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.6 0.2 1</ambient>
+            <diffuse>0.8 0.6 0.2 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Platform 5: Y=500m, top at Z=25m (box height=25m, center at Z=12.5m) -->
+    <model name="platform_5">
+      <static>true</static>
+      <pose>0 500 12.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>20 20 25</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>20 20 25</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.2 0.2 1</ambient>
+            <diffuse>0.8 0.2 0.2 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!--
+      Mini Talon with LiDAR — DYNAMIC (will be controlled by SITL)
+      Spawns at origin facing North (+Y direction) along the runway
+      NOT static — physics enabled for flight
+      
+      Gazebo yaw: 0° = +X (East), 90° = +Y (North)
+      Platforms are along +Y axis, so yaw=90 to face them.
+    -->
+    <include>
+      <uri>model://mini_talon_with_lidar</uri>
+      <pose degrees="true">0 0 0.5 0 0 90</pose>
+    </include>
+
+  </world>
+</sdf>

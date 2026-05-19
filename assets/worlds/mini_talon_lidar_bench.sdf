@@ -1,0 +1,116 @@
+<?xml version="1.0" ?>
+<!--
+  Mini Talon LiDAR Bench Test World
+  Phase 1 — Static bridge validation (no flight)
+  
+  The model is held static at a configurable height above the ground plane.
+  Edit the <pose> Z-value in the <include> block to test different heights:
+    B1: Z=10   (expect ~1000 cm)
+    B2: Z=2    (expect ~200 cm)
+    B3: Z=38   (expect ~3800 cm)
+    B4: Z=45   (expect 4001 cm — out of range)
+-->
+<sdf version="1.9">
+  <world name="plane_lidar_bench">
+    <physics name="1ms" type="ignore">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system"
+      name="gz::sim::systems::Physics">
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system"
+      name="gz::sim::systems::UserCommands">
+    </plugin>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+      name="gz::sim::systems::Imu">
+    </plugin>
+    <plugin filename="gz-sim-navsat-system"
+      name="gz::sim::systems::NavSat">
+    </plugin>
+    <plugin filename="gz-sim-sensors-system"
+      name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <scene>
+      <ambient>1.0 1.0 1.0</ambient>
+      <background>0.8 0.8 0.8</background>
+      <sky></sky>
+    </scene>
+
+    <!-- Same origin as all other worlds in this project -->
+    <spherical_coordinates>
+      <latitude_deg>-35.363262</latitude_deg>
+      <longitude_deg>149.165237</longitude_deg>
+      <elevation>584</elevation>
+      <heading_deg>0</heading_deg>
+      <surface_model>EARTH_WGS84</surface_model>
+    </spherical_coordinates>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.8 0.8 0.8 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Ground plane — the LiDAR target surface -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>5000 5000</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>5000 5000</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.3 0.5 0.3 1</ambient>
+            <diffuse>0.3 0.5 0.3 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!--
+      Mini Talon with LiDAR — STATIC (does not move)
+      
+      Change the Z value in the pose below to set the test height:
+        B1: Z=10   → LiDAR reads ~10m  (1000 cm)
+        B2: Z=2    → LiDAR reads ~2m   (200 cm)
+        B3: Z=38   → LiDAR reads ~38m  (3800 cm)
+        B4: Z=45   → LiDAR reads >40m  (4001 cm, out of range)
+      
+      The model is set static so gravity does not pull it down.
+      Heading 90° = East along X axis (same as runway world).
+    -->
+    <include>
+      <uri>model://mini_talon_with_lidar</uri>
+      <pose degrees="true">0 0 10 0 0 90</pose>
+      <static>true</static>
+    </include>
+
+  </world>
+</sdf>
