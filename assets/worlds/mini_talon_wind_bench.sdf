@@ -1,0 +1,136 @@
+<?xml version="1.0" ?>
+<!--
+  Wind Bench World
+  ================
+  Static sensor validation — no flight, no SITL, no ArduPilot.
+  Same idea as mini_talon_lidar_bench: known input → verify measured output.
+
+  Known input:  <linear_velocity> in the <wind> block below
+  Verified output: gz topic -e -t /airspeed  (diff_pressure field)
+  Formula: diff_pressure = 0.5 × 1.225 × v²
+
+  Bench cases — edit the <linear_velocity> line to switch:
+    W0:  0  0  0   → diff_pressure ≈  0.0 Pa  (zero wind sanity check)
+    W1:  5  0  0   → diff_pressure ≈ 15.3 Pa  [DEFAULT]
+    W2: 10  0  0   → diff_pressure ≈ 61.3 Pa
+    W3:  0  5  0   → diff_pressure ≈ 15.3 Pa  (crosswind, same magnitude)
+-->
+<sdf version="1.9">
+  <world name="wind_bench">
+
+    <physics name="1ms" type="ignore">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system"
+      name="gz::sim::systems::Physics">
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system"
+      name="gz::sim::systems::UserCommands">
+    </plugin>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+      name="gz::sim::systems::Imu">
+    </plugin>
+    <plugin filename="gz-sim-navsat-system"
+      name="gz::sim::systems::NavSat">
+    </plugin>
+
+    <!-- Required: publishes wind entity components each tick so the
+         air_speed sensor gets consistent WorldLinearVelocity data.
+         time_for_rise=0 → wind is instant, no ramp (bench needs clean values).
+         force_approximation_scaling_factor is irrelevant for a static model
+         but must be present for the plugin to initialise. -->
+    <plugin filename="gz-sim-wind-effects-system"
+      name="gz::sim::systems::WindEffects">
+      <force_approximation_scaling_factor>0.001</force_approximation_scaling_factor>
+      <horizontal>
+        <magnitude>
+          <time_for_rise>0.1</time_for_rise>
+          <sin><amplitude_percent>0</amplitude_percent></sin>
+          <noise type="gaussian"><mean>0</mean><stddev>0</stddev></noise>
+        </magnitude>
+        <direction>
+          <time_for_rise>0.1</time_for_rise>
+          <sin><amplitude>0</amplitude></sin>
+          <noise type="gaussian"><mean>0</mean><stddev>0</stddev></noise>
+        </direction>
+      </horizontal>
+      <vertical>
+        <noise type="gaussian"><mean>0</mean><stddev>0</stddev></noise>
+      </vertical>
+    </plugin>
+
+    <!-- Required: enables the air_speed sensor type -->
+    <plugin filename="gz-sim-air-speed-system"
+      name="gz::sim::systems::AirSpeed">
+    </plugin>
+
+    <!-- THE INPUT — edit this line to switch bench cases W0/W1/W2/W3 -->
+    <wind>
+      <linear_velocity>5 0 0</linear_velocity>
+    </wind>
+
+    <scene>
+      <ambient>1.0 1.0 1.0</ambient>
+      <background>0.8 0.8 0.8</background>
+    </scene>
+
+    <spherical_coordinates>
+      <latitude_deg>-35.363262</latitude_deg>
+      <longitude_deg>149.165237</longitude_deg>
+      <elevation>584</elevation>
+      <heading_deg>0</heading_deg>
+      <surface_model>EARTH_WGS84</surface_model>
+    </spherical_coordinates>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.8 0.8 0.8 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Ground plane — not needed for the bench but prevents the model
+         disappearing into the void if physics is unpaused accidentally -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>5000 5000</size></plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>5000 5000</size></plane>
+          </geometry>
+          <material>
+            <ambient>0.3 0.5 0.3 1</ambient>
+            <diffuse>0.3 0.5 0.3 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Wind sensor probe: no ArduPilot, no LiftDrag, no motors.
+         NOT static — the AirSpeed system skips static links.
+         The probe won't fly: zero aerodynamic forces keep it grounded. -->
+    <include>
+      <uri>model://wind_sensor_probe</uri>
+      <pose>0 0 0.5 0 0 0</pose>
+      <enable_wind>true</enable_wind>
+    </include>
+
+  </world>
+</sdf>
