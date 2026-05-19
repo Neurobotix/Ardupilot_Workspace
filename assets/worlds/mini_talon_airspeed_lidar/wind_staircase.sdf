@@ -1,0 +1,340 @@
+<?xml version="1.0" ?>
+<!--
+  Mini Talon Airspeed + LiDAR Integrated Test World
+
+  This world intentionally inherits the validated frame from
+  `mini_talon_wind_runway.sdf`:
+  - standard runway include at the origin,
+  - aircraft spawned at the origin facing East (yaw=0),
+  - 5 m/s headwind for the eastbound takeoff run. Note: north component added.
+
+  The staircase terrain is then added on the same eastbound centerline so the
+  airspeed path and the downward LiDAR path can be exercised in one clean lane.
+-->
+<sdf version="1.7">
+  <world name="mini_talon_airspeed_lidar_wind_staircase">
+    <physics name="1ms" type="ignore">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system"
+      name="gz::sim::systems::Physics">
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system"
+      name="gz::sim::systems::UserCommands">
+    </plugin>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+      name="gz::sim::systems::Imu">
+    </plugin>
+    <plugin filename="gz-sim-navsat-system"
+      name="gz::sim::systems::NavSat">
+    </plugin>
+    <plugin filename="gz-sim-air-speed-system"
+      name="gz::sim::systems::AirSpeed">
+    </plugin>
+    <plugin filename="gz-sim-sensors-system"
+      name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <!-- Wind: 5 m/s headwind for the eastbound takeoff lane.
+         The aircraft faces East (yaw=0), so air moves West. -->
+    <wind>
+      <linear_velocity>5 1 0</linear_velocity> <!--  changed from -5 0 0 -->
+    </wind>
+    <plugin filename="gz-sim-wind-effects-system"
+      name="gz::sim::systems::WindEffects">
+      <force_approximation_scaling_factor>0.001</force_approximation_scaling_factor> <!-- trace the effect of changing this-->
+      <horizontal>
+        <magnitude>
+          <time_for_rise>10</time_for_rise>
+          <sin><amplitude_percent>0</amplitude_percent></sin>
+          <noise type="gaussian"><mean>0</mean><stddev>0</stddev></noise>
+        </magnitude>
+        <direction>
+          <time_for_rise>10</time_for_rise>
+          <sin><amplitude>0</amplitude></sin>
+          <noise type="gaussian"><mean>0</mean><stddev>0</stddev></noise>
+        </direction>
+      </horizontal>
+      <vertical> <!--  look at this, change var-->
+        <noise type="gaussian"><mean>0</mean><stddev>0</stddev></noise>
+      </vertical>
+    </plugin>
+
+    <scene>
+      <ambient>1.0 1.0 1.0</ambient>
+      <background>0.8 0.8 0.8</background>
+      <sky></sky>
+    </scene>
+
+    <!-- Same origin as all other worlds in this project (CMAC) -->
+    <spherical_coordinates>
+      <latitude_deg>-35.363262</latitude_deg>
+      <longitude_deg>149.165237</longitude_deg>
+      <elevation>584</elevation>
+      <heading_deg>0</heading_deg>
+      <surface_model>EARTH_WGS84</surface_model>
+    </spherical_coordinates>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.8 0.8 0.8 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- ENU axes copied from the validated wind world for orientation sanity. -->
+    <model name="axes">
+      <static>1</static>
+      <link name="link">
+        <visual name="r">
+          <cast_shadows>0</cast_shadows>
+          <pose>5 0 0.1 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>10 0.01 0.01</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>1 0 0 1</ambient>
+            <diffuse>1 0 0 1</diffuse>
+            <emissive>1 0 0 1</emissive>
+            <specular>0.5 0.5 0.5 1</specular>
+          </material>
+        </visual>
+        <visual name="g">
+          <cast_shadows>0</cast_shadows>
+          <pose>0 5 0.1 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.01 10 0.01</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0 1 0 1</ambient>
+            <diffuse>0 1 0 1</diffuse>
+            <emissive>0 1 0 1</emissive>
+            <specular>0.5 0.5 0.5 1</specular>
+          </material>
+        </visual>
+        <visual name="b">
+          <cast_shadows>0</cast_shadows>
+          <pose>0 0 5.1 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.01 0.01 10</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0 0 1 1</ambient>
+            <diffuse>0 0 1 1</diffuse>
+            <emissive>0 0 1 1</emissive>
+            <specular>0.5 0.5 0.5 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Ground plane -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>5000 5000</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>5000 5000</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.3 0.5 0.3 1</ambient>
+            <diffuse>0.3 0.5 0.3 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Use the standard runway model so AUTO takeoff has a real launch lane. -->
+    <include>
+      <pose degrees="true">0 0 0 0 0 90</pose>
+      <uri>model://runway</uri>
+    </include>
+
+    <!--
+      ==========================================================
+      STAIRCASE PLATFORMS
+      Each platform is 20m x 20m, centered on the flight path (Y=0)
+      Spaced 100m apart along X-axis (East direction)
+      The first platform starts at X=250m so the aircraft gets a real climbout
+      segment before the staircase begins.
+      Colors progress from blue (low) to red (high)
+      ==========================================================
+    -->
+
+    <!-- Platform 1: X=250m, top at Z=5m (box height=5m, center at Z=2.5m) -->
+    <model name="platform_1">
+      <static>true</static>
+      <pose>250 0 2.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>20 20 5</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>20 20 5</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.2 0.8 1</ambient>
+            <diffuse>0.2 0.2 0.8 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Platform 2: X=350m, top at Z=10m (box height=10m, center at Z=5m) -->
+    <model name="platform_2">
+      <static>true</static>
+      <pose>350 0 5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>20 20 10</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>20 20 10</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.6 0.8 1</ambient>
+            <diffuse>0.2 0.6 0.8 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Platform 3: X=450m, top at Z=15m (box height=15m, center at Z=7.5m) -->
+    <model name="platform_3">
+      <static>true</static>
+      <pose>450 0 7.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>20 20 15</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>20 20 15</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.8 0.4 1</ambient>
+            <diffuse>0.2 0.8 0.4 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Platform 4: X=550m, top at Z=20m (box height=20m, center at Z=10m) -->
+    <model name="platform_4">
+      <static>true</static>
+      <pose>550 0 10 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>20 20 20</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>20 20 20</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.6 0.2 1</ambient>
+            <diffuse>0.8 0.6 0.2 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Platform 5: X=650m, top at Z=25m (box height=25m, center at Z=12.5m) -->
+    <model name="platform_5">
+      <static>true</static>
+      <pose>650 0 12.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>20 20 25</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>20 20 25</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.2 0.2 1</ambient>
+            <diffuse>0.8 0.2 0.2 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!--
+      Integrated Mini Talon airspeed + LiDAR aircraft.
+      Spawns exactly like the wind world: origin, yaw=0, facing East (+X).
+    -->
+    <include>
+      <uri>model://mini_talon_airspeed_lidar</uri>
+      <pose degrees="true">0 0 0.2 0 0 0</pose>
+      <enable_wind>true</enable_wind>
+    </include>
+
+  </world>
+</sdf>

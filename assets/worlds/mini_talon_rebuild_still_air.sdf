@@ -1,0 +1,182 @@
+<?xml version="1.0"?>
+<!--
+  mini_talon_rebuild_still_air.sdf
+  ================================
+  Phase 0 baseline world. No wind. No airspeed sensor plugin.
+  Purpose: prove stable takeoff + cruise before adding any wind capability.
+
+  Rebuild rules enforced:
+    - SDF 1.9 (not 1.7)
+    - Inline ground plane with explicit mu=0.8 friction (not model://runway)
+    - Spawn height Z=0.195 m (wheel-geometry-correct)
+    - NO <wind> element
+    - NO gz-sim-wind-effects-system plugin
+    - NO gz-sim-air-speed-system plugin (no sensor in model yet)
+    - model://mini_talon_rebuild (stable base, no enable_wind)
+-->
+<sdf version="1.9">
+  <world name="mini_talon_rebuild_still_air">
+
+    <!-- ============================================================
+         WORLD PLUGINS
+         ============================================================ -->
+    <plugin filename="gz-sim-physics-system"
+      name="gz::sim::systems::Physics">
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system"
+      name="gz::sim::systems::UserCommands">
+    </plugin>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+      name="gz::sim::systems::Imu">
+    </plugin>
+    <plugin filename="gz-sim-navsat-system"
+      name="gz::sim::systems::NavSat">
+    </plugin>
+
+    <!-- NO gz-sim-wind-effects-system — no wind in this world -->
+    <!-- NO gz-sim-air-speed-system    — no airspeed sensor in Phase 0 model -->
+
+    <!-- ============================================================
+         PHYSICS
+         ============================================================ -->
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+    </physics>
+
+    <!-- ============================================================
+         SCENE
+         ============================================================ -->
+    <scene>
+      <ambient>1.0 1.0 1.0</ambient>
+      <background>0.8 0.9 1.0</background>
+      <sky></sky>
+    </scene>
+
+    <!-- ============================================================
+         SPHERICAL COORDINATES  (CMAC, Canberra — same as existing worlds)
+         ============================================================ -->
+    <spherical_coordinates>
+      <latitude_deg>-35.363262</latitude_deg>
+      <longitude_deg>149.165237</longitude_deg>
+      <elevation>584</elevation>
+      <heading_deg>0</heading_deg>
+      <surface_model>EARTH_WGS84</surface_model>
+    </spherical_coordinates>
+
+    <!-- ============================================================
+         SUN
+         ============================================================ -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- ============================================================
+         GROUND PLANE
+         Inline definition — no external model://runway dependency.
+         mu=0.8 / mu2=0.8 gives realistic grass/tarmac friction.
+         kp=1e6 / kd=100 prevent wheel sinking.
+         5000x5000 m — enough for full takeoff + cruise.
+         ============================================================ -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="ground_collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>5000 5000</size>
+            </plane>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>0.8</mu>
+                <mu2>0.8</mu2>
+              </ode>
+            </friction>
+            <contact>
+              <ode>
+                <kp>1000000.0</kp>
+                <kd>100.0</kd>
+                <min_depth>0.001</min_depth>
+                <max_vel>1.0</max_vel>
+              </ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="ground_visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>5000 5000</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.4 0.5 0.3 1</ambient>
+            <diffuse>0.4 0.5 0.3 1</diffuse>
+            <specular>0.0 0.0 0.0 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================================================
+         ENU AXIS MARKER  (debug aid — X=East red, Y=North green, Z=Up blue)
+         ============================================================ -->
+    <model name="axes">
+      <static>true</static>
+      <link name="link">
+        <visual name="x_axis">
+          <cast_shadows>false</cast_shadows>
+          <pose>5 0 0.05 0 0 0</pose>
+          <geometry><box><size>10 0.04 0.04</size></box></geometry>
+          <material>
+            <ambient>1 0 0 1</ambient><diffuse>1 0 0 1</diffuse><emissive>1 0 0 1</emissive>
+          </material>
+        </visual>
+        <visual name="y_axis">
+          <cast_shadows>false</cast_shadows>
+          <pose>0 5 0.05 0 0 0</pose>
+          <geometry><box><size>0.04 10 0.04</size></box></geometry>
+          <material>
+            <ambient>0 1 0 1</ambient><diffuse>0 1 0 1</diffuse><emissive>0 1 0 1</emissive>
+          </material>
+        </visual>
+        <visual name="z_axis">
+          <cast_shadows>false</cast_shadows>
+          <pose>0 0 5.05 0 0 0</pose>
+          <geometry><box><size>0.04 0.04 10</size></box></geometry>
+          <material>
+            <ambient>0 0 1 1</ambient><diffuse>0 0 1 1</diffuse><emissive>0 0 1 1</emissive>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================================================
+         AIRCRAFT
+         - model://mini_talon_rebuild  (stable base, no enable_wind, no airspeed sensor)
+         - Z=0.195 m  (wheel geometry: main wheel radius ~0.0135m + fuselage clearance)
+         - Heading 0 = facing East (aircraft +X forward = East in ENU)
+         ============================================================ -->
+    <include>
+      <pose degrees="true">0 0 0.195 0 0 0</pose>
+      <uri>model://mini_talon_rebuild</uri>
+    </include>
+
+  </world>
+</sdf>
