@@ -1,0 +1,21 @@
+# ArduPlane Parameters - Mini Talon Airspeed Overlay
+# Apply on top of plane_base.parm for Gazebo wind / pitot worlds.
+#
+# One-source rule:
+# - Gazebo provides wind
+# - SITL wind remains disabled
+
+ARSPD_TYPE       100       # JSON airspeed sensor from Gazebo / ArduPilotPlugin
+ARSPD_USE        1
+ARSPD_AUTOCAL    0         # Do not learn offset from live wind on startup
+ARSPD_SKIP_CAL   1         # Keep startup from zeroing in active wind
+ARSPD_OFFSET     0
+AIRSPEED_CRUISE  14
+AIRSPEED_MIN     10
+AIRSPEED_MAX     22
+STALL_PREVENTION 1
+
+SIM_WIND_SPD     0
+SIM_WIND_DIR     180
+SIM_WIND_TURB    0
+AHRS_WIND_MAX    15
