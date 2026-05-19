@@ -1,0 +1,25 @@
+# ArduPlane Parameter Overrides - Staircase LiDAR Mission
+# Base files: plane_base.parm + plane_lidar.parm
+# Purpose:    Tight navigation for accurate LiDAR overpass of 20 m wide platforms
+#
+# Changes from plane_params.parm:
+#   NAVL1_PERIOD  17 → 13   L1 lookahead 76m → 58m. Tighter tracking without oscillation.
+#                            Period=10 was too aggressive (caused oscillation/weaving).
+#   NAVL1_DAMPING 0.75→0.85 More damping to prevent hunting at tighter period.
+#   WP_RADIUS     20 → 10   Exactly the platform half-width (20m/2). Forces the aircraft
+#                            to actually fly over the platform before capturing the WP.
+#   SIM_WIND_SPD   5 → 0    No wind — eliminate lateral drift for clean LiDAR data.
+#   SIM_WIND_TURB 0.5→ 0    No turbulence — no random heading perturbations.
+#   SIM_WIND_DIR 180 → 0    Irrelevant at SPD=0, set to 0 for clarity.
+
+# ============ NAVIGATION TUNING ============
+# L1 lookahead = NAVL1_PERIOD × airspeed / π = 13 × 14 / 3.14 ≈ 58m
+# Corrects cross-track error within ~1 segment length (100m between platforms)
+NAVL1_PERIOD     13
+NAVL1_DAMPING    0.85
+WP_RADIUS        10
+
+# ============ WIND SIMULATION (SITL) ============
+SIM_WIND_SPD     0
+SIM_WIND_TURB    0
+SIM_WIND_DIR     0

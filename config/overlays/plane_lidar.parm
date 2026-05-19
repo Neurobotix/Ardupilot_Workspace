@@ -1,0 +1,11 @@
+# ArduPlane Parameters - Mini Talon LiDAR Overlay
+# Apply on top of plane_base.parm for LiDAR worlds.
+#
+# Current LiDAR integration path is MAVLink bridge based.
+
+RNGFND_LANDING   1
+RNGFND1_TYPE     10       # MAVLink
+RNGFND1_ORIENT   25       # Down
+RNGFND1_MIN_CM   50
+RNGFND1_MAX_CM   5000
+RNGFND1_GNDCLEAR 10
