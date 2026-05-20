@@ -1,0 +1,35 @@
+source_file,line,raw_string,resolved_abs_path,classification,notes
+.ai/QUICK_START.md,119,src/SIM_ARD_GAW/logs/flights/,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/logs/flights/,MISSING,Directory does not exist. Real logs in numbered buckets.
+.ai/QUICK_START.md,15,~/ardupilot_workspace/setup.bash,/home/ahmed/ardupilot_workspace/setup.bash,EXISTS,
+.ai/QUICK_START.md,35,~/ardupilot_workspace/src/SIM_ARD_GAW/scripts,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/scripts,EXISTS,
+.ai/QUICK_START.md,51,~/ardupilot_workspace/src/ardupilot,/home/ahmed/ardupilot_workspace/src/ardupilot,EXISTS,
+.ai/QUICK_START.md,58,~/ardupilot_workspace/src/SIM_ARD_GAW/worlds/mini_talon_runway.sdf,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/worlds/mini_talon_runway.sdf,EXISTS,
+.ai/QUICK_START.md,125,plane_base.parm,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/config/plane_base.parm,EXISTS,
+.ai/QUICK_START.md,125,plane_params.parm,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/config/plane_params.parm,MISSING,"Correctly noted as not existing in doc"
+.ai/QUICK_START.md,125,plane_full.parm,RELATIVE_AMBIGUOUS,"Multiple lane-specific plane_full.parm files exist"
+.ai/QUICK_START.md,167,.ai/vehicles/fixed_wing/STATUS.md,/home/ahmed/ardupilot_workspace/.ai/vehicles/fixed_wing/STATUS.md,EXISTS,
+.ai/QUICK_START.md,168,.ai/features/lidar/STATUS.md,/home/ahmed/ardupilot_workspace/.ai/features/lidar/STATUS.md,EXISTS,
+.ai/QUICK_START.md,169,.ai/architecture/OVERVIEW.md,/home/ahmed/ardupilot_workspace/.ai/architecture/OVERVIEW.md,EXISTS,
+.ai/architecture/COMMANDS.md,52,wind_altitude_log_check.py,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/scripts/wind_altitude_log_check.py,MISSING,Script does not exist
+.ai/architecture/COMMANDS.md,272,src/SIM_ARD_GAW/logs/flights/,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/logs/flights/,MISSING,
+.ai/architecture/PATHS.md,23,.private/,/home/ahmed/ardupilot_workspace/.private/,EXISTS,
+.ai/architecture/PATHS.md,101,logs/flights/,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/logs/flights/,MISSING,
+.ai/architecture/SIMULATION_LANES.md,38,wind_altitude_log_check.py,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/scripts/wind_altitude_log_check.py,MISSING,Script does not exist
+.ai/reconciliation/MASTER_STATUS_MATRIX.md,107,archive/ardupilot_logs_20260506/00000110.BIN,/home/ahmed/ardupilot_workspace/archive/ardupilot_logs_20260506/00000110.BIN,EXISTS,"Path is workspace-root-relative, not SIM_ARD_GAW-relative"
+.ai/issues/RESOLVED.md,38,config/full_auto_mission_v7.waypoints,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/config/full_auto_mission_v7.waypoints,MISSING,Referenced as created but does not exist
+.ai/issues/RESOLVED.md,105,archive/ardupilot_logs_20260506/00000110.BIN,/home/ahmed/ardupilot_workspace/archive/ardupilot_logs_20260506/00000110.BIN,EXISTS,
+.ai/issues/RESOLVED.md,156,worlds/plane_lidar_runway.sdf,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/worlds/plane_lidar_runway.sdf,MISSING,Renamed to mini_talon_lidar_runway.sdf
+.ai/issues/RESOLVED.md,147,worlds/zephyr_lidar_runway.sdf,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/worlds/zephyr_lidar_runway.sdf,MISSING,Correctly noted as deleted
+.ai/issues/RESOLVED.md,147,models/zephyr_with_lidar/,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/models/zephyr_with_lidar/,MISSING,Correctly noted as deleted
+.ai/features/airspeed/TEST_MATRIX.md,194,evidence/T03_RESULTS_2026-04-01.md,/home/ahmed/ardupilot_workspace/.ai/features/airspeed/evidence/T03_RESULTS_2026-04-01.md,MISSING,File exists at evidence/raw/T03_RESULTS_2026-04-01.md
+.ai/features/airspeed/80_OPEN_ISSUES.md,13,src/SIM_ARD_GAW/logs/003_Plane_Airspeed/TEST_RESULT_2026-02-04.md,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/logs/003_Plane_Airspeed/TEST_RESULT_2026-02-04.md,EXISTS,
+.ai/external_mods/ardupilot_gazebo/ArduPilotPlugin/airspeed_json.md,236,~/ardupilot_workspace/src/SIM_ARD_GAW/config/plane_base.parm,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/config/plane_base.parm,EXISTS,"Wrong file — should be plane_airspeed.parm for ARSPD_TYPE=100"
+.ai/external_mods/ardupilot_gazebo/ArduPilotPlugin/airspeed_json.md,272,src/SIM_ARD_GAW/config/plane_base.parm,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/config/plane_base.parm,EXISTS,"Wrong file attribution for ARSPD_TYPE=100"
+.ai/external_mods/ardupilot_gazebo/README.md,69,src/ArduPilotPlugin.hh,/home/ahmed/ardupilot_workspace/src/ardupilot_gazebo/src/ArduPilotPlugin.hh,MISSING,File does not exist (only .cc)
+.ai/features/lidar/STATUS.md,50,archive/ardupilot_logs_20260506/00000110.BIN,/home/ahmed/ardupilot_workspace/archive/ardupilot_logs_20260506/00000110.BIN,EXISTS,
+.ai/vehicles/fixed_wing/STATUS.md,83,worlds/plane_lidar_runway.sdf,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/worlds/plane_lidar_runway.sdf,MISSING,Renamed to mini_talon_lidar_runway.sdf
+.ai/vehicles/fixed_wing/STATUS.md,66,logs/flights/flight_20260121_150436.log,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/logs/flights/flight_20260121_150436.log,MISSING,
+.ai/vehicles/fixed_wing/ISSUES.md,63,worlds/plane_lidar_runway.sdf,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/worlds/plane_lidar_runway.sdf,MISSING,Renamed to mini_talon_lidar_runway.sdf
+.ai/vehicles/fixed_wing/ISSUES.md,25,archive/ardupilot_logs_20260506/00000110.BIN,/home/ahmed/ardupilot_workspace/archive/ardupilot_logs_20260506/00000110.BIN,EXISTS,
+.ai/tests/RESULTS.md,100,src/SIM_ARD_GAW/logs/flights/flight_20260121_150436.log,/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/logs/flights/flight_20260121_150436.log,MISSING,
+.ai/tests/RESULTS.md,66,archive/ardupilot_logs_20260506/00000110.BIN,/home/ahmed/ardupilot_workspace/archive/ardupilot_logs_20260506/00000110.BIN,EXISTS,
