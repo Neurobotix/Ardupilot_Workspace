@@ -1,0 +1,71 @@
+# Asset Index
+
+Date: 2026-05-21
+
+Scope: canonical Phase 4 inventory of workspace-owned Gazebo models, Gazebo
+worlds, and waypoint missions under `assets/`.
+
+Verification labels stay evidence-aware:
+
+- `verified in workspace_next` means a dated report names the current lane or
+  world that exercised the asset. Current proof is Phase 2 runtime evidence.
+- `not yet verified` means a current launch lane or asset family exists but the
+  current evidence does not prove that asset in `workspace_next`.
+- `unknown` means no current evidence or concrete current runtime reference was
+  found in this Phase 4 pass.
+
+Verification of a world-backed lane does not prove every sibling probe,
+alternate world, mission, or mesh variant in the same directory.
+
+## Models
+
+| Path | Asset type | Role / purpose | Status | Known references | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `assets/models/mini_talon/` | Gazebo model | Base Mini Talon V-tail model. | active | `assets/worlds/mini_talon_runway.sdf`; `gazebo-plane`. | verified in `workspace_next` |
+| `assets/models/mini_talon_with_airspeed/` | Gazebo model | Mini Talon with Gazebo airspeed path for CTE/wind worlds. | active | `mini_talon_wind_runway.sdf`; `mini_talon_wind_runway_sea_level.sdf`; `gazebo-plane-cte`. | verified in `workspace_next` for the CTE wind-runway lane |
+| `assets/models/mini_talon_with_lidar/` | Gazebo model | Mini Talon with downward LiDAR for bridge-backed terrain readings. | active | `mini_talon_lidar_runway.sdf`; LiDAR bench/staircase worlds; `gazebo-plane-lidar`. | verified in `workspace_next` for the LiDAR runway lane |
+| `assets/models/iris_with_lidar/` | Gazebo model | Iris with LiDAR and obstacle-world bridge path. | active | `assets/worlds/iris_lidar_obstacles.sdf`; `gazebo-copter-lidar`. | verified in `workspace_next` for handshake/bridge evidence; obstacle return remains unproven |
+| `assets/models/mini_talon_airspeed_lidar/` | Gazebo model | Integrated airspeed + LiDAR lane model. | campaign-specific | Integrated lane README, world, mission, and `gazebo-plane-airspeed-lidar`. | not yet verified |
+| `assets/models/mini_talon_altitude_wind/` | Gazebo model | Wrapper for the altitude-driven wind lane. | campaign-specific | `assets/worlds/mini_talon_altitude_wind/runway.sdf`; `gazebo-plane-altitude-wind`. | not yet verified |
+| `assets/models/mini_talon_rebuild/` | Gazebo model | Standalone rebuild model used by rebuild worlds. | probe | `mini_talon_rebuild_still_air.sdf`; `mini_talon_rebuild_wind.sdf`; `gazebo-plane-rebuild*`. | not yet verified |
+| `assets/models/mini_talon_landing_gear/` | Gazebo model | Landing-gear Mini Talon variant retained in assets. | unknown | No current launch-lane reference found in this pass. | unknown |
+| `assets/models/wind_sensor_probe/` | Gazebo model | Sensor-only wind bench probe. | probe | `assets/worlds/mini_talon_wind_bench.sdf`. | not yet verified |
+| `assets/models/wind_sitl_probe/` | Gazebo model | Wind bench probe with ArduPilot-plugin path. | probe | `assets/worlds/bench_s1_airspeed.sdf`. | not yet verified |
+
+## Worlds
+
+| Path | Asset type | Role / purpose | Status | Known references | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `assets/worlds/mini_talon_runway.sdf` | Gazebo world | Base Mini Talon runway. | active | `gazebo-plane`; Phase 2 `plane` lane. | verified in `workspace_next` |
+| `assets/worlds/mini_talon_lidar_runway.sdf` | Gazebo world | LiDAR runway/terrain world. | active | `gazebo-plane-lidar`; `plane-lidar`; `bridge-plane`. | verified in `workspace_next` |
+| `assets/worlds/mini_talon_wind_runway.sdf` | Gazebo world | Calm-by-default CTE wind world mutated/injected by campaign tools. | active | `gazebo-plane-cte`; `run_one.py`; `run_matrix.py`. | verified in `workspace_next` for Phase 2 CTE lane |
+| `assets/worlds/iris_runway.sdf` | Gazebo world | Base Iris runway world using external Iris model. | active | `gazebo-copter`; Phase 2 `copter` lane. | verified in `workspace_next` |
+| `assets/worlds/iris_lidar_obstacles.sdf` | Gazebo world | Iris LiDAR obstacle world. | active | `gazebo-copter-lidar`; `copter-lidar`; `bridge-copter`. | verified in `workspace_next` for handshake/bridge evidence |
+| `assets/worlds/mini_talon_wind_runway_sea_level.sdf` | Gazebo world | Sea-level density comparison wind world. | probe | `gazebo-plane-wind-sea-level`. | not yet verified |
+| `assets/worlds/mini_talon_lidar_bench.sdf` | Gazebo world | Static LiDAR bench. | probe | `gazebo-plane-bench`. | not yet verified |
+| `assets/worlds/mini_talon_lidar_staircase.sdf` | Gazebo world | LiDAR staircase mission world. | active | `gazebo-plane-staircase`; `plane-staircase`. | not yet verified |
+| `assets/worlds/mini_talon_airspeed_lidar/wind_staircase.sdf` | Gazebo world | Integrated wind + airspeed + LiDAR staircase world. | campaign-specific | `gazebo-plane-airspeed-lidar`; integrated lane README. | not yet verified |
+| `assets/worlds/mini_talon_altitude_wind/runway.sdf` | Gazebo world | Altitude-driven wind publisher world. | campaign-specific | `gazebo-plane-altitude-wind`; `wind-publisher-altitude`. | not yet verified |
+| `assets/worlds/mini_talon_rebuild_still_air.sdf` | Gazebo world | Rebuild still-air baseline. | probe | `gazebo-plane-rebuild`; `plane-rebuild`. | not yet verified |
+| `assets/worlds/mini_talon_rebuild_wind.sdf` | Gazebo world | Rebuild wind placeholder world. | probe | `gazebo-plane-rebuild-wind`. | not yet verified |
+| `assets/worlds/mini_talon_wind_bench.sdf` | Gazebo world | Sensor-only wind bench. | probe | `wind_sensor_probe` world include. | not yet verified |
+| `assets/worlds/bench_s1_airspeed.sdf` | Gazebo world | ArduPilot-connected airspeed bench. | probe | `wind_sitl_probe` world include. | not yet verified |
+
+## Missions
+
+| Path | Asset type | Role / purpose | Status | Known references | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `assets/missions/square_500m_five_laps_loiter5_land.waypoints` | waypoint mission | Wind-matrix square, loiter, land mission. | campaign-specific | `run_one.py`; `run_matrix.py`; `docs/campaigns/wind_matrix.md`. | not yet verified |
+| `assets/missions/lidar_staircase_mission.waypoints` | waypoint mission | Staircase LiDAR overpass mission. | active | `plane-staircase` launch guidance. | not yet verified |
+| `assets/missions/mini_talon_airspeed_lidar/staircase_sensor_validation.waypoints` | waypoint mission | Integrated airspeed + LiDAR staircase mission. | campaign-specific | `plane-airspeed-lidar`; integrated lane README. | not yet verified |
+| `assets/missions/airspeed_validation_mission.waypoints` | waypoint mission | Reciprocal-leg airspeed validation mission. | active | `assets/missions/README.md`. | unknown |
+| `assets/missions/runway_autoland_gentle_approach_v8.waypoints` | waypoint mission | Retained runway autoland tuning mission. | active | `assets/missions/README.md`. | unknown |
+| `assets/missions/archive/runway_autoland_short_final_v7.waypoints` | waypoint mission | Historical runway autoland variant. | archive | `assets/missions/archive/README.md`. | unknown |
+
+## Inventory Counts
+
+Count basis for this pass:
+
+- models: 10 first-level model directories under `assets/models/`;
+- worlds: 14 `.sdf` files under `assets/worlds/`;
+- missions: 6 `.waypoints` files under `assets/missions/`.
