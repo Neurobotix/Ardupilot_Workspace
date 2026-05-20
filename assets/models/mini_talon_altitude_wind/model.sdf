@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<sdf version="1.7">
+  <model name="mini_talon_altitude_wind">
+    <include>
+      <uri>model://mini_talon_with_airspeed</uri>
+      <name>mini_talon_with_airspeed</name>
+      <enable_wind>true</enable_wind>
+    </include>
+  </model>
+</sdf>
