@@ -1,0 +1,805 @@
+{
+  "schema_version": "1.0",
+  "purpose": "Machine-readable reference for ArduPilot Plane SITL sensor fault-injection parameters used by AI agents and experiment scaffolding.",
+  "scope": {
+    "vehicle": "ArduPlane",
+    "target": "SITL",
+    "prefix": "SIM_",
+    "generated_for": "sensor failure injection experiment planning",
+    "last_verified": "2026-05-10"
+  },
+  "source_of_truth": {
+    "primary": [
+      "Runtime MAVProxy/SITL parameter output: param show SIM_* / mav.parm",
+      "Local ArduPilot source: src/ardupilot/libraries/SITL/SITL.cpp",
+      "Local ArduPilot source: src/ardupilot/libraries/SITL/SIM_GPS.cpp",
+      "Local ArduPilot source: src/ardupilot/libraries/SITL/SITL_Airspeed.cpp",
+      "Local ArduPilot source: src/ardupilot/libraries/SITL/SITL_Baro.cpp"
+    ],
+    "official_generated_docs": [
+      "https://autotest.ardupilot.org/Parameters/ArduPlane/Parameters.html",
+      "https://autotest.ardupilot.org/Parameters/ArduPlane/apm.pdef.json"
+    ],
+    "supporting_docs": [
+      "https://ardupilot.org/dev/docs/sitl-parameters.html",
+      "https://ardupilot.org/dev/docs/SITL_simulation_parameters.html"
+    ],
+    "warning": "Narrative SITL documentation can contain stale examples. Prefer runtime param show output, generated parameter files, and current source names."
+  },
+  "agent_usage_rules": [
+    "Do not invent SIM_ parameter names from older examples.",
+    "Before running a campaign, verify every parameter against the SITL build under test using param show SIM_* or a saved mav.parm.",
+    "Vector entries listed as X/Y/Z expand to three runtime parameters with _X, _Y, and _Z suffixes.",
+    "For GPS1 denial, set SIM_GPS1_ENABLE to 0. Do not use SIM_GPS_DISABLE.",
+    "For GPS1 position glitch, use SIM_GPS1_GLTCH_X, SIM_GPS1_GLTCH_Y, and SIM_GPS1_GLTCH_Z. The spelling is GLTCH, not GLITCH.",
+    "For first accelerometer forced failure value, use SIM_ACCEL1_FAIL. Do not use SIM_ACC1_FAIL.",
+    "For gyro update stoppage, use SIM_GYR_FAIL_MSK. There is no current SIM_GYR1_FAIL parameter.",
+    "For magnetometer noise, use global SIM_MAG_RND. Do not use SIM_MAG1_RND."
+  ],
+  "vector_expansions": {
+    "SIM_GYR1_BIAS_X/Y/Z": [
+      "SIM_GYR1_BIAS_X",
+      "SIM_GYR1_BIAS_Y",
+      "SIM_GYR1_BIAS_Z"
+    ],
+    "SIM_GYR1_SCALE_X/Y/Z": [
+      "SIM_GYR1_SCALE_X",
+      "SIM_GYR1_SCALE_Y",
+      "SIM_GYR1_SCALE_Z"
+    ],
+    "SIM_ACC1_BIAS_X/Y/Z": [
+      "SIM_ACC1_BIAS_X",
+      "SIM_ACC1_BIAS_Y",
+      "SIM_ACC1_BIAS_Z"
+    ],
+    "SIM_ACC1_SCAL_X/Y/Z": [
+      "SIM_ACC1_SCAL_X",
+      "SIM_ACC1_SCAL_Y",
+      "SIM_ACC1_SCAL_Z"
+    ],
+    "SIM_MAG1_OFS_X/Y/Z": [
+      "SIM_MAG1_OFS_X",
+      "SIM_MAG1_OFS_Y",
+      "SIM_MAG1_OFS_Z"
+    ],
+    "SIM_GPS1_GLTCH_X/Y/Z": [
+      "SIM_GPS1_GLTCH_X",
+      "SIM_GPS1_GLTCH_Y",
+      "SIM_GPS1_GLTCH_Z"
+    ],
+    "SIM_GPS1_VERR_X/Y/Z": [
+      "SIM_GPS1_VERR_X",
+      "SIM_GPS1_VERR_Y",
+      "SIM_GPS1_VERR_Z"
+    ],
+    "SIM_VIB_FREQ_X/Y/Z": [
+      "SIM_VIB_FREQ_X",
+      "SIM_VIB_FREQ_Y",
+      "SIM_VIB_FREQ_Z"
+    ]
+  },
+  "parameters": [
+    {
+      "id": "gyro_update_failure_mask",
+      "section": "imu_gyro",
+      "param": "SIM_GYR_FAIL_MSK",
+      "runtime_params": ["SIM_GYR_FAIL_MSK"],
+      "default": 0,
+      "units": null,
+      "value_range": "0 or mask value",
+      "typical_test_values": [1],
+      "effect": "Stops gyro reading updates for selected simulated IMU instances.",
+      "injection_role": "failure",
+      "notes": "Use 1 to stop gyro updates for the first IMU instance."
+    },
+    {
+      "id": "gyro_1_bias",
+      "section": "imu_gyro",
+      "param": "SIM_GYR1_BIAS_X/Y/Z",
+      "runtime_params": ["SIM_GYR1_BIAS_X", "SIM_GYR1_BIAS_Y", "SIM_GYR1_BIAS_Z"],
+      "default": 0,
+      "units": "rad/s",
+      "value_range": "any float per axis",
+      "typical_test_values": [0.05, 0.1],
+      "effect": "Adds constant angular-rate bias to the first simulated gyroscope.",
+      "injection_role": "bias",
+      "notes": "Apply only the axes needed by the case."
+    },
+    {
+      "id": "gyro_1_noise",
+      "section": "imu_gyro",
+      "param": "SIM_GYR1_RND",
+      "runtime_params": ["SIM_GYR1_RND"],
+      "default": 0,
+      "units": null,
+      "value_range": "0+ float",
+      "typical_test_values": [0.5, 2.0, 5.0],
+      "effect": "Scales simulated motor vibration noise injected into gyroscope readings.",
+      "injection_role": "noise",
+      "notes": "Useful for vibration stress tests."
+    },
+    {
+      "id": "gyro_1_scale",
+      "section": "imu_gyro",
+      "param": "SIM_GYR1_SCALE_X/Y/Z",
+      "runtime_params": ["SIM_GYR1_SCALE_X", "SIM_GYR1_SCALE_Y", "SIM_GYR1_SCALE_Z"],
+      "default": 0,
+      "units": null,
+      "value_range": "any float per axis",
+      "typical_test_values": [0.05, 0.1],
+      "effect": "Applies per-axis multiplicative scale error to the first simulated gyroscope.",
+      "injection_role": "scale_error",
+      "notes": "0 means no scale error."
+    },
+    {
+      "id": "accelerometer_1_forced_failure_value",
+      "section": "imu_accel",
+      "param": "SIM_ACCEL1_FAIL",
+      "runtime_params": ["SIM_ACCEL1_FAIL"],
+      "default": 0,
+      "units": null,
+      "value_range": "0 or non-zero failure value",
+      "typical_test_values": [1],
+      "effect": "When non-zero, forces first simulated accelerometer output to this value on all axes.",
+      "injection_role": "failure",
+      "notes": "Current parameter name is SIM_ACCEL1_FAIL, not SIM_ACC1_FAIL."
+    },
+    {
+      "id": "accelerometer_update_failure_mask",
+      "section": "imu_accel",
+      "param": "SIM_ACC_FAIL_MSK",
+      "runtime_params": ["SIM_ACC_FAIL_MSK"],
+      "default": 0,
+      "units": null,
+      "value_range": "0 or mask value",
+      "typical_test_values": [1],
+      "effect": "Stops accelerometer reading updates for selected simulated IMU instances.",
+      "injection_role": "failure",
+      "notes": "Use 1 to stop accelerometer updates for the first IMU instance."
+    },
+    {
+      "id": "accelerometer_1_bias",
+      "section": "imu_accel",
+      "param": "SIM_ACC1_BIAS_X/Y/Z",
+      "runtime_params": ["SIM_ACC1_BIAS_X", "SIM_ACC1_BIAS_Y", "SIM_ACC1_BIAS_Z"],
+      "default": 0,
+      "units": "m/s^2",
+      "value_range": "any float per axis",
+      "typical_test_values": [1.0, 2.0],
+      "effect": "Adds constant bias offset to the first simulated accelerometer.",
+      "injection_role": "bias",
+      "notes": "Apply only the axes needed by the case."
+    },
+    {
+      "id": "accelerometer_1_noise",
+      "section": "imu_accel",
+      "param": "SIM_ACC1_RND",
+      "runtime_params": ["SIM_ACC1_RND"],
+      "default": 0,
+      "units": "m/s^2",
+      "value_range": "0+ float",
+      "typical_test_values": [1.0, 3.0, 5.0],
+      "effect": "Scales simulated vibration noise on accelerometer readings.",
+      "injection_role": "noise",
+      "notes": "Useful for vibration stress tests."
+    },
+    {
+      "id": "accelerometer_1_scale",
+      "section": "imu_accel",
+      "param": "SIM_ACC1_SCAL_X/Y/Z",
+      "runtime_params": ["SIM_ACC1_SCAL_X", "SIM_ACC1_SCAL_Y", "SIM_ACC1_SCAL_Z"],
+      "default": 0,
+      "units": null,
+      "value_range": "any float per axis",
+      "typical_test_values": [0.05, 0.1],
+      "effect": "Applies per-axis multiplicative scale error to the first simulated accelerometer.",
+      "injection_role": "scale_error",
+      "notes": "0 means no scale error."
+    },
+    {
+      "id": "magnetometer_1_failure",
+      "section": "compass",
+      "param": "SIM_MAG1_FAIL",
+      "runtime_params": ["SIM_MAG1_FAIL"],
+      "default": 0,
+      "units": null,
+      "value_range": "0 healthy, 1 failed/no data",
+      "typical_test_values": [1],
+      "effect": "Simulates failure of the first magnetometer.",
+      "injection_role": "failure",
+      "notes": "SITL source comments define 1 as no data."
+    },
+    {
+      "id": "magnetometer_1_offset",
+      "section": "compass",
+      "param": "SIM_MAG1_OFS_X/Y/Z",
+      "runtime_params": ["SIM_MAG1_OFS_X", "SIM_MAG1_OFS_Y", "SIM_MAG1_OFS_Z"],
+      "default": 0,
+      "units": "milligauss",
+      "value_range": "any float per axis",
+      "typical_test_values": [100, 200],
+      "effect": "Adds hard-iron offset to each magnetometer axis.",
+      "injection_role": "bias",
+      "notes": "Current runtime defaults may already be non-zero in mav.parm."
+    },
+    {
+      "id": "magnetometer_noise",
+      "section": "compass",
+      "param": "SIM_MAG_RND",
+      "runtime_params": ["SIM_MAG_RND"],
+      "default": 0,
+      "units": null,
+      "value_range": "0+ float",
+      "typical_test_values": [5, 10, 20],
+      "effect": "Scales simulated vibration or motor-induced noise in magnetometer readings.",
+      "injection_role": "noise",
+      "notes": "This is global, not per-compass. SIM_MAG1_RND does not exist."
+    },
+    {
+      "id": "magnetometer_1_scaling",
+      "section": "compass",
+      "param": "SIM_MAG1_SCALING",
+      "runtime_params": ["SIM_MAG1_SCALING"],
+      "default": 1,
+      "units": null,
+      "value_range": "any float",
+      "typical_test_values": [0.8, 1.2],
+      "effect": "Applies scale-factor error to the first simulated compass.",
+      "injection_role": "scale_error",
+      "notes": "1 means nominal scale."
+    },
+    {
+      "id": "airspeed_failure",
+      "section": "airspeed",
+      "param": "SIM_ARSPD_FAIL",
+      "runtime_params": ["SIM_ARSPD_FAIL"],
+      "default": 0,
+      "units": null,
+      "value_range": "0 healthy, 1 failed",
+      "typical_test_values": [1],
+      "effect": "Marks the primary simulated airspeed sensor as failed.",
+      "injection_role": "failure",
+      "notes": "Pair with log assertions for airspeed health and TECS response."
+    },
+    {
+      "id": "airspeed_failure_pressure",
+      "section": "airspeed",
+      "param": "SIM_ARSPD_FAILP",
+      "runtime_params": ["SIM_ARSPD_FAILP"],
+      "default": 0,
+      "units": "Pa",
+      "value_range": "any float",
+      "typical_test_values": [500],
+      "effect": "Sets simulated pressure value used by the airspeed failure path.",
+      "injection_role": "failure_value",
+      "notes": "Use for fixed erroneous pressure cases."
+    },
+    {
+      "id": "airspeed_pitot_failure_pressure",
+      "section": "airspeed",
+      "param": "SIM_ARSPD_PITOT",
+      "runtime_params": ["SIM_ARSPD_PITOT"],
+      "default": 0,
+      "units": "Pa",
+      "value_range": "any float",
+      "typical_test_values": [500],
+      "effect": "Sets simulated pitot tube failure pressure.",
+      "injection_role": "failure_value",
+      "notes": "Use for blocked or damaged pitot tests."
+    },
+    {
+      "id": "airspeed_offset",
+      "section": "airspeed",
+      "param": "SIM_ARSPD_OFS",
+      "runtime_params": ["SIM_ARSPD_OFS"],
+      "default": 2013,
+      "units": "source: m/s",
+      "value_range": "any float",
+      "typical_test_values": [1500, 2500],
+      "effect": "Adds offset to the simulated airspeed sensor reading.",
+      "injection_role": "bias",
+      "notes": "Default in current source/runtime is 2013."
+    },
+    {
+      "id": "airspeed_noise",
+      "section": "airspeed",
+      "param": "SIM_ARSPD_RND",
+      "runtime_params": ["SIM_ARSPD_RND"],
+      "default": 2.0,
+      "units": "Pa",
+      "value_range": "0+ float",
+      "typical_test_values": [5, 10],
+      "effect": "Adds random noise to the simulated airspeed sensor.",
+      "injection_role": "noise",
+      "notes": "Default in current source/runtime is 2.0."
+    },
+    {
+      "id": "airspeed_ratio",
+      "section": "airspeed",
+      "param": "SIM_ARSPD_RATIO",
+      "runtime_params": ["SIM_ARSPD_RATIO"],
+      "default": 1.99,
+      "units": null,
+      "value_range": "0+ float",
+      "typical_test_values": [0.7, 1.3],
+      "effect": "Applies simulated airspeed sensor ratio calibration mismatch.",
+      "injection_role": "scale_error",
+      "notes": "Default in current source/runtime is 1.99."
+    },
+    {
+      "id": "airspeed_signflip",
+      "section": "airspeed",
+      "param": "SIM_ARSPD_SIGN",
+      "runtime_params": ["SIM_ARSPD_SIGN"],
+      "default": 0,
+      "units": null,
+      "value_range": "0 normal, 1 reversed",
+      "typical_test_values": [1],
+      "effect": "Simulates reversed pitot/static connections.",
+      "injection_role": "failure",
+      "notes": "Use as a severe airspeed plumbing fault."
+    },
+    {
+      "id": "gps1_enable",
+      "section": "gps",
+      "param": "SIM_GPS1_ENABLE",
+      "runtime_params": ["SIM_GPS1_ENABLE"],
+      "default": 1,
+      "units": null,
+      "value_range": "0 disabled, 1 enabled",
+      "typical_test_values": [0],
+      "effect": "Enables or disables first simulated GPS.",
+      "injection_role": "failure",
+      "notes": "Set to 0 for primary GPS denial."
+    },
+    {
+      "id": "gps1_position_glitch",
+      "section": "gps",
+      "param": "SIM_GPS1_GLTCH_X/Y/Z",
+      "runtime_params": ["SIM_GPS1_GLTCH_X", "SIM_GPS1_GLTCH_Y", "SIM_GPS1_GLTCH_Z"],
+      "default": 0,
+      "units": "m",
+      "value_range": "any float per axis",
+      "typical_test_values": [10, 50],
+      "effect": "Injects position glitch offsets into first simulated GPS.",
+      "injection_role": "glitch",
+      "notes": "Runtime spelling is GLTCH."
+    },
+    {
+      "id": "gps1_heading_output",
+      "section": "gps",
+      "param": "SIM_GPS1_HDG",
+      "runtime_params": ["SIM_GPS1_HDG"],
+      "default": 0,
+      "units": null,
+      "value_range": "0 disabled, 1 HDT, 2 THS, 3 KSXT, 4 moving-baseline base",
+      "typical_test_values": [1],
+      "effect": "Enables simulated GPS heading output.",
+      "injection_role": "configuration",
+      "notes": "Mostly relevant for GPS-for-yaw tests."
+    },
+    {
+      "id": "gps1_num_sats",
+      "section": "gps",
+      "param": "SIM_GPS1_NUMSATS",
+      "runtime_params": ["SIM_GPS1_NUMSATS"],
+      "default": 10,
+      "units": "satellites",
+      "value_range": "0+ integer",
+      "typical_test_values": [4, 5],
+      "effect": "Sets visible satellite count reported by first simulated GPS.",
+      "injection_role": "degradation",
+      "notes": "Low values can degrade quality or trigger checks/failsafes."
+    },
+    {
+      "id": "gps1_lag_ms",
+      "section": "gps",
+      "param": "SIM_GPS1_LAG_MS",
+      "runtime_params": ["SIM_GPS1_LAG_MS"],
+      "default": 100,
+      "units": "ms",
+      "value_range": "0+ integer",
+      "typical_test_values": [500, 1000],
+      "effect": "Adds fixed GPS measurement delay.",
+      "injection_role": "latency",
+      "notes": "Use for EKF delay compensation tests."
+    },
+    {
+      "id": "gps1_type",
+      "section": "gps",
+      "param": "SIM_GPS1_TYPE",
+      "runtime_params": ["SIM_GPS1_TYPE"],
+      "default": 1,
+      "units": null,
+      "value_range": "0 None, 1 UBlox, 5 NMEA, 6 SBP, 7 File, 8 Nova, 9 SBP2, 11 Trimble, 19 MSP",
+      "typical_test_values": [1, 5],
+      "effect": "Selects simulated GPS backend/protocol.",
+      "injection_role": "configuration",
+      "notes": "Changing GPS type may require reboot depending on test setup."
+    },
+    {
+      "id": "gps1_noise",
+      "section": "gps",
+      "param": "SIM_GPS1_NOISE",
+      "runtime_params": ["SIM_GPS1_NOISE"],
+      "default": 0,
+      "units": "m",
+      "value_range": "0+ float",
+      "typical_test_values": [2, 10],
+      "effect": "Adds simulated GPS altitude error amplitude.",
+      "injection_role": "noise",
+      "notes": "Source description is altitude error amplitude."
+    },
+    {
+      "id": "gps1_velocity_error",
+      "section": "gps",
+      "param": "SIM_GPS1_VERR_X/Y/Z",
+      "runtime_params": ["SIM_GPS1_VERR_X", "SIM_GPS1_VERR_Y", "SIM_GPS1_VERR_Z"],
+      "default": 0,
+      "units": "m/s",
+      "value_range": "any float per axis",
+      "typical_test_values": [1, 5],
+      "effect": "Adds NED velocity error offsets to first simulated GPS.",
+      "injection_role": "bias",
+      "notes": "Use per-axis parameters."
+    },
+    {
+      "id": "gps1_jam",
+      "section": "gps",
+      "param": "SIM_GPS1_JAM",
+      "runtime_params": ["SIM_GPS1_JAM"],
+      "default": 0,
+      "units": null,
+      "value_range": "0 off, 1 jammed",
+      "typical_test_values": [1],
+      "effect": "Enables simulated GPS jamming for first GPS.",
+      "injection_role": "failure",
+      "notes": "Pair with GPS health and failsafe assertions."
+    },
+    {
+      "id": "rangefinder_glitch",
+      "section": "rangefinder",
+      "param": "SIM_SONAR_GLITCH",
+      "runtime_params": ["SIM_SONAR_GLITCH"],
+      "default": 0,
+      "units": "probability",
+      "value_range": "0.0 to 1.0",
+      "typical_test_values": [0.1, 0.3],
+      "effect": "Sets probability that any single rangefinder reading is a random erroneous value.",
+      "injection_role": "glitch",
+      "notes": "Rangefinder impact on Plane depends on configured altitude source and mission phase."
+    },
+    {
+      "id": "rangefinder_noise",
+      "section": "rangefinder",
+      "param": "SIM_SONAR_RND",
+      "runtime_params": ["SIM_SONAR_RND"],
+      "default": 0,
+      "units": null,
+      "value_range": "0+ float",
+      "typical_test_values": [1, 5],
+      "effect": "Adds random noise to rangefinder distance measurements.",
+      "injection_role": "noise",
+      "notes": "Uses legacy SONAR naming for simulated rangefinder."
+    },
+    {
+      "id": "rangefinder_scale",
+      "section": "rangefinder",
+      "param": "SIM_SONAR_SCALE",
+      "runtime_params": ["SIM_SONAR_SCALE"],
+      "default": 12.1212,
+      "units": "m/V",
+      "value_range": "0+ float",
+      "typical_test_values": [10, 15],
+      "effect": "Sets analog rangefinder conversion scale.",
+      "injection_role": "scale_error",
+      "notes": "Useful for miscalibrated rangefinder tests."
+    },
+    {
+      "id": "rangefinder_rotation",
+      "section": "rangefinder",
+      "param": "SIM_SONAR_ROT",
+      "runtime_params": ["SIM_SONAR_ROT"],
+      "default": 25,
+      "units": "rotation enum",
+      "value_range": "0 to 39 typical enum range",
+      "typical_test_values": [25],
+      "effect": "Sets simulated rangefinder mounting orientation.",
+      "injection_role": "configuration",
+      "notes": "Default 25 is downward-facing ROTATION_PITCH_270."
+    },
+    {
+      "id": "battery_voltage",
+      "section": "battery",
+      "param": "SIM_BATT_VOLTAGE",
+      "runtime_params": ["SIM_BATT_VOLTAGE"],
+      "default": 12.6,
+      "units": "V",
+      "value_range": "0+ float",
+      "typical_test_values": [9.6, 10.5],
+      "effect": "Sets simulated battery resting voltage.",
+      "injection_role": "degradation",
+      "notes": "For capacity-based sag, SIM_BATT_CAP_AH must be non-zero."
+    },
+    {
+      "id": "battery_capacity",
+      "section": "battery",
+      "param": "SIM_BATT_CAP_AH",
+      "runtime_params": ["SIM_BATT_CAP_AH"],
+      "default": 0,
+      "units": "Ah",
+      "value_range": "0+ float",
+      "typical_test_values": [2.2],
+      "effect": "Sets simulated battery capacity.",
+      "injection_role": "configuration",
+      "notes": "0 means unlimited capacity."
+    },
+    {
+      "id": "barometer_disable",
+      "section": "barometer",
+      "param": "SIM_BARO_DISABLE",
+      "runtime_params": ["SIM_BARO_DISABLE"],
+      "default": 0,
+      "units": null,
+      "value_range": "0 enabled, 1 disabled",
+      "typical_test_values": [1],
+      "effect": "Disables primary simulated barometer.",
+      "injection_role": "failure",
+      "notes": "Verify EKF altitude health and configured fallback response."
+    },
+    {
+      "id": "barometer_noise",
+      "section": "barometer",
+      "param": "SIM_BARO_RND",
+      "runtime_params": ["SIM_BARO_RND"],
+      "default": 0.2,
+      "units": "m",
+      "value_range": "0+ float",
+      "typical_test_values": [1, 5],
+      "effect": "Adds random noise to barometric height readings.",
+      "injection_role": "noise",
+      "notes": "Source units are height, not pressure."
+    },
+    {
+      "id": "barometer_drift",
+      "section": "barometer",
+      "param": "SIM_BARO_DRIFT",
+      "runtime_params": ["SIM_BARO_DRIFT"],
+      "default": 0,
+      "units": "m/s",
+      "value_range": "any float",
+      "typical_test_values": [0.5],
+      "effect": "Applies barometric altitude drift over time.",
+      "injection_role": "drift",
+      "notes": "Source units are altitude drift rate."
+    },
+    {
+      "id": "barometer_glitch",
+      "section": "barometer",
+      "param": "SIM_BARO_GLITCH",
+      "runtime_params": ["SIM_BARO_GLITCH"],
+      "default": 0,
+      "units": "m",
+      "value_range": "any float",
+      "typical_test_values": [10, 30],
+      "effect": "Adds a simulated barometric height glitch.",
+      "injection_role": "glitch",
+      "notes": "Source units are height, not pressure."
+    },
+    {
+      "id": "barometer_freeze",
+      "section": "barometer",
+      "param": "SIM_BARO_FREEZE",
+      "runtime_params": ["SIM_BARO_FREEZE"],
+      "default": 0,
+      "units": null,
+      "value_range": "0 off, 1 freeze",
+      "typical_test_values": [1],
+      "effect": "Freezes simulated barometer at the last recorded altitude.",
+      "injection_role": "failure",
+      "notes": "Useful for stuck sensor tests."
+    },
+    {
+      "id": "barometer_delay",
+      "section": "barometer",
+      "param": "SIM_BARO_DELAY",
+      "runtime_params": ["SIM_BARO_DELAY"],
+      "default": 0,
+      "units": "ms",
+      "value_range": "0+ integer",
+      "typical_test_values": [250, 500],
+      "effect": "Adds time delay to barometer data.",
+      "injection_role": "latency",
+      "notes": "Use for EKF delay sensitivity tests."
+    },
+    {
+      "id": "barometer_count",
+      "section": "barometer",
+      "param": "SIM_BARO_COUNT",
+      "runtime_params": ["SIM_BARO_COUNT"],
+      "default": 2,
+      "units": "count",
+      "value_range": "0 to 3",
+      "typical_test_values": [1, 2],
+      "effect": "Sets number of simulated barometer instances.",
+      "injection_role": "configuration",
+      "notes": "Use for redundancy setup, usually before arming."
+    },
+    {
+      "id": "gyro_drift_speed",
+      "section": "imu_general",
+      "param": "SIM_DRIFT_SPEED",
+      "runtime_params": ["SIM_DRIFT_SPEED"],
+      "default": 0.05,
+      "units": "deg/s/min",
+      "value_range": "0+ float",
+      "typical_test_values": [0.1, 0.5],
+      "effect": "Controls rate of gyroscope bias drift.",
+      "injection_role": "drift",
+      "notes": "Used with SIM_DRIFT_TIME."
+    },
+    {
+      "id": "gyro_drift_time",
+      "section": "imu_general",
+      "param": "SIM_DRIFT_TIME",
+      "runtime_params": ["SIM_DRIFT_TIME"],
+      "default": 5,
+      "units": "minutes",
+      "value_range": "0+ float",
+      "typical_test_values": [5, 10],
+      "effect": "Sets duration of one full sinusoidal gyro drift cycle.",
+      "injection_role": "drift",
+      "notes": "Used with SIM_DRIFT_SPEED."
+    },
+    {
+      "id": "imu_count",
+      "section": "imu_general",
+      "param": "SIM_IMU_COUNT",
+      "runtime_params": ["SIM_IMU_COUNT"],
+      "default": 2,
+      "units": "count",
+      "value_range": "1 to 3 typical runtime range",
+      "typical_test_values": [2, 3],
+      "effect": "Sets number of simulated IMU instances.",
+      "injection_role": "configuration",
+      "notes": "Use for redundancy setup, usually before arming."
+    },
+    {
+      "id": "vibration_frequency",
+      "section": "imu_general",
+      "param": "SIM_VIB_FREQ_X/Y/Z",
+      "runtime_params": ["SIM_VIB_FREQ_X", "SIM_VIB_FREQ_Y", "SIM_VIB_FREQ_Z"],
+      "default": 0,
+      "units": "Hz",
+      "value_range": "0+ float per axis",
+      "typical_test_values": [50, 100],
+      "effect": "Sets sinusoidal vibration frequency applied to IMU readings.",
+      "injection_role": "vibration",
+      "notes": "Use with gyro and accel noise amplitudes."
+    },
+    {
+      "id": "motor_vibration_max_frequency",
+      "section": "imu_general",
+      "param": "SIM_VIB_MOT_MAX",
+      "runtime_params": ["SIM_VIB_MOT_MAX"],
+      "default": 0,
+      "units": "Hz",
+      "value_range": "0+ float",
+      "typical_test_values": [100, 200],
+      "effect": "Sets max baseline frequency for throttle-linked motor vibration noise.",
+      "injection_role": "vibration",
+      "notes": "Combined with motor/throttle state and gyro/accel noise factors."
+    }
+  ],
+  "stale_or_non_current_names": [
+    {
+      "old": "SIM_GYR1_FAIL",
+      "status": "non_current",
+      "replacement": ["SIM_GYR_FAIL_MSK"],
+      "reason": "Current Plane SITL exposes a gyro update failure mask, not SIM_GYR1_FAIL."
+    },
+    {
+      "old": "SIM_ACC1_FAIL",
+      "status": "non_current",
+      "replacement": ["SIM_ACCEL1_FAIL", "SIM_ACC_FAIL_MSK"],
+      "reason": "Current forced accelerometer failure value is SIM_ACCEL1_FAIL; update stoppage is SIM_ACC_FAIL_MSK."
+    },
+    {
+      "old": "SIM_MAG1_RND",
+      "status": "non_current",
+      "replacement": ["SIM_MAG_RND"],
+      "reason": "Magnetometer noise is a global SITL parameter, not per-compass."
+    },
+    {
+      "old": "SIM_GPS_DISABLE",
+      "status": "renamed_or_replaced",
+      "replacement": ["SIM_GPS1_ENABLE"],
+      "reason": "Current GPS simulation uses per-instance GPS1/GPS2/... ENABLE parameters."
+    },
+    {
+      "old": "SIM_GPS_GLITCH_X/Y/Z",
+      "status": "renamed_or_replaced",
+      "replacement": ["SIM_GPS1_GLTCH_X", "SIM_GPS1_GLTCH_Y", "SIM_GPS1_GLTCH_Z"],
+      "reason": "Current GPS glitch vector is per-instance and uses GLTCH spelling."
+    },
+    {
+      "old": "SIM_GPS_HDG",
+      "status": "renamed_or_replaced",
+      "replacement": ["SIM_GPS1_HDG"],
+      "reason": "Current GPS heading output is per-instance."
+    },
+    {
+      "old": "SIM_GPS_NUMSATS",
+      "status": "renamed_or_replaced",
+      "replacement": ["SIM_GPS1_NUMSATS"],
+      "reason": "Current GPS satellite count is per-instance."
+    },
+    {
+      "old": "SIM_GPS_LAG_MS",
+      "status": "renamed_or_replaced",
+      "replacement": ["SIM_GPS1_LAG_MS"],
+      "reason": "Current GPS lag is per-instance."
+    },
+    {
+      "old": "SIM_GPS_TYPE",
+      "status": "renamed_or_replaced",
+      "replacement": ["SIM_GPS1_TYPE"],
+      "reason": "Current simulated GPS backend type is per-instance."
+    },
+    {
+      "old": "SIM_GPS_NOISE",
+      "status": "renamed_or_replaced",
+      "replacement": ["SIM_GPS1_NOISE"],
+      "reason": "Current GPS noise parameter is per-instance."
+    },
+    {
+      "old": "SIM_GPS_VERR_X/Y/Z",
+      "status": "renamed_or_replaced",
+      "replacement": ["SIM_GPS1_VERR_X", "SIM_GPS1_VERR_Y", "SIM_GPS1_VERR_Z"],
+      "reason": "Current GPS velocity error vector is per-instance."
+    },
+    {
+      "old": "SIM_GPS_JAM",
+      "status": "renamed_or_replaced",
+      "replacement": ["SIM_GPS1_JAM"],
+      "reason": "Current GPS jamming control is per-instance."
+    }
+  ],
+  "case_template": {
+    "case_id": "gps_glitch_50m",
+    "sensor": "gps",
+    "mode": "glitch",
+    "severity": "high",
+    "inject_at": {
+      "type": "mission_waypoint",
+      "waypoint_index": 4
+    },
+    "inject_params": {
+      "SIM_GPS1_GLTCH_X": 50,
+      "SIM_GPS1_GLTCH_Y": 50,
+      "SIM_GPS1_GLTCH_Z": 0
+    },
+    "reset_params": {
+      "SIM_GPS1_GLTCH_X": 0,
+      "SIM_GPS1_GLTCH_Y": 0,
+      "SIM_GPS1_GLTCH_Z": 0
+    },
+    "assertions": [
+      {
+        "kind": "param_value",
+        "param": "SIM_GPS1_GLTCH_X",
+        "equals": 50,
+        "after": "inject"
+      },
+      {
+        "kind": "no_crash"
+      },
+      {
+        "kind": "altitude_bounded",
+        "min_m": 50,
+        "max_m": 200,
+        "after": "inject"
+      }
+    ]
+  }
+}
