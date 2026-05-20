@@ -1,0 +1,24 @@
+# ArduPlane parameters - altitude-wind lane
+# Apply on top of plane_base.parm.
+#
+# One-source rule:
+# - Gazebo provides wind
+# - SITL wind remains disabled
+
+ARSPD_TYPE       100       # JSON airspeed sensor from Gazebo / ArduPilotPlugin
+ARSPD_USE        1
+ARSPD_AUTOCAL    0         # Do not learn startup wind as offset
+ARSPD_SKIP_CAL   1         # Keep startup from zeroing in active Gazebo wind
+ARSPD_OFFSET     0
+
+# DEBUGGED
+# Airspeed for the altitude-wind lane.
+AIRSPEED_CRUISE  14      # Target cruise airspeed in auto-throttle modes (m/s)
+AIRSPEED_MIN     10      # Minimum commanded airspeed; keep above stall margin (m/s)
+AIRSPEED_MAX     22      # Maximum commanded airspeed for TECS / auto-throttle (m/s)
+STALL_PREVENTION 1
+
+SIM_WIND_SPD     0
+SIM_WIND_DIR     180    # DEBUGGED: Harmless, 0 wind_spd
+SIM_WIND_TURB    0
+AHRS_WIND_MAX    20     #  allows up to a 20 m/s difference between groundspeed and airspeed
