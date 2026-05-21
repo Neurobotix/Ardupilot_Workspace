@@ -1,0 +1,126 @@
+# LEGACY all-in-one Mini Talon parameter file.
+# Archived during config cleanup so the active config/ working set stays small.
+#
+# Historical role:
+# - mixed airspeed + LiDAR assumptions in one file
+# - used before the launcher switched to layered plane_base / plane_airspeed /
+#   plane_lidar params
+#
+# Current launcher inputs:
+# - ../plane_base.parm
+# - ../plane_airspeed.parm
+# - ../plane_lidar.parm
+# - ../staircase_plane_params.parm
+# - ../plane_params_rebuild.parm
+
+# Enable JSON backend for Gazebo
+SIM_JSON_MASTER 1
+
+# Throttle failsafe - disabled for simulation
+THR_FAILSAFE 0
+
+# ============ V-TAIL SERVO CONFIGURATION (MINI TALON) ============
+SERVO1_FUNCTION  4
+SERVO1_MIN       1100
+SERVO1_MAX       1900
+SERVO1_TRIM      1500
+SERVO1_REVERSED  0
+
+SERVO2_FUNCTION  79
+SERVO2_MIN       1100
+SERVO2_MAX       1900
+SERVO2_TRIM      1500
+SERVO2_REVERSED  0
+
+SERVO3_FUNCTION  70
+SERVO3_MIN       1100
+SERVO3_MAX       1900
+SERVO3_TRIM      1100
+SERVO3_REVERSED  0
+
+SERVO4_FUNCTION  80
+SERVO4_MIN       1100
+SERVO4_MAX       1900
+SERVO4_TRIM      1500
+SERVO4_REVERSED  0
+
+# ============ AIRSPEED SETTINGS ============
+ARSPD_TYPE       100
+ARSPD_USE        1
+ARSPD_AUTOCAL    0
+TRIM_ARSPD_CM    1400
+ARSPD_FBW_MIN    10
+ARSPD_FBW_MAX    22
+STALL_PREVENTION 1
+
+# ============ NAVIGATION TUNING ============
+NAVL1_PERIOD     17
+NAVL1_DAMPING    0.75
+WP_RADIUS        20
+WP_LOITER_RAD    50
+
+# ============ FLIGHT LIMITS ============
+LIM_ROLL_CD      4500
+LIM_PITCH_MIN    -10
+LIM_PITCH_MAX    20
+
+# ============ THROTTLE SETTINGS ============
+THR_MIN          0
+THR_MAX          100
+TRIM_THROTTLE    55
+
+# ============ RTL SETTINGS ============
+RTL_AUTOLAND     2
+RTL_ALTITUDE     50
+
+# ============ LANDING PARAMETERS ============
+LAND_FLARE_ALT   1
+LAND_FLARE_SEC   0.5
+LAND_PITCH_DEG   3
+TECS_LAND_SINK   0.3
+TECS_APPR_SMAX   0.5
+TECS_SINK_MAX    1.5
+TECS_LAND_ARSPD  12
+TECS_LAND_SPDWGT 2.0
+TECS_FLARE_HGT   0.5
+LAND_FLARE_AIM   20
+TECS_LAND_THR    50
+LAND_THR_SLEW    70
+TECS_LAND_TCONST 2
+LAND_ABORT_THR   70
+LAND_DISARMDELAY 30
+LAND_TYPE        0
+GROUND_STEER_ALT 0
+GROUND_STEER_DPS 0
+LAND_OPTIONS     1
+WHEEL_STEER_GAIN 0
+TECS_THR_DAMP    0.5
+TECS_PITCH_MIN   -10
+
+# ============ RANGEFINDER ============
+RNGFND_LANDING   1
+RNGFND1_TYPE     10
+RNGFND1_ORIENT   25
+RNGFND1_MIN_CM   50
+RNGFND1_MAX_CM   5000
+RNGFND1_GNDCLEAR 10
+
+# ============ EKF / AHRS SETTINGS ============
+AHRS_EKF_TYPE    3
+EK3_ENABLE       1
+EK2_ENABLE       0
+
+# ============ GROUND STEERING / TAKEOFF ============
+GROUND_STEER_ALT 5
+TKOFF_THR_SLEW   100
+TKOFF_ROTATE_SPD 12
+
+# ============ WIND SIMULATION (SITL) ============
+SIM_WIND_SPD     0
+SIM_WIND_DIR     180
+SIM_WIND_TURB    0
+AHRS_WIND_MAX    15
+
+# ============ AUTO MODE SETTINGS ============
+AUTO_FBW_STEER   0
+SKIP_GYRO_CAL    1
