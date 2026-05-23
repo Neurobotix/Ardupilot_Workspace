@@ -1,0 +1,35 @@
+{
+  "attempts": [
+    {
+      "analysis_status": "done",
+      "attempt_dir": "/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/logs/phase1_live_rr_parity_test/wind_x_04_y_04/runs/attempt_001",
+      "attempt_id": "wind_x_04_y_04__rep_01__attempt_001",
+      "attempt_index": 1,
+      "combo_key": "wind_x_04_y_04",
+      "duration_wall_s": 1280.8,
+      "end_time_utc": "2026-05-19T12:15:41+00:00",
+      "loiter_completed": true,
+      "mission_completed_full": true,
+      "notes": [
+        "wind_injection_artifact=/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/logs/phase1_live_rr_parity_test/wind_x_04_y_04/runs/attempt_001/wind_injection.json",
+        "last_statustext=['Throttle disarmed', 'Auto disarmed', 'Distance from LAND point=44.19m']",
+        "source_bin_name=00000001.BIN",
+        "bin_collection_method=isolated_sitl_use_dir"
+      ],
+      "raw_log_path": "/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/logs/phase1_live_rr_parity_test/wind_x_04_y_04/runs/attempt_001/wind_x_04_y_04__rep_01__attempt_001.BIN",
+      "run_alias": "run_01",
+      "square_completed": true,
+      "start_time_utc": "2026-05-19T11:54:21+00:00",
+      "status": "success_full",
+      "success_class": "full_mission",
+      "target_run_index": 1,
+      "x_wind_mps": 4,
+      "y_wind_mps": 4
+    }
+  ],
+  "campaign_root": "/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/logs/phase1_live_rr_parity_test",
+  "created_at_utc": "2026-05-19T11:53:53+00:00",
+  "require_analysis": false,
+  "target_run_count": 1,
+  "updated_at_utc": "2026-05-19T12:15:41+00:00"
+}
