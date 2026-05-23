@@ -1,0 +1,64 @@
+QGC WPL 110
+# ============================================================================
+# RUNWAY AUTOLAND MISSION v7 - SHORT FINAL BASELINE
+# ============================================================================
+#
+# Archived landing-tuning mission retained for historical comparison with v8.
+# Moved out of config/ into missions/archive/ during mission-library cleanup.
+#
+# Goal:
+#   1. Approach low and parallel to runway
+#   2. Touch down at speed (wheels contact ground)
+#   3. Roll out on wheels while decelerating
+#   4. Come to complete stop
+#
+# Approach strategy:
+#   - Final approach at 3m altitude, almost parallel to runway
+#   - Maintain airspeed for control and rollout
+#   - Minimal flare (just protect propeller)
+#   - Touchdown with forward speed, roll to stop
+#
+# ============================================================================
+
+# Home position (set at arming location)
+0	1	0	16	0	0	0	0	-35.363262	149.165237	0	1
+
+# WP1: TAKEOFF - climb to 50m
+1	0	3	22	15.0	0	0	0	-35.363262	149.165237	50	1
+
+# WP2: First cruise waypoint - 200m NORTH, 60m altitude
+2	0	3	16	0	0	0	0	-35.361500	149.165237	60	1
+
+# WP3: Second cruise waypoint - 250m EAST
+3	0	3	16	0	0	0	0	-35.361500	149.168000	60	1
+
+# WP4: Third cruise waypoint - turn back SOUTH
+4	0	3	16	0	0	0	0	-35.364000	149.168000	60	1
+
+# WP5: Far south - 800m south of home for approach alignment
+5	0	3	16	0	0	0	0	-35.370500	149.165237	60	1
+
+# WP6: LOITER_TO_ALT - Circle down to 10m altitude
+6	0	3	31	1	60	0	0	-35.369500	149.165237	10	1
+
+# DO_LAND_START marker - landing sequence begins here
+7	0	3	189	0	0	0	0	0	0	0	1
+
+# ============================================================================
+# STAIRCASE DESCENT - GRADUAL STEP-DOWN TO WHEEL HEIGHT
+# ============================================================================
+
+# WP8: Step 1 - 500m south at 4m altitude
+8	0	3	16	0	0	0	0	-35.367754	149.165237	4	1
+
+# WP9: Step 2 - 300m south at 2m altitude
+9	0	3	16	0	0	0	0	-35.365957	149.165237	2	1
+
+# WP10: Step 3 - 100m south at 1.5m altitude
+10	0	3	16	0	0	0	0	-35.364160	149.165237	1.5	1
+
+# WP11: Step 4 - 30m south at 1.5m altitude
+11	0	3	16	0	0	0	0	-35.363532	149.165237	1.5	1
+
+# WP12: NAV_LAND - touchdown zone
+12	0	3	21	0	0	0	0	-35.363262	149.165237	0	1
