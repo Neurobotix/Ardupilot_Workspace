@@ -1,0 +1,71 @@
+QGC WPL 110
+# ============================================================================
+# RUNWAY AUTOLAND MISSION v8 - GENTLE APPROACH + TRICYCLE GEAR LANDING
+# ============================================================================
+#
+# Retained historical mission from the v7 -> v8 landing-tuning cycle.
+# Moved from config/ into missions/ so it lives with other waypoint missions.
+#
+# CHANGES FROM v7 (archive/runway_autoland_short_final_v7.waypoints):
+#   - WP10: lowered from 1.5m to 1.0m (pre-flare altitude closer to ground)
+#   - WP11: moved from 30m to 80m south of home, lowered to 1.0m
+#           -> final segment now drops 1.0m over 80m = 0.7 deg glide (was 2.9 deg)
+#   - WP12 NAV_LAND: unchanged
+#
+# WHY: v7 dropped 1.5m in last 30m -> violent nosedive at touchdown.
+#      v8 gives 80m of gentle 0.7 deg descent -> smoother wheel contact.
+#
+# APPROACH PROFILE (v7 -> v8):
+#   WP10: 1.5m @ 100m south -> 1.0m @ 100m south
+#   WP11: 1.5m @  30m south -> 1.0m @  80m south
+#   WP12: 0.0m @   0m (home) -> unchanged
+#
+# ============================================================================
+
+# Home position (set at arming location)
+0	1	0	16	0	0	0	0	-35.363262	149.165237	0	1
+
+# WP1: TAKEOFF - climb to 50m
+1	0	3	22	15.0	0	0	0	-35.363262	149.165237	50	1
+
+# WP2: First cruise waypoint - 200m NORTH, 60m altitude
+2	0	3	16	0	0	0	0	-35.361500	149.165237	60	1
+
+# WP3: Second cruise waypoint - 250m EAST
+3	0	3	16	0	0	0	0	-35.361500	149.168000	60	1
+
+# WP4: Third cruise waypoint - turn back SOUTH
+4	0	3	16	0	0	0	0	-35.364000	149.168000	60	1
+
+# WP5: Far south - 800m south of home for approach alignment
+5	0	3	16	0	0	0	0	-35.370500	149.165237	60	1
+
+# WP6: LOITER_TO_ALT - Circle down to 10m altitude
+# This ensures we're at EXACTLY 10m before starting final approach
+6	0	3	31	1	60	0	0	-35.369500	149.165237	10	1
+
+# DO_LAND_START marker - landing sequence begins here
+7	0	3	189	0	0	0	0	0	0	0	1
+
+# ============================================================================
+# STAIRCASE DESCENT - Gentler final approach than v7
+# ============================================================================
+
+# WP8: Step 1 - 500m south at 4m altitude
+# First descent from 10m to 4m (unchanged from v7)
+8	0	3	16	0	0	0	0	-35.367754	149.165237	4	1
+
+# WP9: Step 2 - 300m south at 2m altitude (unchanged from v7)
+9	0	3	16	0	0	0	0	-35.365957	149.165237	2	1
+
+# WP10: Step 3 - 100m south at 1.0m altitude
+# v7 was 1.5m - lowered to reduce final drop to ground
+10	0	3	16	0	0	0	0	-35.364160	149.165237	1.0	1
+
+# WP11: Step 4 - 80m south at 1.0m altitude
+# v7 was 30m @ 1.5m - moved further out + lowered
+# This gives 80m to descend 1.0m = 0.7 deg glide angle (v7 was 2.9 deg)
+11	0	3	16	0	0	0	0	-35.363982	149.165237	1.0	1
+
+# WP12: NAV_LAND - touchdown zone
+12	0	3	21	0	0	0	0	-35.363262	149.165237	0	1
