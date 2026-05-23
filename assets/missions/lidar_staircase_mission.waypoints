@@ -1,0 +1,93 @@
+QGC WPL 110
+# ============================================================================
+# LIDAR STAIRCASE TEST MISSION v4
+# Takeoff → Straight North over 5 platforms → Square racetrack U-turn → Straight South → Land
+#
+# Coordinate origin: lat=-35.363262, lon=149.165237 (CMAC)
+# Platform centerline: lon=149.165237 (X=0 in world frame)
+# Platform positions:  Y=100/200/300/400/500m North of home
+# Cruise altitude:     30m AGL
+#
+# U-TURN DESIGN — Square racetrack, all right-hand 90° turns:
+#
+#   WP7  (800N,  0E) → heading North  — overshoots P5 by 300m
+#   WP8  (800N,150E) → right 90°, heading East
+#   WP9  (700N,150E) → right 90°, heading South (100m South along East offset lane)
+#   WP10 (700N,  0E) → L1 tracks WP9→WP10 (West leg) then WP10→WP11 (South leg)
+#                       Aircraft makes a controlled left 90° back to centerline heading South
+#                       Left turn swings aircraft ~20m West of centerline, corrected within 60m
+#   WP11 (P5,  500N) → 200m South of WP10 — L1 re-establishes on centerline before P5
+#
+# Why 800m overshoot (not 700m):
+#   Gives WP7→WP8 leg 150m (>L1_dist=58m) to establish East heading before WP8 right turn.
+#   Previous 700m overshoot had WP8→WP9 requiring a 104° left turn, causing aircraft to circle.
+#
+# Nav params (staircase_plane_params.parm):
+#   NAVL1_PERIOD=13  → L1 lookahead ≈ 58m (stable, tight tracking)
+#   NAVL1_DAMPING=0.85 → prevents oscillation with tighter period
+#   WP_RADIUS=10m    → exactly the platform half-width (20m/2), forces overpass
+#   SIM_WIND_SPD=0   → no wind drift
+# ============================================================================
+
+# Home position
+0	1	0	16	0	0	0	0	-35.363262	149.165237	584	1
+
+# WP1: TAKEOFF - 50m North, climb to 30m AGL
+1	0	3	22	15.0	0	0	0	-35.362812	149.165237	30.00	1
+
+# === NORTHBOUND LEG ===
+# WP2: Platform 1 (Y=100m, top=5m,  expect LiDAR ~2500cm)
+2	0	3	16	0	0	0	0	-35.362362	149.165237	30.00	1
+
+# WP3: Platform 2 (Y=200m, top=10m, expect LiDAR ~2000cm)
+3	0	3	16	0	0	0	0	-35.361462	149.165237	30.00	1
+
+# WP4: Platform 3 (Y=300m, top=15m, expect LiDAR ~1500cm)
+4	0	3	16	0	0	0	0	-35.360562	149.165237	30.00	1
+
+# WP5: Platform 4 (Y=400m, top=20m, expect LiDAR ~1000cm)
+5	0	3	16	0	0	0	0	-35.359662	149.165237	30.00	1
+
+# WP6: Platform 5 (Y=500m, top=25m, expect LiDAR ~500cm)
+6	0	3	16	0	0	0	0	-35.358762	149.165237	30.00	1
+
+# === SQUARE RACETRACK U-TURN ===
+# WP7: Overshoot (800m N, centerline) — 300m past P5, extra room for WP7→WP8 leg
+#   lat = -35.363262 + 800/111111 = -35.363262 + 0.007200 = -35.356062
+7	0	3	16	0	0	0	0	-35.356062	149.165237	30.00	1
+
+# WP8: Corner 1 (800m N, 150m East) — RIGHT 90°: aircraft turns North→East
+#   lon = 149.165237 + 150/(111111*cos(35.363°)) = 149.165237 + 150/90706 = 149.165237 + 0.001654 = 149.166891
+8	0	3	16	0	0	0	0	-35.356062	149.166891	30.00	1
+
+# WP9: Corner 2 (700m N, 150m East) — RIGHT 90°: aircraft turns East→South
+#   Aircraft flies 100m South along 150m East offset lane before turning back West
+#   lat = -35.363262 + 700/111111 = -35.363262 + 0.006300 = -35.356962
+9	0	3	16	0	0	0	0	-35.356962	149.166891	30.00	1
+
+# WP10: Corner 3 (700m N, centerline) — aircraft returns to centerline (West leg)
+#   L1 tracks WP9→WP10 (West) then WP10→WP11 (South). Left 90° at WP10 into South track.
+#   Max ~20m West overshoot during left turn, corrected within 60m before P5 (200m away).
+10	0	3	16	0	0	0	0	-35.356962	149.165237	30.00	1
+
+# === SOUTHBOUND LEG (same centerline) ===
+# WP11: Platform 5 (Y=500m, expect LiDAR ~500cm) — 200m South of WP10, L1 established
+11	0	3	16	0	0	0	0	-35.358762	149.165237	30.00	1
+
+# WP12: Platform 4 (Y=400m, expect LiDAR ~1000cm)
+12	0	3	16	0	0	0	0	-35.359662	149.165237	30.00	1
+
+# WP13: Platform 3 (Y=300m, expect LiDAR ~1500cm)
+13	0	3	16	0	0	0	0	-35.360562	149.165237	30.00	1
+
+# WP14: Platform 2 (Y=200m, expect LiDAR ~2000cm)
+14	0	3	16	0	0	0	0	-35.361462	149.165237	30.00	1
+
+# WP15: Platform 1 (Y=100m, expect LiDAR ~2500cm)
+15	0	3	16	0	0	0	0	-35.362362	149.165237	30.00	1
+
+# WP16: Approach (Y=50m, descend to 15m AGL)
+16	0	3	16	0	0	0	0	-35.362812	149.165237	15.00	1
+
+# WP17: LAND at home
+17	0	3	21	0	0	0	0	-35.363262	149.165237	0.00	1
