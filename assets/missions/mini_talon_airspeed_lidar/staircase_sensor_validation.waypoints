@@ -1,0 +1,92 @@
+QGC WPL 110
+# ============================================================================
+# AIRSPEED + LIDAR STAIRCASE SENSOR VALIDATION
+# Takeoff → Straight East over 5 platforms → Right-hand racetrack → Straight West → Land
+#
+# Coordinate origin: lat=-35.363262, lon=149.165237 (CMAC)
+# Platform centerline: lat=-35.363262 (Y=0 in world frame)
+# Platform positions:  X=250/350/450/550/650m East of home
+# Cruise altitude:     30m AGL
+# Intended world:      worlds/mini_talon_airspeed_lidar/wind_staircase.sdf
+# Intended params:     config/mini_talon_airspeed_lidar/plane_full.parm
+#
+# RACETRACK DESIGN — inherited from the wind-world eastbound takeoff frame:
+#
+#   WP7  (950E,   0N) → heading East  — overshoots P5 by 300m
+#   WP8  (950E, 150S) → right 90°, heading South
+#   WP9  (850E, 150S) → right 90°, heading West
+#   WP10 (850E,   0N) → left 90° back to the eastbound centerline, now heading West
+#   WP11 (650E,   0N) → centerline rejoin before platform 5 on the westbound leg
+#
+# Why the staircase starts at 250m:
+#   `00000169.BIN` showed the aircraft only reached about X=90m and ~4.4m AGL on
+#   the failed run, which is not enough margin to clear a 5m platform at X=100m.
+#   The staircase is shifted downrange so takeoff and climb can settle first.
+#
+# Why 950m overshoot:
+#   Gives WP7→WP8 enough room to stabilize before the southbound offset leg, while
+#   keeping the aircraft aligned with the wind-world runway frame on departure.
+#
+# Nav params (plane_full.parm):
+#   NAVL1_PERIOD=13  → L1 lookahead ≈ 58m (stable, tight tracking)
+#   NAVL1_DAMPING=0.85 → prevents oscillation with tighter period
+#   WP_RADIUS=10m    → exactly the platform half-width (20m/2), forces overpass
+#   Gazebo wind is active in the world, SITL wind stays disabled here
+# ============================================================================
+
+# Home position
+0	1	0	16	0	0	0	0	-35.363262	149.165237	584	1
+
+# WP1: TAKEOFF - 50m East, climb to 30m AGL
+1	0	3	22	15.0	0	0	0	-35.363262	149.1657888	30.00	1
+
+# === EASTBOUND LEG ===
+# WP2: Platform 1 (X=250m, top=5m,  expect LiDAR ~2500cm)
+2	0	3	16	0	0	0	0	-35.363262	149.1679960	30.00	1
+
+# WP3: Platform 2 (X=350m, top=10m, expect LiDAR ~2000cm)
+3	0	3	16	0	0	0	0	-35.363262	149.1690997	30.00	1
+
+# WP4: Platform 3 (X=450m, top=15m, expect LiDAR ~1500cm)
+4	0	3	16	0	0	0	0	-35.363262	149.1702033	30.00	1
+
+# WP5: Platform 4 (X=550m, top=20m, expect LiDAR ~1000cm)
+5	0	3	16	0	0	0	0	-35.363262	149.1713069	30.00	1
+
+# WP6: Platform 5 (X=650m, top=25m, expect LiDAR ~500cm)
+6	0	3	16	0	0	0	0	-35.363262	149.1724105	30.00	1
+
+# === RIGHT-HAND RACETRACK ===
+# WP7: Overshoot (950m E, centerline) — 300m past P5, extra room for WP7→WP8 leg
+7	0	3	16	0	0	0	0	-35.363262	149.1757214	30.00	1
+
+# WP8: Corner 1 (950m E, 150m South) — RIGHT 90°: aircraft turns East→South
+8	0	3	16	0	0	0	0	-35.364612	149.1757214	30.00	1
+
+# WP9: Corner 2 (850m E, 150m South) — RIGHT 90°: aircraft turns South→West
+9	0	3	16	0	0	0	0	-35.364612	149.1746178	30.00	1
+
+# WP10: Corner 3 (850m E, centerline) — aircraft returns to centerline (North leg)
+10	0	3	16	0	0	0	0	-35.363262	149.1746178	30.00	1
+
+# === WESTBOUND LEG (same centerline) ===
+# WP11: Platform 5 (X=650m, expect LiDAR ~500cm) — westbound rejoin complete
+11	0	3	16	0	0	0	0	-35.363262	149.1724105	30.00	1
+
+# WP12: Platform 4 (X=550m, expect LiDAR ~1000cm)
+12	0	3	16	0	0	0	0	-35.363262	149.1713069	30.00	1
+
+# WP13: Platform 3 (X=450m, expect LiDAR ~1500cm)
+13	0	3	16	0	0	0	0	-35.363262	149.1702033	30.00	1
+
+# WP14: Platform 2 (X=350m, expect LiDAR ~2000cm)
+14	0	3	16	0	0	0	0	-35.363262	149.1690997	30.00	1
+
+# WP15: Platform 1 (X=250m, expect LiDAR ~2500cm)
+15	0	3	16	0	0	0	0	-35.363262	149.1679960	30.00	1
+
+# WP16: Approach (100m East, descend to 15m AGL)
+16	0	3	16	0	0	0	0	-35.363262	149.1663406	15.00	1
+
+# WP17: LAND at home
+17	0	3	21	0	0	0	0	-35.363262	149.165237	0.00	1
