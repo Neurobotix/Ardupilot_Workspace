@@ -1,0 +1,186 @@
+{
+  "accepted_total": 1,
+  "campaign_root": "/home/ahmed/ardupilot_workspace_next/var/runs/phase5_live_rr_parity_remediation_20260521",
+  "combos": [
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_00_y_00",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 0,
+      "y_wind_mps": 0
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_00_y_04",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 0,
+      "y_wind_mps": 4
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_00_y_08",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 0,
+      "y_wind_mps": 8
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_00_y_12",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 0,
+      "y_wind_mps": 12
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_04_y_00",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 4,
+      "y_wind_mps": 0
+    },
+    {
+      "accepted_runs": 1,
+      "attempt_count": 1,
+      "combo_key": "wind_x_04_y_04",
+      "last_attempt_id": "wind_x_04_y_04__rep_01__attempt_001",
+      "last_status": "success_full",
+      "pending_attempt_count": 0,
+      "remaining_runs": 0,
+      "x_wind_mps": 4,
+      "y_wind_mps": 4
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_04_y_08",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 4,
+      "y_wind_mps": 8
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_04_y_12",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 4,
+      "y_wind_mps": 12
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_08_y_00",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 8,
+      "y_wind_mps": 0
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_08_y_04",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 8,
+      "y_wind_mps": 4
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_08_y_08",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 8,
+      "y_wind_mps": 8
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_08_y_12",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 8,
+      "y_wind_mps": 12
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_12_y_00",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 12,
+      "y_wind_mps": 0
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_12_y_04",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 12,
+      "y_wind_mps": 4
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_12_y_08",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 12,
+      "y_wind_mps": 8
+    },
+    {
+      "accepted_runs": 0,
+      "attempt_count": 0,
+      "combo_key": "wind_x_12_y_12",
+      "last_attempt_id": null,
+      "last_status": null,
+      "pending_attempt_count": 0,
+      "remaining_runs": 1,
+      "x_wind_mps": 12,
+      "y_wind_mps": 12
+    }
+  ],
+  "remaining_total": 15,
+  "require_analysis": false,
+  "target_run_count": 1,
+  "updated_at_utc": "2026-05-21T10:50:11+00:00"
+}
