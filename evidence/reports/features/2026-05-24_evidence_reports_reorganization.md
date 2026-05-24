@@ -187,8 +187,19 @@ make doctor
 
 ## Validation Results
 
-Results are recorded in the run that produced this report. See the closing
-summary at the bottom of this file for the exact `make doctor` outcome.
+Revalidated on 2026-05-25 in
+`/home/ahmed/ardupilot_workspace_next`:
+
+| Command | Outcome |
+| --- | --- |
+| `git status --short` | PASS: no output; working tree was clean before this validation-results fix. |
+| `git diff --check` | PASS: no whitespace errors. |
+| `find evidence/reports -maxdepth 1 -type f -name "*.md" -print` | PASS: output was exactly `evidence/reports/README.md`; no report Markdown remains at the top level. |
+| `find evidence/reports -maxdepth 2 -type f -name "*.md" \| sort` | PASS: listed `README.md`, 6 reports under `features/`, 15 reports under `migration/`, and 1 report under `operations/`; no report Markdown under `audits/` or `campaigns/` yet. |
+| `find evidence/reports -type f ! -name "*.md" -print \| sort` | PASS: no output; report directories contain no non-Markdown files. |
+| `find evidence/reports -maxdepth 2 -type d \| sort` | PASS: listed only `evidence/reports`, `audits`, `campaigns`, `features`, `migration`, and `operations`. |
+| `rg "evidence/reports/" .` | PASS: live docs, governance, `.ai`, indexes, templates, scripts, and dependency notes point to the categorized paths; remaining flat-path references are inside dated evidence reports or this report's old-path/new-path mapping and residual-risk note. |
+| `make doctor` | PASS: `STRUCTURE VALIDATION PASSED` and `EVIDENCE VALIDATION PASSED`. |
 
 ## Old Workspace Modification Statement
 
