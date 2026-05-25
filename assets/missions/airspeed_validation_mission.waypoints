@@ -1,0 +1,87 @@
+QGC WPL 110
+# ============================================================================
+# AIRSPEED VALIDATION MISSION v1
+# Purpose:
+#   Produce clean, repeatable airspeed vs groundspeed behavior in the fixed
+#   wind world `mini_talon_wind_runway.sdf`.
+#
+# World assumptions:
+#   - Home: lat=-35.363262, lon=149.165237
+#   - Wind: `<linear_velocity>-5 0 0</linear_velocity>`
+#   - ENU axes: +X East, +Y North
+#   - Aircraft starts facing East and takes off into the wind
+#
+# Validation logic:
+#   - Command a single cruise airspeed with DO_CHANGE_SPEED = 15 m/s
+#   - Fly one long Eastbound leg into the headwind
+#   - Fly one long Westbound leg with the tailwind
+#
+# Expected steady-state outputs in the cruise segments:
+#   - Eastbound leg (WP3 -> WP4):
+#       ARSP ≈ 15 m/s
+#       GPS  ≈ 10 m/s
+#       ARSP - GPS ≈ +5 m/s
+#   - Westbound leg (WP6 -> WP7):
+#       ARSP ≈ 15 m/s
+#       GPS  ≈ 20 m/s
+#       ARSP - GPS ≈ -5 m/s
+#
+# Interpretation:
+#   - If ARSP holds near the command and the sign of (ARSP-GPS) flips between
+#     the reciprocal legs with about 5 m/s magnitude, the sensor chain and
+#     wind interaction are behaving correctly.
+#   - Ignore the takeoff transient and the turn segments for validation.
+# ============================================================================ 
+
+# Home
+0	1	0	16	0	0	0	0	-35.3632620	149.1652370	584.00	1
+
+# WP1: TAKEOFF East, climb to 40m AGL
+1	0	3	22	15.0	0	0	0	-35.3632620	149.1668924	40.00	1
+
+# WP2: Command target airspeed = 15 m/s
+# MAV_CMD_DO_CHANGE_SPEED (178): param1=0, param2=15
+2	0	0	178	0	15.0	0	0	0	0	0	1
+
+# WP3: Eastbound settle leg, 300m East of home
+3	0	3	16	0	0	0	0	-35.3632620	149.1685479	40.00	1
+
+# WP4: Eastbound measurement leg end, 900m East of home
+4	0	3	16	0	0	0	0	-35.3632620	149.1751696	40.00	1
+
+# WP5: North offset for racetrack turn, 150m North / 900m East
+5	0	3	16	0	0	0	0	-35.3619120	149.1751696	40.00	1
+
+# WP6: Westbound settle leg start, 150m North / 300m East
+6	0	3	16	0	0	0	0	-35.3619120	149.1685479	40.00	1
+
+# WP7: Westbound measurement leg end, 150m North / 300m West
+7	0	3	16	0	0	0	0	-35.3619120	149.1619261	40.00	1
+
+# WP8: Return near home, 150m North of home
+8	0	3	16	0	0	0	0	-35.3619120	149.1652370	40.00	1
+
+# WP9: Return directly over home at validation altitude
+# Purpose: finish reciprocal test, then transition to a deterministic landing sequence.
+9	0	3	16	0	0	0	0	-35.3632620	149.1652370	40.00	1
+
+# WP10: Loiter at home for 20 seconds before landing sequence.
+10	0	3	19	20	0	0	0	-35.3632620	149.1652370	40.00	1
+
+# WP11: DO_LAND_START marker for RTL_AUTOLAND compatibility.
+11	0	3	189	0	0	0	0	0	0	0	1
+
+# WP12: LOITER_TO_ALT south of home; descend to 10m before final approach.
+12	0	3	31	1	60	0	0	-35.3695000	149.1652370	10.00	1
+
+# WP13: Step-down approach waypoint at 4m.
+13	0	3	16	0	0	0	0	-35.3677540	149.1652370	4.00	1
+
+# WP14: Step-down approach waypoint at 2m.
+14	0	3	16	0	0	0	0	-35.3659570	149.1652370	2.00	1
+
+# WP15: Short final approach waypoint at 1m.
+15	0	3	16	0	0	0	0	-35.3639820	149.1652370	1.00	1
+
+# WP16: NAV_LAND at home.
+16	0	3	21	0	0	0	0	-35.3632620	149.1652370	0.00	1
