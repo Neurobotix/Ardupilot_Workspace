@@ -160,7 +160,8 @@ class AttemptRunner:
             self._env.launch(case, ctx)
             self._env.assert_ready(case, ctx)
             record = self._strategy.execute(ctx)
-            record.end_time_utc = _utc_now_iso()
+            if not record.end_time_utc:
+                record.end_time_utc = _utc_now_iso()
             record.duration_wall_s = time.time() - ctx.start_wall_s
             self._manifest.append_attempt(record)
             return record
