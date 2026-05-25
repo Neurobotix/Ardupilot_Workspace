@@ -15,7 +15,6 @@ src/SIM_ARD_GAW/logs/
 *.local
 *.local.parm
 !evidence/curated_logs/recovered_param_stacks/**/private_overlay/**/*.local.parm
-.ai/
 .claude/
 .codex/
 .agents/
