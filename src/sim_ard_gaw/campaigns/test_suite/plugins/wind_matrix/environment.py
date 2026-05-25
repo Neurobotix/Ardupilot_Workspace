@@ -107,10 +107,29 @@ class WindMatrixEnvironment(EnvironmentAdapter):
         run_matrix.ensure_process_alive("Gazebo", gazebo_proc, gazebo_log)
 
     def assert_ready(self, case: TestCase, ctx: AttemptContext) -> None:
-        # The legacy stack performs heartbeat + readiness checks inside
-        # `run_one.run_one`. Phase 1 trusts that; Phase 3 will pull the
-        # readiness checks here.
-        return None
+        if self._config.attempt_strategy != "staged":
+            return None
+        run_one = _legacy.run_one_module()
+        master = run_one.wait_for_heartbeat(
+            self._config.mavlink_addr,
+            run_one.clamp_timeout_to_slot(
+                self._config.heartbeat_timeout_s,
+                ctx.slot_deadline_monotonic_s,
+                phase="heartbeat wait",
+            ),
+        )
+        ctx.extra["mavlink_master"] = master
+        ctx.extra["legacy_start_time_utc"] = run_one.utc_now()
+        if self._config.auto_control:
+            run_one.wait_for_vehicle_ready(
+                master,
+                run_one.clamp_timeout_to_slot(
+                    self._config.ready_timeout_s,
+                    ctx.slot_deadline_monotonic_s,
+                    phase="vehicle readiness",
+                ),
+                force_arm=self._config.force_arm,
+            )
 
     def cleanup(self, case: TestCase, ctx: AttemptContext) -> None:
         if not self._config.launch_stack:
