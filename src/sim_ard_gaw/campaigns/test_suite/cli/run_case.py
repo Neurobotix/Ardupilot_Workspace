@@ -1,7 +1,9 @@
 """Run one attempt for a single case.
 
 Mirrors the flag surface of the legacy `run_one.py` so existing scripts
-can be migrated by swapping the entry point.
+can be migrated by swapping the entry point. The default
+`--attempt-strategy legacy` delegates to `run_one.run_one(...)`; the
+opt-in `staged` strategy is not campaign-runtime parity evidence yet.
 """
 from __future__ import annotations
 
@@ -18,6 +20,9 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix",
                    help="Plugin name (default: wind_matrix)")
+    p.add_argument("--attempt-strategy", choices=("legacy", "staged"),
+                   default="legacy",
+                   help="Attempt implementation path (default: legacy)")
     p.add_argument("--x", type=int, required=True, choices=run_one.WIND_VALUES)
     p.add_argument("--y", type=int, required=True, choices=run_one.WIND_VALUES)
     p.add_argument("--rep", type=int, required=True)
@@ -98,6 +103,7 @@ def main() -> None:
             if args.preloaded_wind_world is not None else None
         ),
         preloaded_wind_refresh=not args.no_preloaded_wind_refresh,
+        attempt_strategy=args.attempt_strategy,
     )
 
     plugin = build_plugin(config)
