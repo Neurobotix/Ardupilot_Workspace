@@ -4,13 +4,13 @@ This module is the only public surface of the plugin. It wires the
 plugin's adapters together and exposes `build_plugin(config)` for the
 CLI.
 
-Phase-1 design:
-- Environment adapter is real (delegates to `run_matrix`).
-- The body of stages 4-10 is `LegacyDelegateStrategy` that calls
-  `run_one.run_one(...)` so behavior stays byte-for-byte identical.
-- A future Phase-3 commit replaces `LegacyDelegateStrategy` with
-  `StagedStrategy` and ships real stim/control/monitor/analyzer/verdict
-  adapters.
+Phase-3 design:
+- `legacy` remains the default strategy and delegates to
+  `run_one.run_one(...)`.
+- `staged` is an explicit opt-in strategy that wires wind stimulus,
+  MAVLink control, monitoring, analysis, and verdict adapters through
+  the framework. It is not the campaign default until live parity
+  evidence exists.
 """
 from __future__ import annotations
 
@@ -21,8 +21,15 @@ from typing import Callable
 from sim_ard_gaw.campaigns.status import legacy_analysis_succeeded
 
 from ...core import _legacy
-from ...core.attempt_runner import AttemptRunner, LegacyDelegateStrategy
+from ...core.analysis import AnalyzerChain
+from ...core.attempt_runner import (
+    AttemptRunner,
+    AttemptStrategy,
+    LegacyDelegateStrategy,
+    StagedStrategy,
+)
 from ...core.case_generator import CaseGenerator
+from ...core.control import ManualMissionControl, MavlinkAutoMissionControl
 from ...core.environment import EnvironmentAdapter
 from ...core.manifest import LegacyManifest, Manifest
 from ...core.models import (
@@ -34,9 +41,16 @@ from ...core.models import (
     Verdict,
     VerdictClass,
 )
+from ...core.monitor import DisarmCompletionMonitor
 from .case_generator import WindMatrixCaseGenerator
 from .config import WindMatrixConfig
 from .environment import WindMatrixEnvironment
+from .analyzers import (
+    WindMatrixAnalyzer,
+    WindMatrixVerdictPolicy,
+    build_wind_matrix_error_record,
+)
+from .stimulus import WindMatrixStimulus
 
 
 @dataclass
@@ -46,11 +60,24 @@ class WindMatrixPlugin:
     environment: EnvironmentAdapter
     manifest: Manifest
     legacy_body: Callable[[AttemptContext], AttemptRecord]
+    staged_strategy: AttemptStrategy | None = None
 
     def attempt_runner(self) -> AttemptRunner:
+        strategy: AttemptStrategy
+        if self.config.attempt_strategy == "staged":
+            if self.staged_strategy is None:
+                raise RuntimeError("staged attempt strategy was not configured")
+            strategy = self.staged_strategy
+        elif self.config.attempt_strategy == "legacy":
+            strategy = LegacyDelegateStrategy(body=self.legacy_body)
+        else:
+            raise ValueError(
+                "attempt_strategy must be 'legacy' or 'staged', got "
+                f"{self.config.attempt_strategy!r}"
+            )
         return AttemptRunner(
             environment=self.environment,
-            strategy=LegacyDelegateStrategy(body=self.legacy_body),
+            strategy=strategy,
             manifest=self.manifest,
             artifact_root=self.config.campaign_root,
         )
@@ -200,6 +227,21 @@ _LEGACY_STATUS_TO_VERDICT = {
 
 
 def build_plugin(config: WindMatrixConfig) -> WindMatrixPlugin:
+    if config.attempt_strategy not in {"legacy", "staged"}:
+        raise ValueError(
+            "attempt_strategy must be 'legacy' or 'staged', got "
+            f"{config.attempt_strategy!r}"
+        )
+    if (
+        config.attempt_strategy == "staged"
+        and config.auto_control
+        and config.auto_wind_phase == "after-takeoff"
+    ):
+        raise ValueError(
+            "staged wind_matrix attempts do not support "
+            "auto_wind_phase='after-takeoff'. Use attempt_strategy='legacy' "
+            "or auto_wind_phase='before-arm'."
+        )
     return WindMatrixPlugin(
         config=config,
         case_generator=WindMatrixCaseGenerator(config),
@@ -210,4 +252,51 @@ def build_plugin(config: WindMatrixConfig) -> WindMatrixPlugin:
             accept_square_only=config.accept_square_only,
         ),
         legacy_body=_legacy_run_one_body(config),
+        staged_strategy=(
+            _staged_strategy(config)
+            if config.attempt_strategy == "staged" else None
+        ),
+    )
+
+
+def _staged_strategy(config: WindMatrixConfig) -> StagedStrategy:
+    run_one = _legacy.run_one_module()
+    control = (
+        MavlinkAutoMissionControl(
+            mission_file=config.mission_file,
+            upload_timeout_s=config.upload_timeout_s,
+            arm_timeout_s=config.arm_timeout_s,
+            mode_timeout_s=config.mode_timeout_s,
+            settle_s=run_one.AUTO_ARM_TO_AUTO_SETTLE_S,
+            force_arm=config.force_arm,
+            upload_mission=run_one.upload_mission,
+            verify_mission=run_one.verify_mission,
+            arm_vehicle=run_one.arm_vehicle,
+            settle_after_arm_before_auto=run_one.settle_after_arm_before_auto,
+            set_auto_mode=run_one.set_auto_mode,
+            clamp_timeout_to_slot=run_one.clamp_timeout_to_slot,
+            bin_flush_delay_s=run_one.BIN_FLUSH_DELAY_S,
+            analysis_headroom_s=run_one.ANALYSIS_HEADROOM_S,
+            log=run_one.log,
+        )
+        if config.auto_control
+        else ManualMissionControl(config.mission_file, log=run_one.log)
+    )
+    return StagedStrategy(
+        stimulus=WindMatrixStimulus(config),
+        control=control,
+        monitor=DisarmCompletionMonitor(
+            mission_timeout_s=config.mission_timeout_s,
+            monitor_until_disarm=run_one.monitor_until_disarm,
+            clamp_timeout_to_slot=run_one.clamp_timeout_to_slot,
+            mission_pre_loaded=config.auto_control,
+            stop_on_square_loiter=config.accept_square_only,
+            bin_flush_delay_s=run_one.BIN_FLUSH_DELAY_S,
+            analysis_headroom_s=run_one.ANALYSIS_HEADROOM_S,
+        ),
+        analyzers=AnalyzerChain([WindMatrixAnalyzer(config)]),
+        verdict_policy=WindMatrixVerdictPolicy(),
+        on_exception=lambda ctx, exc: build_wind_matrix_error_record(
+            config, ctx, exc,
+        ),
     )
