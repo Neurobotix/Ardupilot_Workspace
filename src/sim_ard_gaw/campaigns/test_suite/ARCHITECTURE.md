@@ -99,7 +99,7 @@ adapters are thin wrappers that delegate into the legacy modules:
 | `WindMatrixMonitor`              | `run_one.monitor_until_disarm`         |
 | `WindMatrixAnalyzers`            | `run_one.run_analysis`                 |
 | `WindMatrixVerdict`              | success classes from `run_one.run_one` |
-| `LegacyManifest`                 | `run_one.load_manifest` / `save_manifest` |
+| `LegacyManifest`                 | `run_one.load_manifest` / `save_manifest`, plus additive generic view fields |
 
 For Phase 1 the wind plugin uses a `LegacyDelegateAttemptStrategy` that calls
 `run_one.run_one(...)` as the single body of stages 4–10. The intent is to keep
@@ -123,10 +123,17 @@ retirement stage below.
 - No changes to manifest schema or artifact layout.
 
 ### Stage 2 — generic data model
-- Add framework-level `case_id`, `parameters`, `stimulus_result`,
-  `analysis_results`, `verdict` fields written **alongside** the existing
-  wind-specific fields (additive, not breaking).
+- Add framework-level `case_id`, `suite_name`, `parameters`,
+  `stimulus_result`, `analysis_results`, `verdict`, `artifacts`,
+  `attempt_id`, `started_at`, `finished_at`, and `schema_version` fields
+  written **alongside** the existing wind-specific fields (additive, not
+  breaking).
 - Provide a manifest reader that exposes both views.
+
+Implemented in feature Phase 2 on 2026-05-25. The generic view schema marker
+is `test_suite.generic_manifest.v1`; `Manifest.legacy_view()` returns the
+legacy/plugin shape and `Manifest.generic_view()` normalizes old and new rows
+without mutating older manifests.
 
 ### Stage 3 — split run_one into plugin pieces
 - Extract from `run_one.py`:
@@ -138,8 +145,13 @@ retirement stage below.
   - `monitor_until_disarm` → `core/monitor.py` (waypoint-range knob is
     plugin config)
   - manifest helpers → `core/manifest.py`
-- Replace the Phase-1 `LegacyDelegateAttemptStrategy` with a real
-  framework-driven `AttemptRunner.run` that calls each stage adapter.
+- Add a real framework-driven staged path in `AttemptRunner.run` that calls
+  each stage adapter. As of feature Phase 3 on 2026-05-25 this path is
+  available only with `--attempt-strategy staged`; `legacy` remains the
+  default until live SITL/Gazebo parity evidence exists. Staged
+  `auto_wind_phase=after-takeoff` is blocked because the legacy behavior
+  applies wind after AUTO takeoff altitude while the generic staged order
+  applies stimulus before control.
 
 ### Stage 4 — second plugin (proof of generality)
 - Stand up a second non-wind plugin (suggested: a no-stimulus airspeed
@@ -165,6 +177,10 @@ keep working when the entry point is swapped in:
 
 During Phase 1 these new entry points exist in addition to the legacy
 ones, not in place of them.
+
+Feature Phase 3 added `--attempt-strategy {legacy,staged}` to the new
+`test_suite.cli.*` entry points. The default is `legacy`; `staged` is an
+explicit opt-in for the extracted wind-matrix stage adapters.
 
 ## Risks
 
