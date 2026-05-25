@@ -89,7 +89,10 @@ class Phase1ParityTests(unittest.TestCase):
                 legacy_flags = _help_flags(legacy)
                 new_flags = _help_flags(new)
                 self.assertEqual(set(), legacy_flags - new_flags)
-                self.assertEqual({"--plugin"}, new_flags - legacy_flags)
+                self.assertEqual(
+                    {"--plugin", "--attempt-strategy"},
+                    new_flags - legacy_flags,
+                )
 
     def test_wind_config_defaults_track_legacy_matrix(self) -> None:
         cfg = WindMatrixConfig()
