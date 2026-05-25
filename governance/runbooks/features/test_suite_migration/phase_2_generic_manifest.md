@@ -89,7 +89,6 @@ this version while historical campaign evidence is still referenced.
 - this feature runbook bundle
 - `evidence/reports/features/2026-05-25_test_suite_migration_phase_2.md`
 - `evidence/indexes/evidence_catalog.md`
-- `.ai/index.md`
 
 ## Validation plan
 
