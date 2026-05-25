@@ -8,6 +8,20 @@ Raw evidence stays under `evidence/`.
 - Primary report:
   `evidence/reports/features/TEST_SUITE_MIGRATION_PHASE_1_2026-05-24.md`
 
+## Phase 2 (generic manifest / data model)
+
+- Primary report:
+  `evidence/reports/features/2026-05-25_test_suite_migration_phase_2.md`
+- Runbook:
+  `governance/runbooks/features/test_suite_migration/phase_2_generic_manifest.md`
+
+## Phase 3 (staged attempt runner)
+
+- Primary report:
+  `evidence/reports/features/2026-05-25_test_suite_migration_phase_3.md`
+- Runbook:
+  `governance/runbooks/features/test_suite_migration/phase_3_staged_attempt_runner.md`
+
 ## Upstream evidence that Phase 1 relies on
 
 - Governance Phase 5 campaign / test migration:
@@ -26,9 +40,10 @@ Raw evidence stays under `evidence/`.
 
 ## Curated comparator log roots
 
-These Phase-1 wrapper-parity claims must remain schema-compatible
-with the legacy manifest layout in these curated roots until Phase 2
-(generic data model) adds additive fields:
+These Phase-1 wrapper-parity claims remain schema-compatible with the
+legacy manifest layout in these curated roots. Phase 2 adds a generic
+reader view over them and writes generic fields only additively for new
+framework attempts:
 
 - `evidence/curated_logs/017_params_old_009_matrix_r3_plugin_fixed/`
 - `evidence/curated_logs/018_New_Param_Full_CTE_Matrix/`
@@ -36,9 +51,8 @@ with the legacy manifest layout in these curated roots until Phase 2
 
 ## Future evidence (not yet produced)
 
-- Phase 2 evidence report: not started.
-- Phase 3 split evidence (live SITL/Gazebo single-attempt diff against
-  legacy `run_one.py`): not started; gates Phase 3 entry.
+- Staged-mode live SITL/Gazebo single-attempt diff against legacy
+  `run_one.py`: not started; required before any staged-mode cutover claim.
 - Phase 4 second-plugin evidence: not started.
 - Phase 5 compatibility-retirement evidence: not started; depends on
   Phase 4 acceptance.
