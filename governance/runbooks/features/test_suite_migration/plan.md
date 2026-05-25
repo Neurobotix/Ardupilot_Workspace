@@ -79,7 +79,7 @@ phase numbering (Phase 5 / 7 / 8). The mapping is:
 - ArchitectureMD "Stage 4 — second plugin" == feature **Phase 4**.
 - ArchitectureMD "Stage 5 — retire legacy scripts" == feature **Phase 5**.
 
-### Phase 1 — wrapper parity and baseline hardening (this phase)
+### Phase 1 — wrapper parity and baseline hardening
 
 Goals:
 
@@ -94,16 +94,20 @@ Goals:
 Phase 1 does **not** split `run_one.py`, retire compatibility
 wrappers, claim full live-runtime parity, or stand up a second plugin.
 
-### Phase 2 — generic manifest / data model
+### Phase 2 — generic manifest / data model (accepted 2026-05-25)
 
-Add framework-level fields (`case_id`, `parameters`, `verdict`,
-`analysis_results`, `stimulus_result`) to the manifest, written
-additively next to the existing wind-specific fields. Add a reader
-that exposes both views. No rename of existing fields. Phase 2
-preserves campaign log history for fixed-harness comparator datasets
-under `evidence/curated_logs/017_*` and `018_*`.
+Add framework-level fields (`case_id`, `suite_name`, `parameters`,
+`stimulus_result`, `analysis_results`, `verdict`, `artifacts`,
+`attempt_id`, `started_at`, `finished_at`, and `schema_version`) to a
+generic manifest view, written additively next to the existing
+wind-specific fields for attempts created through the framework path.
+Add a reader that exposes both views. No rename of existing fields.
+Phase 2 preserves campaign log history for fixed-harness comparator
+datasets under `evidence/curated_logs/017_*` and `018_*`.
 
-### Phase 3 — split run_one into plugin pieces
+Details: `phase_2_generic_manifest.md`.
+
+### Phase 3 — split run_one into plugin pieces (implemented as opt-in staged mode 2026-05-25)
 
 Move wind/CTE logic out of `run_one.run_one`:
 
@@ -115,9 +119,12 @@ Move wind/CTE logic out of `run_one.run_one`:
 - `monitor_until_disarm` → `core/monitor.py`.
 - Manifest helpers → `core/manifest.py`.
 
-Replace the Phase-1 `LegacyDelegateStrategy` with a real
-`StagedStrategy` and a framework-driven `AttemptRunner.run` that calls
-each stage adapter.
+Add a real `StagedStrategy` path and framework-driven
+`AttemptRunner.run` that calls each stage adapter. The legacy delegate
+remains the default behavior until live SITL/Gazebo parity proves the
+staged path for the runtime scope being claimed.
+
+Details: `phase_3_staged_attempt_runner.md`.
 
 ### Phase 4 — second plugin (proof of generality)
 
@@ -150,6 +157,50 @@ modules become thin wrappers that import and call
 - Disposable Python artifacts (`__pycache__`, `*.pyc`) are absent
   from active source and covered by `.gitignore`.
 - Dated evidence report exists under `evidence/reports/`.
+
+## Phase 2 success criteria
+
+- `Manifest.generic_view()` exposes the generic attempt contract with
+  schema version `test_suite.generic_manifest.v1`.
+- `Manifest.legacy_view()` keeps the wind-specific manifest shape.
+- `LegacyManifest.append_attempt()` writes generic fields additively to
+  the matching attempt row and does not overwrite legacy wind fields.
+- Older manifests with no generic fields normalize without crashing.
+- `success_square_only` remains a generic `partial` verdict and does
+  not count as strict full success by default.
+- Focused Phase 2 tests, unit tests, integration tests, Phase 1 parity,
+  `make test-parity`, and `make doctor` pass.
+
+## Phase 3 success criteria
+
+- `--attempt-strategy legacy` remains the default and keeps the legacy
+  delegate path available.
+- `--attempt-strategy staged` builds wind-matrix staged adapters for
+  stimulus, control, monitor, analysis, and verdict.
+- Staged strategy order and cleanup behavior are covered by unit tests.
+- Manifest writes remain additive and legacy wind fields round-trip
+  unchanged.
+- Failed/error/interrupted statuses do not count as accepted.
+- CLI help paths still work.
+- No Phase 4 second plugin or Phase 5 compatibility retirement occurs.
+
+## Out of scope for Phase 2
+
+- Splitting `run_one.py`.
+- Retiring legacy wrappers.
+- Creating the second plugin.
+- Claiming Phase 3 / Phase 4 / Phase 5 completion.
+- Changing live runtime behavior except additive generic manifest/view
+  recording.
+- Adding implementation logic to `compat_scripts/`.
+
+## Out of scope for Phase 3
+
+- Switching all campaign runtime behavior to staged mode by default.
+- Claiming live staged SITL/Gazebo parity.
+- Supporting staged `auto_wind_phase=after-takeoff`.
+- Retiring legacy wrappers or deleting `run_one.py`.
+- Creating the second plugin.
 
 ## Out of scope for Phase 1
 

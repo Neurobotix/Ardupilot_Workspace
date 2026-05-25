@@ -72,6 +72,19 @@ equivalence from path names.
 - Legacy manifest `status` values remain compatible; Phase 5 adds canonical
   `terminal_status` values (`success`, `partial`, `failed`, `failed_analysis`,
   `error`, `interrupted`) additively.
+- The `test_suite` framework manifest view adds generic fields additively
+  (`schema_version`, `case_id`, `suite_name`, `parameters`,
+  `stimulus_result`, `analysis_results`, `verdict`, `artifacts`,
+  `attempt_id`, `started_at`, `finished_at`). The schema marker is
+  `test_suite.generic_manifest.v1`. Older wind manifests without those fields
+  remain readable through the generic view and the legacy wind-specific fields
+  remain the compatibility surface. Framework additive writes use the same
+  campaign manifest lock as the legacy unsafe manifest transactions.
+- Feature Phase 3 adds an opt-in staged attempt path for the new
+  `test_suite.cli.*` entry points through `--attempt-strategy staged`.
+  The default remains `--attempt-strategy legacy`, which delegates to the
+  proven `run_one.run_one(...)` body. Do not treat staged mode as campaign
+  parity evidence until a dated live SITL/Gazebo comparison exists.
 - The square campaign validates its mission contract before a matrix launcher
   starts a stack and again before the delegated attempt relies on square,
   loiter, and landing sequence assumptions. The contract includes the
