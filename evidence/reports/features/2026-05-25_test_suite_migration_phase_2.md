@@ -37,7 +37,6 @@ The old workspace `/home/ahmed/ardupilot_workspace` was not modified.
 - `governance/runbooks/features/test_suite_migration/review.md`
 - `governance/runbooks/features/test_suite_migration/evidence.md`
 - `evidence/indexes/evidence_catalog.md`
-- `.ai/index.md`
 - this report
 
 ## Generic manifest contract summary
