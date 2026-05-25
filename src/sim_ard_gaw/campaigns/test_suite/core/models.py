@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any
 
 
+GENERIC_MANIFEST_SCHEMA_VERSION = "test_suite.generic_manifest.v1"
+
+
 class AttemptStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
@@ -123,3 +126,4 @@ class AttemptRecord:
     parameters: dict[str, Any] = field(default_factory=dict)
     stimulus_result: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    plugin_manifest_fields: dict[str, Any] = field(default_factory=dict)

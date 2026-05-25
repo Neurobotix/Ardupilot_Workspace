@@ -122,6 +122,8 @@ def _legacy_run_one_body(config: WindMatrixConfig) -> Callable[[AttemptContext],
 
 def _record_from_legacy(ctx: AttemptContext, rec: dict) -> AttemptRecord:
     status_raw = (rec or {}).get("status", "error")
+    x = ctx.case.parameters.get("wind_x_mps")
+    y = ctx.case.parameters.get("wind_y_mps")
     status = _LEGACY_STATUS_TO_FRAMEWORK.get(status_raw, AttemptStatus.ERROR)
     verdict_klass = _LEGACY_STATUS_TO_VERDICT.get(status_raw, VerdictClass.FAILED)
     verdict = Verdict(
@@ -158,8 +160,23 @@ def _record_from_legacy(ctx: AttemptContext, rec: dict) -> AttemptRecord:
         verdict=verdict,
         monitor_result=monitor_result,
         analysis_results=analysis_results,
+        start_time_utc=(rec or {}).get("start_time_utc") or "",
+        end_time_utc=(rec or {}).get("end_time_utc") or "",
+        duration_wall_s=float((rec or {}).get("duration_wall_s", 0.0) or 0.0),
+        artifacts={
+            key: value
+            for key, value in {
+                "raw_log": (rec or {}).get("raw_log_path"),
+                "attempt_dir": (rec or {}).get("attempt_dir"),
+                "run_alias": (rec or {}).get("run_alias"),
+            }.items()
+            if value is not None
+        },
         parameters=dict(ctx.case.parameters),
-        stimulus_result={"kind": ctx.case.stimulus_name},
+        stimulus_result={
+            "kind": ctx.case.stimulus_name or "wind_matrix",
+            "wind_mps": {"x": x, "y": y, "z": 0.0},
+        },
     )
 
 
