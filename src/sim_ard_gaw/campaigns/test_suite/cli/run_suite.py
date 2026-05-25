@@ -1,12 +1,12 @@
 """Run an automated suite — sequential scheduler.
 
 Mirrors the flag surface of `run_matrix.py`. With `--plugin
-wind_matrix`, the attempt body delegates through the legacy
-`run_one.run_one(...)` call path; static / help / unit parity is
-covered by `tests/parity/test_phase1_parity.py`. A live SITL/Gazebo
-single-attempt diff against the legacy `run_matrix.py` runtime is
-still required before treating this CLI as runtime-equivalent — see
-`governance/runbooks/features/test_suite_migration/`.
+wind_matrix`, the default `--attempt-strategy legacy` body delegates
+through the legacy `run_one.run_one(...)` call path. The opt-in
+`--attempt-strategy staged` path uses extracted stage adapters but is
+not campaign-runtime parity evidence yet; a live SITL/Gazebo
+single-attempt diff against the legacy `run_matrix.py` runtime is still
+required before treating it as runtime-equivalent.
 """
 from __future__ import annotations
 
@@ -42,6 +42,8 @@ def _parse_args() -> argparse.Namespace:
     run_matrix = _legacy.run_matrix_module()
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix")
+    p.add_argument("--attempt-strategy", choices=("legacy", "staged"),
+                   default="legacy")
     p.add_argument("--x-values", type=_parse_wind_values, default=[0, 4, 8, 12])
     p.add_argument("--y-values", type=_parse_wind_values, default=[0, 4, 8, 12])
     p.add_argument("--runs-per-combo", type=int, default=run_one.RUNS_PER_COMBO)
@@ -149,6 +151,7 @@ def main() -> None:
         wind_world_mode=args.wind_world_mode,
         param_file_stack=param_files,
         isolated_sitl_state=True,
+        attempt_strategy=args.attempt_strategy,
     )
 
     plugin = build_plugin(config)

@@ -63,8 +63,17 @@ class StagedStrategy(AttemptStrategy):
     monitor: CompletionMonitor
     analyzers: AnalyzerChain
     verdict_policy: VerdictPolicy
+    on_exception: Callable[[AttemptContext, Exception], AttemptRecord] | None = None
 
     def execute(self, ctx: AttemptContext) -> AttemptRecord:
+        try:
+            return self._execute_stages(ctx)
+        except Exception as exc:
+            if self.on_exception is None:
+                raise
+            return self.on_exception(ctx, exc)
+
+    def _execute_stages(self, ctx: AttemptContext) -> AttemptRecord:
         ctx.stimulus_result = self.stimulus.apply(ctx.case, ctx)
         verify_payload = self.stimulus.verify(ctx.case, ctx)
         if verify_payload:
@@ -76,21 +85,42 @@ class StagedStrategy(AttemptStrategy):
         verdict: Verdict = self.verdict_policy.classify(
             ctx.case, monitor_result, analysis_results,
         )
+        plugin_manifest_fields = dict(ctx.extra.get("plugin_manifest_fields") or {})
+        artifacts = {
+            name: str(path)
+            for name, path in ctx.artifacts.items()
+        }
+        artifacts.update({
+            key: str(value)
+            for key, value in plugin_manifest_fields.get("artifacts", {}).items()
+        })
 
         return AttemptRecord(
-            attempt_id=f"{ctx.case.case_id}__attempt_{ctx.attempt_index:03d}",
+            attempt_id=plugin_manifest_fields.get(
+                "attempt_id",
+                f"{ctx.case.case_id}__attempt_{ctx.attempt_index:03d}",
+            ),
             suite_name=ctx.case.suite_name,
             case_id=ctx.case.case_id,
             target_run_index=ctx.target_run_index,
             attempt_index=ctx.attempt_index,
-            status=_status_from_verdict(verdict),
+            status=_status_from_plugin_manifest(
+                plugin_manifest_fields,
+                fallback=_status_from_verdict(verdict),
+            ),
             verdict=verdict,
             monitor_result=monitor_result,
             analysis_results=list(analysis_results),
-            start_time_utc=_utc_now_iso(),  # filled in by runner end-of-run
+            start_time_utc=plugin_manifest_fields.get("start_time_utc") or _utc_now_iso(),
+            end_time_utc=plugin_manifest_fields.get("end_time_utc") or "",
             duration_wall_s=time.time() - ctx.start_wall_s,
-            parameters=dict(ctx.case.parameters),
+            artifacts=artifacts,
+            parameters=plugin_manifest_fields.get(
+                "parameters", dict(ctx.case.parameters),
+            ),
             stimulus_result=dict(ctx.stimulus_result),
+            notes=list(plugin_manifest_fields.get("notes", [])),
+            plugin_manifest_fields=plugin_manifest_fields,
         )
 
 
@@ -103,6 +133,24 @@ def _status_from_verdict(v: Verdict) -> AttemptStatus:
         VerdictClass.FAILED_RETRYABLE: AttemptStatus.FAILED,
         VerdictClass.ANALYSIS_FAILED: AttemptStatus.ANALYSIS_FAILED,
     }[v.klass]
+
+
+def _status_from_plugin_manifest(
+    fields: dict,
+    *,
+    fallback: AttemptStatus,
+) -> AttemptStatus:
+    status = fields.get("status")
+    if status is None:
+        return fallback
+    return {
+        "success_full": AttemptStatus.SUCCESS,
+        "success_square_only": AttemptStatus.PARTIAL,
+        "failed": AttemptStatus.FAILED,
+        "failed_analysis": AttemptStatus.ANALYSIS_FAILED,
+        "error": AttemptStatus.ERROR,
+        "interrupted": AttemptStatus.INTERRUPTED,
+    }.get(str(status), fallback)
 
 
 @dataclass

@@ -3,12 +3,12 @@
 Mirrors the flag surface of `run_matrix_round_robin.py`, including
 bounded slot timing, analysis-required acceptance, focus-combo
 filtering, and isolated SITL state for BIN selection. With `--plugin
-wind_matrix`, the attempt body delegates through the legacy
-`run_one.run_one(...)` call path; static / help / unit parity is
-covered by `tests/parity/test_phase1_parity.py`. A live SITL/Gazebo
-diff against the legacy round-robin runtime is still required before
-treating this CLI as runtime-equivalent — see
-`governance/runbooks/features/test_suite_migration/`.
+wind_matrix`, the default `--attempt-strategy legacy` body delegates
+through the legacy `run_one.run_one(...)` call path. The opt-in
+`--attempt-strategy staged` path uses extracted stage adapters but is
+not campaign-runtime parity evidence yet; a live SITL/Gazebo diff
+against the legacy round-robin runtime is still required before
+treating it as runtime-equivalent.
 """
 from __future__ import annotations
 
@@ -38,6 +38,8 @@ def _parse_args() -> argparse.Namespace:
     run_matrix_round_robin = _legacy.run_matrix_round_robin_module()
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix")
+    p.add_argument("--attempt-strategy", choices=("legacy", "staged"),
+                   default="legacy")
     p.add_argument("--x-values", type=_parse_int_list, default=[0, 4, 8, 12])
     p.add_argument("--y-values", type=_parse_int_list, default=[0, 4, 8, 12])
     p.add_argument("--runs-per-combo", type=int, default=4)
@@ -204,6 +206,7 @@ def main() -> None:
         stack_log_subdir="round_robin_logs",
         isolated_sitl_state=True,
         slot_deadline_margin_s=run_matrix.CLEANUP_TIMEOUT_S + args.retry_delay_s,
+        attempt_strategy=args.attempt_strategy,
     )
 
     plugin = build_plugin(config)
