@@ -11,6 +11,7 @@
 - Evidence standard: `governance/standards/evidence.md`
 - Records lifecycle standard: `governance/standards/records_lifecycle.md`
 - Human evidence workflow: `docs/operations/evidence_workflow.md`
+- Presentation template: `docs/presentations/README.md`
 - Evidence catalog: `evidence/indexes/evidence_catalog.md`
 - Evidence report templates: `evidence/templates/`
 - Runbook layout overview: `governance/runbooks/README.md`
@@ -41,6 +42,17 @@
   `evidence/reports/features/2026-05-25_test_suite_migration_phase_2.md`
 - test_suite migration Phase 3 (staged attempt runner) evidence:
   `evidence/reports/features/2026-05-25_test_suite_migration_phase_3.md`
+- test_suite migration Phase 3B (staged-boundary audit / negative proof;
+  Phase 3C-3G now required for zero-legacy staged system) evidence:
+  `evidence/reports/features/2026-05-29_test_suite_migration_phase_3b.md`
+- test_suite migration Phase 3C (legacy-runner import blocker / staged
+  foundation boundary; no live zero-legacy runtime proof) evidence:
+  `evidence/reports/features/2026-05-29_test_suite_migration_phase_3c.md`
+- test_suite migration Phase 3C review fixes (atomic manifests, staged
+  running/terminal rows, stimulus run-config boundary) evidence:
+  `evidence/reports/features/2026-05-31_test_suite_phase3c_review_fixes.md`
+- test_suite migration Phase 3C review findings audit:
+  `governance/audits/2026-05-31_test_suite_phase3c_review_findings.md`
 - Superseded Phase 8 partial-retirement evidence:
   `evidence/reports/migration/PHASE_8_COMPAT_RETIREMENT_2026-05-22.md`
 - Human migration status: `docs/operations/migration_status.md`
