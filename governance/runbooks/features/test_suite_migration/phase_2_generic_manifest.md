@@ -64,10 +64,12 @@ file untouched.
 does not count as a strict full success unless the manifest is configured
 with `accept_square_only=True`.
 
-`LegacyManifest.append_attempt()` must take `campaign_manifest_lock()` for
-the full read/update/save transaction. It must fail closed with the same
-lock error as legacy unsafe writers when another process already holds the
-campaign root lock.
+`WindMatrixManifest.append_attempt()` must take `campaign_manifest_lock()` for
+the full read/update/save transaction. In Phase 2 this behavior still lived in
+`LegacyManifest`; Phase 3C moved the wind-compatible implementation out of
+generic core and into `plugins/wind_matrix/manifest.py`. It must fail closed
+with the same lock error as legacy unsafe writers when another process already
+holds the campaign root lock.
 
 ## Schema/version decision
 
