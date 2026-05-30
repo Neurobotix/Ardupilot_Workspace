@@ -8,7 +8,7 @@ which is called by `make doctor`.
 - `config/` contains reproducible shared vehicle parameters, feature overlays,
   campaign config, and explicit archives.
 - `docs/` contains human-facing onboarding, operations, architecture,
-  campaign, and vehicle documentation.
+  campaign, vehicle documentation, and presentation templates.
 - `governance/` contains standards, decisions, audits, and phase runbooks.
 - `.ai/` contains compact agent pointers and active state.
 - `src/` contains owned code and migration compatibility surfaces.
