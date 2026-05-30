@@ -84,7 +84,17 @@ equivalence from path names.
   `test_suite.cli.*` entry points through `--attempt-strategy staged`.
   The default remains `--attempt-strategy legacy`, which delegates to the
   proven `run_one.run_one(...)` body. Do not treat staged mode as campaign
-  parity evidence until a dated live SITL/Gazebo comparison exists.
+  parity evidence until a dated live SITL/Gazebo comparison exists. Feature
+  Phase 3B proved the staged wind boundary is not hidden behind
+  `run_one.run_one(...)`, but it also found staged mode still depends on
+  legacy runner helper code. Phase 3C-3G must build the full zero-legacy
+  staged wind system before staged mode is treated as replacement or generic
+  runtime proof. The 2026-05-31 Phase 3C follow-up restored atomic plugin
+  manifest writes, staged `running`/terminal manifest persistence, stale
+  running-record reconciliation, and plugin-owned stimulus run-config/path
+  helpers; staged environment launch/readiness, MAVLink control/monitoring,
+  runtime wind injection, analysis, summary, and terminal helper execution
+  still remain Phase 3D-3G legacy-dependency work.
 - The square campaign validates its mission contract before a matrix launcher
   starts a stack and again before the delegated attempt relies on square,
   loiter, and landing sequence assumptions. The contract includes the
