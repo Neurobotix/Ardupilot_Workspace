@@ -15,12 +15,79 @@ Raw evidence stays under `evidence/`.
 - Runbook:
   `governance/runbooks/features/test_suite_migration/phase_2_generic_manifest.md`
 
-## Phase 3 (staged attempt runner)
+## Phase 3A (staged attempt runner)
 
 - Primary report:
   `evidence/reports/features/2026-05-25_test_suite_migration_phase_3.md`
 - Runbook:
   `governance/runbooks/features/test_suite_migration/phase_3_staged_attempt_runner.md`
+- Scope:
+  accepted opt-in staged implementation with static/unit/integration/CLI
+  evidence. This is not live staged runtime parity and not generic framework
+  proof.
+
+## Phase 3B (staged-boundary audit / negative proof)
+
+- Primary report:
+  `evidence/reports/features/2026-05-29_test_suite_migration_phase_3b.md`
+- Scope:
+  no-SITL staged-boundary proof passed for "does not call
+  `run_one.run_one(...)`", but self-review found staged mode still depends on
+  legacy runner helper code across config, CLI, manifest, environment,
+  control, monitor, stimulus, and analysis.
+- Required before Phase 4:
+  Phase 3C-3G must build and prove a full zero-legacy staged wind system in
+  parallel with legacy mode before generic runtime readiness or second-plugin
+  work is used as proof.
+- Gate:
+  Phase 4 second-plugin proof remains blocked.
+
+## Phase 3C (legacy-runner import blocker / staged foundation)
+
+- Primary report:
+  `evidence/reports/features/2026-05-29_test_suite_migration_phase_3c.md`
+- Scope:
+  no-SITL foundation proof for the legacy-runner import blocker and current
+  core/plugin boundary. Staged config/defaults, combo-key case generation,
+  plugin-owned wind manifest setup/additive generic fields, plugin
+  construction, `plugin.attempt_runner()`, and CLI parser/bootstrap work while
+  imports of `run_one.py`, `run_matrix.py`, and
+  `run_matrix_round_robin.py` are blocked. Generic core no longer carries the
+  flagged wind-matrix manifest, monitor, or legacy status-string fallback
+  behavior. Staged auto defaults to the supported `before-arm` wind phase, and
+  campaign summaries use the same `accept_square_only` policy as manifest
+  accepted counts. A 2026-05-31 follow-up closes review findings for plugin
+  manifest atomic writes, staged `running`/terminal manifest persistence,
+  stale-running reconciliation, and avoidable legacy helper use in stimulus
+  attempt-directory/run-config creation.
+- Limit:
+  live zero-legacy staged runtime is not proven. Runtime/environment,
+  MAVLink control/monitor, wind stimulus, artifacts, analysis, and summary
+  helpers still need Phase 3D-3G replacement. Phase 3C is not a full generic
+  architecture proof.
+- Gate:
+  Phase 4 remains blocked.
+
+## Phase 3D-3G (zero-legacy staged runtime and live proof)
+
+- Primary report:
+  not yet available.
+- Scope:
+  planned follow-on work. Build test-suite-owned staged runtime/environment,
+  MAVLink control/monitor, wind stimulus, artifacts, analysis, summary, and
+  full live proof beside legacy mode.
+- Gate:
+  Phase 4 remains blocked until Phase 3G accepts full no-legacy staged tests
+  plus bounded live staged wind proof and matching legacy comparison.
+
+## Plan correction (2026-05-29)
+
+- Primary report:
+  `evidence/reports/features/2026-05-29_test_suite_migration_plan_correction.md`
+- Scope:
+  planning/governance correction only. It splits the old Phase 3 into Phase
+  3A and Phase 3B. Later review expands the Phase 3 follow-on gate to
+  Phase 3C-3G before Phase 4.
 
 ## Upstream evidence that Phase 1 relies on
 
@@ -51,8 +118,10 @@ framework attempts:
 
 ## Future evidence (not yet produced)
 
-- Staged-mode live SITL/Gazebo single-attempt diff against legacy
-  `run_one.py`: not started; required before any staged-mode cutover claim.
-- Phase 4 second-plugin evidence: not started.
+- Phase 3B staged-mode live SITL/Gazebo wind proof against the retained legacy
+  path: blocked as of
+  `evidence/reports/features/2026-05-29_test_suite_migration_phase_3b.md`.
+- Phase 4 second-plugin evidence: not started and not authorized until Phase
+  3B is accepted.
 - Phase 5 compatibility-retirement evidence: not started; depends on
   Phase 4 acceptance.
