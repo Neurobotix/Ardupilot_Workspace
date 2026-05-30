@@ -3,6 +3,9 @@
 Human-facing current documentation belongs here. Use this tree for operating,
 configuring, troubleshooting, and understanding the workspace.
 
+Presentation templates for human-facing project communication live under
+`docs/presentations/`.
+
 ## Naming
 
 - Stable living docs use `lower_snake_case.md`.
