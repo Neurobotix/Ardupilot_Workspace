@@ -1,8 +1,19 @@
-# Phase 3 - Staged Attempt Runner
+# Phase 3A - Staged Attempt Runner
 
-Scope: feature-level Phase 3 of the `test_suite` migration. This is the
-"Stage 3 - split run_one into plugin pieces" phase from
+Scope: feature-level Phase 3A of the `test_suite` migration. This is the
+first half of the old "Stage 3 - split run_one into plugin pieces" phase from
 `src/sim_ard_gaw/campaigns/test_suite/ARCHITECTURE.md`.
+
+Status as of 2026-05-29: Phase 3A is complete as an opt-in staged
+implementation. Phase 3B proves the staged wind lifecycle is not hidden behind
+`run_one.run_one(...)`, but it also records that staged mode still depends on
+legacy runner helper code. Phase 3C is complete for staged foundation only:
+config/defaults, case generation, plugin-owned wind manifest/monitor
+foundation, plugin construction, and CLI parser/bootstrap no longer import
+legacy runner modules. Generic `core/manifest.py` and `core/monitor.py` no
+longer carry wind-matrix fallback behavior. Phase 3D-3G are still required to
+build and prove a full zero-legacy staged wind system in parallel with legacy
+mode.
 
 ## Objective
 
@@ -10,6 +21,11 @@ Split the wind-matrix attempt lifecycle into framework/plugin-owned stages
 without cutting over the campaign default. The legacy delegate remains the
 default strategy until a live SITL/Gazebo parity run proves the staged path is
 runtime-equivalent for the campaign scope being claimed.
+
+Because the legacy path is wind-specific, this phase cannot authorize a second
+plugin proof by itself. `test_suite` is not generic until `wind_matrix` is a
+real staged plugin with evidence, or until any retained legacy wind pieces are
+explicitly isolated and evidence-backed.
 
 ## Extraction Map
 
@@ -19,10 +35,10 @@ runtime-equivalent for the campaign scope being claimed.
 | Mission upload, mission verification, arm, settle, AUTO mode | `core/control.py` via `MavlinkAutoMissionControl` with injected MAVLink helpers | Mission control is a reusable lifecycle stage while helper functions remain injectable. | Staged order tests exercise control call placement. | The staged opt-in does not yet support `auto_wind_phase=after-takeoff`; legacy remains default. |
 | Manual operator prompt | `core/control.py` via `ManualMissionControl` | Manual runs are a control strategy with no MAVLink commands. | Staged build test covers manual staged assembly. | Operator-facing text is preserved in shape, but live manual staged parity is not claimed. |
 | Heartbeat and vehicle readiness | `plugins/wind_matrix/environment.py` for staged mode | Readiness must happen after launch and before stimulus/control. | Compile/import coverage; staged strategy build test. | Uses legacy readiness helpers; no live staged run yet. |
-| `monitor_until_disarm` | `core/monitor.py` via `DisarmCompletionMonitor` | Completion monitoring is a framework stage with plugin thresholds. | Staged order test verifies monitor position. | Uses legacy monitor helper; live timeout/disarm behavior not re-proven. |
+| `monitor_until_disarm` | `plugins/wind_matrix/monitor.py` via `WindMatrixDisarmCompletionMonitor` | Wind/square mission completion is plugin-specific monitor behavior. | Staged order test verifies monitor position. | Uses legacy monitor helper when executed; live timeout/disarm behavior not re-proven. |
 | BIN finalization, BIN collection, `run_analysis`, `build_run_summary`, wind success classification | `plugins/wind_matrix/analyzers.py` via `WindMatrixAnalyzer` and `WindMatrixVerdictPolicy` | Analysis and wind verdict semantics are plugin-owned. | Cleanup/flush ordering, partial verdict, non-accepted failure statuses, and staged manifest tests. | Analyzer still delegates to legacy helpers; heavy analysis is not unit-executed. |
 | Generic staged orchestration | `core/attempt_runner.py` `StagedStrategy` | Framework owns stage ordering and cleanup in `finally`. | `test_staged_strategy_calls_stages_in_expected_order`; cleanup success/failure/interrupt tests. | Strategy order is generic; wind after-takeoff remains blocked in staged mode. |
-| Legacy manifest additive writes | `core/manifest.py` `LegacyManifest.append_attempt()` | Generic fields remain additive; plugin legacy fields can be appended for new staged rows. | Phase 2 generic tests plus Phase 3 plugin-manifest tests. | Direct legacy scripts still write legacy-only rows by design. |
+| Legacy manifest additive writes | `plugins/wind_matrix/manifest.py` `WindMatrixManifest.append_attempt()` | Generic fields remain additive; plugin legacy fields can be appended for new staged rows. | Phase 2 generic tests plus Phase 3 plugin-manifest tests. | Direct legacy scripts still write legacy-only rows by design. |
 | `run_one.run_one(...)` full body | Retained in `campaigns/wind_matrix/run_one.py`; used by `LegacyDelegateStrategy` | Proven compatibility fallback and default runtime path. | `test_legacy_delegate_path_remains_available`; Phase 1 parity tests. | Full staged cutover is intentionally deferred. |
 
 ## Runtime Behavior Preservation Contract
@@ -37,6 +53,26 @@ runtime-equivalent for the campaign scope being claimed.
 - `auto_wind_phase=after-takeoff` is blocked during staged plugin
   construction. Use the legacy delegate for that mode until the wind
   stimulus/control ordering is split safely and proven with live evidence.
+
+## Completion Status
+
+Phase 3A is accepted for:
+
+- opt-in staged runner construction;
+- explicit stage ordering;
+- cleanup in `finally`;
+- manifest additivity and legacy field compatibility;
+- verdict/acceptance safety;
+- CLI flag/help coverage;
+- retention of the default legacy delegate fallback.
+
+Phase 3A remains blocked for:
+
+- default staged runtime cutover;
+- live staged SITL/Gazebo wind parity;
+- staged `auto_wind_phase=after-takeoff`;
+- any claim that `test_suite` is generic;
+- any Phase 4 second-plugin work.
 
 ## Cleanup Contract
 
@@ -56,7 +92,7 @@ launched stack and then closes retained process handles.
   strict accepted run unless `accept_square_only=True`.
 - `failed`, `error`, `interrupted`, and `failed_analysis` do not count as
   accepted.
-- `LegacyManifest.generic_view()` remains backward-compatible with historical
+- `WindMatrixManifest.generic_view()` remains backward-compatible with historical
   manifests that do not contain generic fields.
 
 ## Validation Plan
@@ -98,6 +134,90 @@ launched stack and then closes retained process handles.
 - No implementation logic lands in `compat_scripts/`.
 - Phase 4 second plugin and Phase 5 wrapper retirement are not implemented.
 
+## Phase 3B Audit Result
+
+Phase 3B no-SITL proof is recorded in
+`evidence/reports/features/2026-05-29_test_suite_migration_phase_3b.md`.
+It adds:
+
+- `test_real_staged_wind_path_does_not_call_legacy_run_one_body`;
+- verdict/acceptance coverage for full, partial, failed, error, interrupted,
+  and analysis-failure statuses;
+- CLI default/staged/fail-closed tests;
+- analysis-failure persistence proof.
+
+The retained legacy helper audit is now treated as a blocker list for the
+replacement system:
+
+| Helper | Phase 3B classification |
+| --- | --- |
+| `run_one.run_one(...)` | Removed from the staged lifecycle; retained only by the default legacy strategy. |
+| `run_one.inject_wind`, `preloaded_wind_artifact`, wind echo helpers | Retained as plugin-owned stimulus helpers behind `WindMatrixStimulus`. |
+| `run_one.wait_for_heartbeat`, `wait_for_vehicle_ready` | Retained as staged environment readiness helpers behind `WindMatrixEnvironment`. |
+| `run_one.upload_mission`, `verify_mission`, `arm_vehicle`, `set_auto_mode`, timeout helpers | Retained as injected MAVLink helpers behind `MavlinkAutoMissionControl`. |
+| `run_one.monitor_until_disarm` | Retained as an injected monitor helper behind `WindMatrixDisarmCompletionMonitor`. |
+| `run_one.collect_bin_log`, `cleanup_stack_for_analysis`, `run_analysis`, `build_run_summary` | Retained as plugin-owned analyzer helpers behind `WindMatrixAnalyzer`. |
+| `run_matrix.launch_sitl`, `launch_gazebo`, `cleanup_stack` | Retained as environment launch/cleanup helpers behind `WindMatrixEnvironment`. |
+
+These retained calls are not the final architecture. They remain wind-specific
+legacy runner dependencies behind explicit staged boundaries and must be
+removed from staged mode before replacement readiness.
+
+Additional Phase 3B self-review blockers:
+
+- staged plugin construction still builds a legacy delegate closure;
+- `WindMatrixConfig` defaults still import legacy runner modules;
+- `WindMatrixCaseGenerator` still imports legacy for combo keys;
+- generic `core.LegacyManifest` still imports wind legacy (resolved in Phase
+  3C by moving wind-compatible manifest behavior to
+  `plugins/wind_matrix/manifest.py`);
+- CLI bootstrap still imports legacy for defaults, manifest setup, validation,
+  and logging.
+
+The live staged wind gate is blocked. Attempts under
+`var/runs/test_suite_phase3b_staged_live_20260529/` and
+`var/runs/test_suite_phase3b_staged_live_20260529_no_wipe/` failed during SITL
+launch before heartbeat with `SIM_VEHICLE: MAVProxy exited`. The manifest has
+no accepted staged attempt. Phase 3B live proof is not accepted.
+
+The complete Phase 3B gate requires:
+
+- stage-order tests for the real staged wind lifecycle;
+- cleanup tests on success, failure, and interrupt-like paths;
+- verdict and acceptance tests for full, partial, failed, error, interrupted,
+  and analysis-failure outcomes;
+- manifest compatibility tests for additive generic fields and unchanged
+  legacy wind fields;
+- CLI tests proving the legacy default remains available and the staged path
+  is explicitly selectable;
+- review confirmation that `wind_matrix` no longer hides wind-specific
+  lifecycle delegation through `run_one.run_one(...)`;
+- complete inventory of retained legacy runner helper dependencies, recorded
+  as blockers for Phase 3C-3G;
+- any live staged wind result or blocker recorded without claiming replacement
+  readiness.
+
+## Phase 3C-3G Completion Gate
+
+Phase 4 remains blocked until all of these are accepted:
+
+- **Phase 3C:** staged construction, defaults, paths, case generation,
+  manifest, and CLI bootstrap are test-suite-owned and work with legacy runner
+  imports blocked. Accepted on 2026-05-29 as no-SITL foundation proof only:
+  `evidence/reports/features/2026-05-29_test_suite_migration_phase_3c.md`.
+- **Phase 3D:** staged environment/runtime launch, world writing, cleanup,
+  diagnostics, and timeouts are test-suite-owned.
+- **Phase 3E:** staged MAVLink readiness/control/monitor implementation is
+  test-suite-owned.
+- **Phase 3F:** staged wind stimulus, BIN/artifact, analysis, summary, and
+  terminal-row implementation is test-suite-owned.
+- **Phase 3G:** the full zero-legacy staged wind system passes no-SITL hard
+  tests, completes at least one bounded live staged wind case, and has a
+  matching legacy comparison case.
+
+A second plugin would be architecture theater if it were used to imply generic
+runtime readiness while the first plugin still depends on legacy runner code.
+
 ## Out Of Scope
 
 - Making staged mode the default runtime path.
@@ -106,6 +226,18 @@ launched stack and then closes retained process handles.
 - Creating a second plugin.
 - Retiring or deleting legacy wrappers.
 - Changing accepted/partial/fail manifest semantics.
+- Claiming generic framework readiness.
+
+## Residual Risk
+
+- `test_suite` is not generic until `wind_matrix` is a zero-legacy staged
+  plugin with live evidence.
+- The current staged path still relies on wind-specific legacy helpers for
+  construction, defaults, manifesting, launch, protocol behavior, wind echo
+  handling, monitoring, BIN selection, and heavy analysis. Under the stricter
+  replacement goal, this is a blocker, not an acceptable final boundary.
+- The default runtime path remains the legacy delegate. That is the correct
+  fallback, but it is not proof of generic framework readiness.
 
 ## Rollback Plan
 
