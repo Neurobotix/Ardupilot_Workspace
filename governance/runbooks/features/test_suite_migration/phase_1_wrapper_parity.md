@@ -31,8 +31,9 @@ governed feature phase.
   governance Phase 5 (`evidence/reports/migration/PHASE_5_CAMPAIGN_TESTS_2026-05-21.md`)
   and Phase 8 (`evidence/reports/migration/PHASE_8_COMPAT_RETIREMENT_2026-05-24.md`)
   already recorded.
-- Does not change the manifest schema. The Phase-1 `LegacyManifest`
-  still delegates to `run_one.load_manifest` / `save_manifest`.
+- Does not change the manifest schema. At Phase 1, `LegacyManifest`
+  delegated to `run_one.load_manifest` / `save_manifest`; Phase 3C later
+  moved the wind-compatible implementation to `WindMatrixManifest`.
 - Does not modify the deprecated fallback/reference workspace
   named in `.ai/current.md` and ADR-0005.
 
@@ -53,9 +54,10 @@ governed feature phase.
 - `artifacts.py` — `ArtifactStore` protocol.
 - `analysis.py` — `AnalyzerChain` protocol.
 - `verdicts.py` — `VerdictPolicy` protocol.
-- `manifest.py` — `Manifest` ABC and Phase-1 `LegacyManifest`
+- `manifest.py` — `Manifest` ABC and, at Phase 1, `LegacyManifest`
   delegating to owned `run_one.load_manifest` /
-  `save_manifest` / `combo_successes` / `next_attempt_index`.
+  `save_manifest` / `combo_successes` / `next_attempt_index`. Phase 3C later
+  moved this wind-specific implementation to `plugins/wind_matrix/manifest.py`.
 - `scheduler.py` — `SchedulerPolicy` ABC, `SchedulerDecision`,
   `SequentialScheduler` (matches `run_matrix.main`),
   `RoundRobinScheduler` (bounded slot fairness).
@@ -164,7 +166,7 @@ governed feature phase.
 | `compat_scripts/run_one.py` only calls `run_owned_script` / `export_owned_module` | PASS |
 | `compat_scripts/run_matrix.py` only calls `run_owned_script` / `export_owned_module` | PASS |
 | `compat_scripts/run_matrix_round_robin.py` only calls `run_owned_script` / `export_owned_module` | PASS |
-| `test_suite/core/_legacy.py` resolves owned `sim_ard_gaw.campaigns.wind_matrix.*` modules, not top-level wrappers | PASS |
+| `test_suite/core/_legacy.py` resolves owned `sim_ard_gaw.campaigns.wind_matrix.*` modules, not top-level wrappers | PASS at Phase 1; superseded in Phase 3C by `plugins/wind_matrix/legacy.py` |
 | No new implementation logic added to `compat_scripts/` during Phase 1 | PASS |
 
 ## CLI parity surfaces verified
@@ -192,9 +194,9 @@ also diffs the help flag sets between each legacy script and its
 | Area | Behavior | Evidence |
 | --- | --- | --- |
 | Round-robin ordering | `RoundRobinScheduler.next_case` advances a pointer over a fixed `_pass_cases` list per pass; cases already at acceptance are skipped, not double-counted. | `tests/parity/test_phase1_parity.py::test_round_robin_snapshots_one_pass_in_legacy_order` |
-| Acceptance counting (full success) | `LegacyManifest.accepted_count` defers to `run_one.combo_successes(manifest, key, require_analysis=...)`; `failed` / `failed_analysis` / `error` / `interrupted` are not in the success set. | Translation tables in `plugins/wind_matrix/plugin.py`; `legacy_analysis_succeeded` helper. |
-| Acceptance counting (square-only policy) | `LegacyManifest.accepted_count` is policy-aware: when `accept_square_only=False` (the default), legacy `success_square_only` attempts are treated as partial and do **not** contribute to the accepted count. A historical square-only row cannot silently satisfy a strict full-mission run. | `tests/parity/test_phase1_parity.py::test_legacy_manifest_does_not_accept_square_only_by_default` and `test_legacy_manifest_partial_alone_is_not_accepted_under_strict_policy`. |
-| Attempt indexing | `LegacyManifest.next_attempt_index` defers to `run_one.next_attempt_index`. | Phase 1 manifest path unchanged from governance Phase 5. |
+| Acceptance counting (full success) | At Phase 1, `LegacyManifest.accepted_count` deferred to `run_one.combo_successes(manifest, key, require_analysis=...)`; Phase 3C moved this wind-compatible behavior to `WindMatrixManifest`. `failed` / `failed_analysis` / `error` / `interrupted` are not in the success set. | Translation tables in `plugins/wind_matrix/plugin.py`; `legacy_analysis_succeeded` helper. |
+| Acceptance counting (square-only policy) | The wind-compatible manifest implementation is policy-aware: when `accept_square_only=False` (the default), legacy `success_square_only` attempts are treated as partial and do **not** contribute to the accepted count. A historical square-only row cannot silently satisfy a strict full-mission run. | `tests/parity/test_phase1_parity.py::test_legacy_manifest_does_not_accept_square_only_by_default` and `test_legacy_manifest_partial_alone_is_not_accepted_under_strict_policy`. |
+| Attempt indexing | Phase 1 delegated attempt indexing to `run_one.next_attempt_index`; Phase 3C moved the test-suite-owned implementation to `WindMatrixManifest.next_attempt_index`. | Phase 1 manifest path unchanged from governance Phase 5; Phase 3C report records the move. |
 | Cleanup in `finally` | `AttemptRunner.run` wraps the strategy body in `try/.../finally: env.cleanup(...)`. `WindMatrixEnvironment.cleanup` always calls `run_matrix.cleanup_stack()` then closes any retained process handles. | `attempt_runner.py:158-176`; `environment.py:115-128` |
 | Slot deadline propagation | `RoundRobinScheduler.next_case` sets `slot_deadline_monotonic_s`. `_legacy_run_one_body` subtracts `slot_deadline_margin_s` before forwarding to `run_one.run_one`. | `scheduler.py:116-124`; `plugin.py:82-117` |
 | Manifest writes | `run_one.save_manifest` is the legacy atomic write path; `campaign_manifest_lock` protects the cli pre-amble in `run_suite.py` / `run_round_robin.py`. | Inherited from governance Phase 5 hardening; covered by `tests/unit/test_campaign_manifest_safety.py`. |
