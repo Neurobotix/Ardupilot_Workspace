@@ -6,13 +6,21 @@ blueprint. Its active migration state is governed by
 feature-level migration plan and per-phase notes live under
 `governance/runbooks/features/test_suite_migration/`; the
 ArchitectureMD "Stage" labels below map onto the feature phases there
-(`Stage 1` ↔ feature Phase 1, ..., `Stage 5` ↔ feature Phase 5).
+(`Stage 1` ↔ feature Phase 1, `Stage 2` ↔ feature Phase 2, the old
+`Stage 3` split now maps to feature Phase 3A through Phase 3G, `Stage 4` ↔
+feature Phase 4 after the Phase 3G gate, and `Stage 5` ↔ feature Phase 5
+after Phase 4 acceptance).
 
 It sits **alongside** the legacy runners. Phase 5 hardens shared campaign
 behavior in `run_one.py`, `run_matrix.py`, `run_matrix_round_robin.py`, and the
 wrapper CLIs without cutting over or retiring those compatibility entrypoints.
 New CLI entry points (`test_suite/cli/*.py`) build a plugin and feed it through
 the framework.
+
+The first plugin must be real before a second plugin is used as proof of
+generality. Because the retained legacy path is wind-specific, a second plugin
+does not prove generic framework readiness while `wind_matrix` still depends
+on wind-specific legacy delegation for its attempt lifecycle.
 
 ## Layered model
 
@@ -99,7 +107,7 @@ adapters are thin wrappers that delegate into the legacy modules:
 | `WindMatrixMonitor`              | `run_one.monitor_until_disarm`         |
 | `WindMatrixAnalyzers`            | `run_one.run_analysis`                 |
 | `WindMatrixVerdict`              | success classes from `run_one.run_one` |
-| `LegacyManifest`                 | `run_one.load_manifest` / `save_manifest`, plus additive generic view fields |
+| `WindMatrixManifest`             | legacy-compatible wind manifest shape, plus additive generic view fields |
 
 For Phase 1 the wind plugin uses a `LegacyDelegateAttemptStrategy` that calls
 `run_one.run_one(...)` as the single body of stages 4–10. The intent is to keep
@@ -135,16 +143,16 @@ is `test_suite.generic_manifest.v1`; `Manifest.legacy_view()` returns the
 legacy/plugin shape and `Manifest.generic_view()` normalizes old and new rows
 without mutating older manifests.
 
-### Stage 3 — split run_one into plugin pieces
+### Stage 3A — split run_one into opt-in staged plugin pieces
 - Extract from `run_one.py`:
   - `inject_wind`, `preloaded_wind_artifact`, `parse_wind_echo`,
     `start_wind_echo` → `plugins/wind_matrix/stimulus.py`
   - `run_analysis`, `build_run_summary` (wind/CTE-tailored bits)
     → `plugins/wind_matrix/analyzers.py`
   - mission upload/arm/mode logic → `core/control.py`
-  - `monitor_until_disarm` → `core/monitor.py` (waypoint-range knob is
-    plugin config)
-  - manifest helpers → `core/manifest.py`
+  - `monitor_until_disarm` → `plugins/wind_matrix/monitor.py`
+  - generic manifest contract/view → `core/manifest.py`
+  - wind-compatible manifest implementation → `plugins/wind_matrix/manifest.py`
 - Add a real framework-driven staged path in `AttemptRunner.run` that calls
   each stage adapter. As of feature Phase 3 on 2026-05-25 this path is
   available only with `--attempt-strategy staged`; `legacy` remains the
@@ -153,15 +161,85 @@ without mutating older manifests.
   applies wind after AUTO takeoff altitude while the generic staged order
   applies stimulus before control.
 
-### Stage 4 — second plugin (proof of generality)
+Stage 3A is accepted as static/unit/integration/CLI proof only. It is staged
+behind fallback and does not claim live staged wind parity or generic
+framework readiness.
+
+### Stage 3B — staged dependency audit and negative proof
+- Prove the current staged path is not hidden behind `run_one.run_one(...)`.
+- Prove and record that it is still not a full replacement system because it
+  imports and calls legacy runner helper code.
+- Cover stage ordering, cleanup, verdict/acceptance, manifest compatibility,
+  and CLI behavior with tests.
+- Record any live staged result or blocker without treating helper reuse as
+  final architecture.
+
+Recorded on 2026-05-29 in
+`evidence/reports/features/2026-05-29_test_suite_migration_phase_3b.md`:
+the no-SITL staged-boundary proof passes and the staged path does not call
+`run_one.run_one(...)`; later self-review found staged construction, config,
+CLI, manifest, environment, control, monitor, stimulus, and analysis still
+depend on legacy runner modules. Do not claim generic runtime readiness from
+Phase 3B.
+
+### Stage 3C — legacy-runner import blocker / staged foundation
+- Move staged defaults, case IDs, path naming, manifest implementation, and
+  CLI bootstrap into test-suite-owned modules.
+- Generic core must not contain wind-specific legacy manifest behavior.
+- `attempt_strategy="staged"` must construct with legacy runner imports
+  blocked. Legacy mode may keep the delegate fallback.
+
+Implemented on 2026-05-29 for no-SITL foundation scope only. Staged
+`WindMatrixConfig`, case generation, plugin construction,
+`plugin.attempt_runner()`, manifest setup, and CLI parser/bootstrap now work
+while imports of `run_one.py`, `run_matrix.py`, and
+`run_matrix_round_robin.py` are blocked. The wind-compatible manifest
+implementation and wind/square completion monitor are plugin-owned; generic
+core does not contain wind-matrix manifest, monitor, or legacy status-string
+fallback logic. Staged auto construction defaults to `before-arm`, while
+explicit staged `after-takeoff` remains blocked. Runtime/environment, MAVLink
+control/monitor, wind stimulus, artifacts, analysis, summary, and live
+zero-legacy staged execution remain Stage 3D-3G work.
+
+### Stage 3D — zero-legacy runtime/environment
+- Move staged runtime environment, workspace plugin enforcement, SITL/Gazebo
+  launch, static wind world writing, process cleanup, diagnostics, and timeout
+  helpers into test-suite-owned modules.
+- `WindMatrixEnvironment` staged mode must not call `run_matrix.*` or
+  `run_one.*`.
+
+### Stage 3E — zero-legacy MAVLink control and monitor
+- Move heartbeat/readiness, mission upload/verification, arm/mode control, and
+  mission monitoring into test-suite-owned modules.
+- Staged control/monitor must not inject legacy helper functions.
+
+### Stage 3F — zero-legacy stimulus, artifacts, analysis, and summary
+- Move wind injection/echo verification, preloaded wind artifacts, BIN
+  collection, analysis invocation, run summary, terminal rows, and exception
+  formatting into test-suite-owned modules.
+- Staged stimulus/analyzer must not call legacy runner helpers.
+
+### Stage 3G — full zero-legacy staged wind proof
+- Run the zero-legacy staged wind system beside the retained legacy mode.
+- Hard-test that staged mode passes no-SITL with `run_one.py`,
+  `run_matrix.py`, and `run_matrix_round_robin.py` imports/calls blocked.
+- Run at least one bounded live staged wind case and a matching legacy
+  comparison case.
+
+### Stage 4 — second plugin proof, gated
+- Begins only after Phase 3G accepts a full zero-legacy staged wind system
+  with live proof.
 - Stand up a second non-wind plugin (suggested: a no-stimulus airspeed
   validation bench, or a GPS dropout injector).
 - If it requires editing `core/`, the boundaries are still wrong.
+- Do not use a second plugin as architecture theater. A second plugin proves
+  nothing if the first plugin is still secretly a wind-specific legacy wrapper.
 
-### Stage 5 — retire legacy scripts
-- Once the two plugins are stable, the legacy `run_one.py` etc. become
-  thin wrappers that import and call `test_suite/cli/*.py`. Eventually
-  they can be removed.
+### Stage 5 — retire legacy scripts, gated
+- Begins only after Phase 4 is accepted.
+- Once the first plugin and a second plugin are stable with evidence-backed
+  replacement paths, the legacy `run_one.py` etc. become thin wrappers that
+  import and call `test_suite/cli/*.py`. Eventually they can be removed.
 
 ## CLI compatibility
 
@@ -201,9 +279,13 @@ explicit opt-in for the extracted wind-matrix stage adapters.
   scheduler policy must propagate these into `AttemptContext`, not each
   plugin.
 - **Plugin discovery.** Phase 1 hard-wires the wind_matrix plugin in the
-  CLI. Phase 4 should introduce a plugin registry (entry points or a
-  simple `plugins/__init__.py` mapping). Premature dynamic discovery is
-  out of scope.
+  CLI. Phase 4 may introduce a plugin registry (entry points or a
+  simple `plugins/__init__.py` mapping), but only after Phase 3B proves the
+  first plugin is real. Premature dynamic discovery is out of scope.
+- **Architecture theater.** A second plugin can hide the real problem if
+  `wind_matrix` still depends on wind-specific legacy lifecycle delegation.
+  Phase 4 is blocked until Phase 3G accepts a zero-legacy staged wind system
+  with live proof.
 - **Path assumptions.** Plugins must not hard-code workspace-relative
   paths inside the framework layer. All paths flow through plugin config
   so a new plugin can pick its own scenario and analyzers.
@@ -249,9 +331,16 @@ the runtime acceptance gate.
 6. **Cleanup contract.** Kill the new CLI mid-attempt with SIGINT and
    confirm `EnvironmentAdapter.cleanup` runs (look for the cleanup log
    marker and absence of orphaned `arducopter`/`gz`/MAVProxy procs).
-7. **Plugin isolation.** Add a stub second plugin (e.g.,
-   `plugins/example_noop/`) and prove it can run a one-attempt suite
-   without touching wind_matrix files.
+7. **Phase 3B dependency audit.** Prove staged is not hidden behind
+   `run_one.run_one(...)`, and record every remaining legacy runner
+   dependency as a blocker.
+8. **Phase 3C-3G zero-legacy staged system.** Replace construction, runtime,
+   control, monitor, stimulus, artifact, analysis, manifest, and CLI helper
+   dependencies with test-suite-owned modules, then prove live staged wind
+   beside legacy.
+9. **Plugin isolation.** Only after Phase 3G acceptance, add a stub or real
+   second plugin (for example `plugins/example_noop/`) and prove it can run a
+   one-attempt suite without touching wind_matrix files.
 
 ## Example: porting to a non-wind sensor
 
