@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "src" / "sim_ard_gaw" / "compat_scripts"
@@ -25,8 +26,8 @@ from test_suite.core.attempt_runner import AttemptRunner, AttemptStrategy  # noq
 from test_suite.core.environment import EnvironmentAdapter  # noqa: E402
 from test_suite.core.manifest import (  # noqa: E402
     GENERIC_MANIFEST_SCHEMA_VERSION,
-    LegacyManifest,
     attempt_record_to_generic_fields,
+    generic_manifest_view,
 )
 from test_suite.core.models import (  # noqa: E402
     AnalysisResult,
@@ -37,6 +38,8 @@ from test_suite.core.models import (  # noqa: E402
     Verdict,
     VerdictClass,
 )
+from test_suite.plugins.wind_matrix import manifest as wind_manifest_module  # noqa: E402
+from test_suite.plugins.wind_matrix.manifest import WindMatrixManifest  # noqa: E402
 from test_suite.plugins.wind_matrix.plugin import _record_from_legacy  # noqa: E402
 
 
@@ -126,7 +129,7 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
                 json.dumps(old_manifest), encoding="utf-8"
             )
 
-            manifest = LegacyManifest(root)
+            manifest = WindMatrixManifest(root)
             generic = manifest.generic_view()
             attempt = generic["attempts"][0]
 
@@ -163,11 +166,11 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
                     },
                 ],
             })
-            before = LegacyManifest(root).load()["attempts"][0].copy()
+            before = WindMatrixManifest(root).load()["attempts"][0].copy()
 
             record = _generic_success_record("wind_x_00_y_04__rep_01__attempt_001")
-            LegacyManifest(root).append_attempt(record)
-            saved = LegacyManifest(root).load()["attempts"][0]
+            WindMatrixManifest(root).append_attempt(record)
+            saved = WindMatrixManifest(root).load()["attempts"][0]
 
             for key in (
                 "attempt_id",
@@ -216,7 +219,7 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
             try:
                 self.assertTrue(acquired.wait(timeout=5.0))
                 with self.assertRaises(CampaignManifestLockError):
-                    LegacyManifest(root).append_attempt(
+                    WindMatrixManifest(root).append_attempt(
                         _generic_success_record(attempt_id)
                     )
             finally:
@@ -224,7 +227,7 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
                 holder.join(timeout=5.0)
 
             self.assertFalse(holder.is_alive())
-            saved = LegacyManifest(root).load()["attempts"][0]
+            saved = WindMatrixManifest(root).load()["attempts"][0]
             self.assertNotIn("schema_version", saved)
             self.assertNotIn("case_id", saved)
 
@@ -253,7 +256,7 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
                 case_id="wind_x_00_y_04",
                 parameters={"wind_x_mps": 0, "wind_y_mps": 4},
             )
-            manifest = LegacyManifest(root)
+            manifest = WindMatrixManifest(root)
             runner = AttemptRunner(
                 environment=_NoopEnvironment(),
                 strategy=_StaticRecordStrategy(_generic_success_record(attempt_id)),
@@ -326,7 +329,7 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
                 ],
             })
             case = TestCase("wind_matrix", "wind_x_00_y_00")
-            manifest = LegacyManifest(root)
+            manifest = WindMatrixManifest(root)
 
             self.assertEqual(0, manifest.accepted_count(case))
             self.assertEqual(
@@ -350,7 +353,8 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            attempt = LegacyManifest(root).generic_view()["attempts"][0]
+            raw = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+            attempt = generic_manifest_view(raw)["attempts"][0]
             self.assertEqual("manual_fixture_attempt", attempt["attempt_id"])
             self.assertEqual("", attempt["suite_name"])
             self.assertEqual("manual_fixture_attempt", attempt["case_id"])
@@ -361,6 +365,77 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
             self.assertEqual({}, attempt["artifacts"])
             self.assertIsNone(attempt["started_at"])
             self.assertIsNone(attempt["finished_at"])
+
+    def test_wind_manifest_write_text_preserves_existing_file_on_write_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            target = root / "manifest.json"
+            target.write_text('{"old": true}\n', encoding="utf-8")
+            tmp_path = root / ".manifest.json.testtmp"
+
+            class BrokenTempFile:
+                name = str(tmp_path)
+
+                def __enter__(self):
+                    self._handle = tmp_path.open("w", encoding="utf-8")
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    self._handle.close()
+                    return False
+
+                def write(self, text: str) -> int:
+                    self._handle.write("partial")
+                    self._handle.flush()
+                    raise OSError("simulated interrupted write")
+
+            def broken_named_temporary_file(*args, **kwargs):
+                return BrokenTempFile()
+
+            original = target.read_text(encoding="utf-8")
+            with mock.patch.object(
+                wind_manifest_module.tempfile,
+                "NamedTemporaryFile",
+                side_effect=broken_named_temporary_file,
+            ):
+                with self.assertRaises(OSError):
+                    wind_manifest_module._write_text(target, '{"new": true}\n')
+
+            self.assertEqual(original, target.read_text(encoding="utf-8"))
+            self.assertFalse(tmp_path.exists())
+
+    def test_wind_manifest_reconciles_stale_running_record_before_next_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_one.save_manifest(root, {
+                "campaign_root": str(root),
+                "attempts": [
+                    {
+                        "attempt_id": "wind_x_00_y_04__rep_01__attempt_001",
+                        "combo_key": "wind_x_00_y_04",
+                        "x_wind_mps": 0,
+                        "y_wind_mps": 4,
+                        "target_run_index": 1,
+                        "attempt_index": 1,
+                        "status": "running",
+                        "analysis_status": "pending",
+                    },
+                ],
+            })
+            manifest = WindMatrixManifest(root)
+
+            next_attempt = manifest.next_attempt_index(
+                TestCase("wind_matrix", "wind_x_00_y_04")
+            )
+
+            saved = manifest.load()["attempts"][0]
+            self.assertEqual(2, next_attempt)
+            self.assertEqual("interrupted", saved["status"])
+            self.assertEqual("not_run", saved["analysis_status"])
+            self.assertIn(
+                "bookkeeping_recovered_stale_running_record",
+                saved["notes"],
+            )
 
 
 if __name__ == "__main__":

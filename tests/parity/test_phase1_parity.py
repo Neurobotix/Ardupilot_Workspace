@@ -18,12 +18,12 @@ os.environ.setdefault("PYTHONPATH", str(SCRIPTS_DIR))
 sys.path.insert(0, str(SRC_DIR))
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-import run_matrix  # noqa: E402
-import run_one  # noqa: E402
-from test_suite.core.manifest import LegacyManifest, Manifest  # noqa: E402
+from sim_ard_gaw.campaigns.wind_matrix import run_matrix, run_one  # noqa: E402
+from test_suite.core.manifest import Manifest  # noqa: E402
 from test_suite.core.models import AttemptRecord, TestCase  # noqa: E402
 from test_suite.core.scheduler import RoundRobinScheduler  # noqa: E402
 from test_suite.plugins.wind_matrix.config import WindMatrixConfig  # noqa: E402
+from test_suite.plugins.wind_matrix.manifest import WindMatrixManifest  # noqa: E402
 
 
 OPTION_RE = re.compile(
@@ -170,10 +170,10 @@ class Phase1ParityTests(unittest.TestCase):
                 case_id="wind_x_04_y_04",
                 acceptance_target_runs=2,
             )
-            strict = LegacyManifest(root, accept_square_only=False)
+            strict = WindMatrixManifest(root, accept_square_only=False)
             self.assertEqual(1, strict.accepted_count(case))
 
-            lenient = LegacyManifest(root, accept_square_only=True)
+            lenient = WindMatrixManifest(root, accept_square_only=True)
             self.assertEqual(2, lenient.accepted_count(case))
 
     def test_legacy_manifest_partial_alone_is_not_accepted_under_strict_policy(self) -> None:
@@ -202,9 +202,9 @@ class Phase1ParityTests(unittest.TestCase):
                 case_id="wind_x_00_y_00",
                 acceptance_target_runs=1,
             )
-            self.assertEqual(0, LegacyManifest(root).accepted_count(case))
+            self.assertEqual(0, WindMatrixManifest(root).accepted_count(case))
             self.assertEqual(
-                1, LegacyManifest(root, accept_square_only=True).accepted_count(case),
+                1, WindMatrixManifest(root, accept_square_only=True).accepted_count(case),
             )
 
     def test_wind_runtime_rejects_missing_workspace_plugin(self) -> None:

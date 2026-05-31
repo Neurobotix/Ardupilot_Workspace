@@ -17,8 +17,8 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(SCRIPTS))
 
 import run_one  # noqa: E402
-from test_suite.core.manifest import LegacyManifest  # noqa: E402
 from test_suite.core.models import AttemptContext, AttemptStatus, TestCase  # noqa: E402
+from test_suite.plugins.wind_matrix.manifest import WindMatrixManifest  # noqa: E402
 from test_suite.plugins.wind_matrix.plugin import _record_from_legacy  # noqa: E402
 
 
@@ -40,7 +40,7 @@ class Phase5WrapperManifestFlowTests(unittest.TestCase):
             fixture["attempts"][0]["attempt_dir"] = str(attempt_dir)
             run_one.save_manifest(campaign_root, fixture)
 
-            manifest = LegacyManifest(campaign_root)
+            manifest = WindMatrixManifest(campaign_root)
             case = TestCase(
                 suite_name="wind_matrix",
                 case_id="wind_x_00_y_00",

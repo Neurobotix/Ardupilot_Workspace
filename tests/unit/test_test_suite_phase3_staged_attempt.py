@@ -18,7 +18,6 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(SCRIPTS))
 
 import run_one  # noqa: E402
-from test_suite.core import _legacy  # noqa: E402
 from test_suite.core.analysis import Analyzer, AnalyzerChain  # noqa: E402
 from test_suite.core.attempt_runner import (  # noqa: E402
     AttemptRunner,
@@ -27,7 +26,6 @@ from test_suite.core.attempt_runner import (  # noqa: E402
 )
 from test_suite.core.control import ControlStrategy  # noqa: E402
 from test_suite.core.environment import EnvironmentAdapter  # noqa: E402
-from test_suite.core.manifest import LegacyManifest  # noqa: E402
 from test_suite.core.models import (  # noqa: E402
     AnalysisResult,
     AttemptContext,
@@ -40,10 +38,15 @@ from test_suite.core.models import (  # noqa: E402
 )
 from test_suite.core.monitor import CompletionMonitor  # noqa: E402
 from test_suite.core.stimulus import StimulusAdapter  # noqa: E402
+from test_suite.plugins.wind_matrix import legacy  # noqa: E402
+from test_suite.plugins.wind_matrix.manifest import WindMatrixManifest  # noqa: E402
 from test_suite.plugins.wind_matrix.config import WindMatrixConfig  # noqa: E402
 from test_suite.plugins.wind_matrix.analyzers import WindMatrixAnalyzer  # noqa: E402
 from test_suite.plugins.wind_matrix.plugin import build_plugin  # noqa: E402
 from test_suite.plugins.wind_matrix.analyzers import WindMatrixVerdictPolicy  # noqa: E402
+from test_suite.cli import run_case as cli_run_case  # noqa: E402
+from test_suite.cli import run_round_robin as cli_run_round_robin  # noqa: E402
+from test_suite.cli import run_suite as cli_run_suite  # noqa: E402
 
 
 class _FakeManifest:
@@ -273,7 +276,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 ],
             })
 
-            self.assertEqual(0, LegacyManifest(root).accepted_count(_case()))
+            self.assertEqual(0, WindMatrixManifest(root).accepted_count(_case()))
 
     def test_plugin_manifest_fields_are_additive_for_new_staged_rows(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -303,7 +306,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 },
             )
 
-            LegacyManifest(root).append_attempt(record)
+            WindMatrixManifest(root).append_attempt(record)
             saved = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
             attempt = saved["attempts"][0]
 
@@ -331,7 +334,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 "campaign_root": str(root),
                 "attempts": [dict(legacy_row)],
             })
-            LegacyManifest(root).append_attempt(
+            WindMatrixManifest(root).append_attempt(
                 AttemptRecord(
                     attempt_id=legacy_row["attempt_id"],
                     suite_name="wind_matrix",
@@ -346,7 +349,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     stimulus_result={"kind": "wind_matrix"},
                 )
             )
-            saved = LegacyManifest(root).load()["attempts"][0]
+            saved = WindMatrixManifest(root).load()["attempts"][0]
 
             for key, value in legacy_row.items():
                 self.assertEqual(value, saved[key])
@@ -391,6 +394,260 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             self.assertEqual(0, result.returncode)
             self.assertEqual("StagedStrategy", result.stdout.strip())
 
+    def test_real_staged_wind_path_does_not_call_legacy_run_one_body(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": []})
+            plugin = build_plugin(
+                WindMatrixConfig(
+                    campaign_root=root,
+                    launch_stack=False,
+                    auto_control=False,
+                    attempt_strategy="staged",
+                )
+            )
+            assert isinstance(plugin.staged_strategy, StagedStrategy)
+            strategy = plugin.staged_strategy
+            events: list[str] = []
+
+            strategy.stimulus.apply = (  # type: ignore[method-assign]
+                lambda case, ctx: events.append("wind_stimulus.apply")
+                or {"kind": "wind_matrix"}
+            )
+            strategy.stimulus.verify = (  # type: ignore[method-assign]
+                lambda case, ctx: events.append("wind_stimulus.verify")
+                or {"ok": True}
+            )
+            strategy.control.execute = (  # type: ignore[method-assign]
+                lambda case, ctx: events.append("wind_control")
+            )
+            strategy.monitor.run = (  # type: ignore[method-assign]
+                lambda case, ctx: events.append("wind_monitor")
+                or MonitorResult(True, "completed", 1.0)
+            )
+
+            def _analysis(case: TestCase, ctx: AttemptContext) -> list[AnalysisResult]:
+                events.append("wind_analysis")
+                ctx.extra["plugin_manifest_fields"] = {
+                    "attempt_id": "wind_x_00_y_04__rep_01__attempt_001",
+                    "combo_key": "wind_x_00_y_04",
+                    "x_wind_mps": 0,
+                    "y_wind_mps": 4,
+                    "target_run_index": 1,
+                    "attempt_index": 1,
+                    "status": "success_full",
+                    "success_class": "full_mission",
+                    "analysis_status": "done",
+                    "raw_log_path": None,
+                    "attempt_dir": str(root / "wind_x_00_y_04" / "runs" / "attempt_001"),
+                    "run_alias": "run_01",
+                    "start_time_utc": "2026-05-29T00:00:00Z",
+                    "end_time_utc": "2026-05-29T00:01:00Z",
+                    "duration_wall_s": 60.0,
+                    "notes": [],
+                    "artifacts": {
+                        "attempt_dir": str(
+                            root / "wind_x_00_y_04" / "runs" / "attempt_001"
+                        ),
+                    },
+                }
+                return [
+                    AnalysisResult(
+                        "wind_matrix_legacy_analysis",
+                        True,
+                        {
+                            "legacy_status": "success_full",
+                            "legacy_success_class": "full_mission",
+                            "legacy_analysis_status": "done",
+                        },
+                    )
+                ]
+
+            strategy.analyzers.run = _analysis  # type: ignore[method-assign]
+            runner = AttemptRunner(
+                environment=_RecordingEnvironment(events),
+                strategy=strategy,
+                manifest=plugin.manifest,
+                artifact_root=root,
+                log=lambda _msg: None,
+            )
+            owned_run_one = legacy.run_one_module()
+            with patch.object(
+                owned_run_one,
+                "run_one",
+                side_effect=AssertionError("staged path called run_one.run_one"),
+            ):
+                record = runner.run(
+                    case=_case(),
+                    target_run_index=1,
+                    attempt_index=1,
+                    attempt_dir=root / "wind_x_00_y_04" / "runs",
+                )
+
+            self.assertEqual(AttemptStatus.SUCCESS, record.status)
+            self.assertEqual(
+                [
+                    "prepare",
+                    "launch",
+                    "ready",
+                    "wind_stimulus.apply",
+                    "wind_stimulus.verify",
+                    "wind_control",
+                    "wind_monitor",
+                    "wind_analysis",
+                    "cleanup",
+                ],
+                events,
+            )
+            saved = WindMatrixManifest(root).load()["attempts"][0]
+            self.assertEqual("success_full", saved["status"])
+            self.assertEqual("test_suite.generic_manifest.v1", saved["schema_version"])
+
+    def test_staged_runner_prewrites_running_row_then_updates_same_row(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            plugin = build_plugin(
+                WindMatrixConfig(
+                    campaign_root=root,
+                    launch_stack=False,
+                    auto_control=False,
+                    attempt_strategy="staged",
+                )
+            )
+            assert isinstance(plugin.staged_strategy, StagedStrategy)
+            strategy = plugin.staged_strategy
+            events: list[str] = []
+
+            class _AssertRunningEnvironment(_RecordingEnvironment):
+                def assert_ready(self, case: TestCase, ctx: AttemptContext) -> None:
+                    super().assert_ready(case, ctx)
+                    saved = WindMatrixManifest(root).load()["attempts"]
+                    if len(saved) != 1 or saved[0].get("status") != "running":
+                        raise AssertionError(saved)
+
+            strategy.stimulus.apply = (  # type: ignore[method-assign]
+                lambda case, ctx: events.append("wind_stimulus.apply")
+                or {"kind": "wind_matrix"}
+            )
+            strategy.stimulus.verify = (  # type: ignore[method-assign]
+                lambda case, ctx: events.append("wind_stimulus.verify")
+                or {"ok": True}
+            )
+            strategy.control.execute = (  # type: ignore[method-assign]
+                lambda case, ctx: events.append("wind_control")
+            )
+            strategy.monitor.run = (  # type: ignore[method-assign]
+                lambda case, ctx: events.append("wind_monitor")
+                or MonitorResult(True, "completed", 1.0)
+            )
+
+            def _analysis(case: TestCase, ctx: AttemptContext) -> list[AnalysisResult]:
+                events.append("wind_analysis")
+                ctx.extra["plugin_manifest_fields"] = {
+                    "attempt_id": "wind_x_00_y_04__rep_01__attempt_001",
+                    "combo_key": "wind_x_00_y_04",
+                    "x_wind_mps": 0,
+                    "y_wind_mps": 4,
+                    "target_run_index": 1,
+                    "attempt_index": 1,
+                    "status": "success_full",
+                    "success_class": "full_mission",
+                    "analysis_status": "done",
+                    "raw_log_path": None,
+                    "attempt_dir": str(root / "wind_x_00_y_04" / "runs" / "attempt_001"),
+                    "run_alias": "run_01",
+                    "start_time_utc": "2026-05-31T00:00:00Z",
+                    "end_time_utc": "2026-05-31T00:01:00Z",
+                    "duration_wall_s": 60.0,
+                    "notes": [],
+                    "artifacts": {
+                        "attempt_dir": str(
+                            root / "wind_x_00_y_04" / "runs" / "attempt_001"
+                        ),
+                    },
+                }
+                return [
+                    AnalysisResult(
+                        "wind_matrix_legacy_analysis",
+                        True,
+                        {
+                            "legacy_status": "success_full",
+                            "legacy_success_class": "full_mission",
+                            "legacy_analysis_status": "done",
+                        },
+                    )
+                ]
+
+            strategy.analyzers.run = _analysis  # type: ignore[method-assign]
+            runner = plugin.attempt_runner()
+            runner._env = _AssertRunningEnvironment(events)  # noqa: SLF001
+
+            record = runner.run(
+                case=_case(),
+                target_run_index=1,
+                attempt_index=1,
+                attempt_dir=root / "wind_x_00_y_04" / "runs",
+            )
+
+            saved = WindMatrixManifest(root).load()["attempts"]
+            self.assertEqual(AttemptStatus.SUCCESS, record.status)
+            self.assertEqual(1, len(saved))
+            self.assertEqual("success_full", saved[0]["status"])
+            self.assertEqual("done", saved[0]["analysis_status"])
+            self.assertEqual(
+                "test_suite.generic_manifest.v1",
+                saved[0]["schema_version"],
+            )
+
+    def test_staged_environment_failure_updates_running_row_to_terminal_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            plugin = build_plugin(
+                WindMatrixConfig(
+                    campaign_root=root,
+                    launch_stack=False,
+                    auto_control=False,
+                    attempt_strategy="staged",
+                )
+            )
+            events: list[str] = []
+
+            class _FailingLaunchEnvironment(EnvironmentAdapter):
+                def prepare_case(self, case: TestCase) -> None:
+                    events.append("prepare")
+
+                def launch(self, case: TestCase, ctx: AttemptContext) -> None:
+                    events.append("launch")
+                    raise RuntimeError("launch boom")
+
+                def assert_ready(self, case: TestCase, ctx: AttemptContext) -> None:
+                    events.append("ready")
+
+                def cleanup(self, case: TestCase, ctx: AttemptContext) -> None:
+                    events.append("cleanup")
+
+            runner = plugin.attempt_runner()
+            runner._env = _FailingLaunchEnvironment()  # noqa: SLF001
+
+            with self.assertRaisesRegex(RuntimeError, "launch boom"):
+                runner.run(
+                    case=_case(),
+                    target_run_index=1,
+                    attempt_index=1,
+                    attempt_dir=root / "wind_x_00_y_04" / "runs",
+                )
+
+            saved = WindMatrixManifest(root).load()["attempts"]
+            self.assertEqual(["prepare", "launch", "cleanup"], events)
+            self.assertEqual(1, len(saved))
+            self.assertEqual("error", saved[0]["status"])
+            self.assertEqual("not_run", saved[0]["analysis_status"])
+            self.assertEqual(
+                "test_suite.generic_manifest.v1",
+                saved[0]["schema_version"],
+            )
+            self.assertIn("exception: launch boom", saved[0]["notes"])
+
     def test_legacy_delegate_path_remains_available(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             plugin = build_plugin(
@@ -431,7 +688,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 "square_completed": True,
                 "loiter_completed": True,
             }
-            owned_run_one = _legacy.run_one_module()
+            owned_run_one = legacy.run_one_module()
             analyzer = WindMatrixAnalyzer(
                 WindMatrixConfig(
                     campaign_root=root,
@@ -493,11 +750,11 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             runner = AttemptRunner(
                 environment=_RecordingEnvironment([]),
                 strategy=strategy,
-                manifest=LegacyManifest(root),
+                manifest=WindMatrixManifest(root),
                 artifact_root=root,
                 log=lambda _msg: None,
             )
-            owned_run_one = _legacy.run_one_module()
+            owned_run_one = legacy.run_one_module()
             with (
                 patch.object(owned_run_one, "clamp_timeout_to_slot", return_value=0.0),
                 patch("test_suite.plugins.wind_matrix.analyzers.time.sleep", return_value=None),
@@ -510,7 +767,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     attempt_dir=root / "wind_x_00_y_04" / "runs" / "attempt_001",
                 )
 
-            saved = LegacyManifest(root).load()["attempts"][0]
+            saved = WindMatrixManifest(root).load()["attempts"][0]
             self.assertEqual(AttemptStatus.ERROR, record.status)
             self.assertEqual("wind_x_00_y_04__rep_01__attempt_001", saved["attempt_id"])
             self.assertEqual("wind_x_00_y_04", saved["combo_key"])
@@ -524,6 +781,70 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             )
             self.assertEqual("test_suite.generic_manifest.v1", saved["schema_version"])
             self.assertEqual("wind_x_00_y_04", saved["case_id"])
+
+    def test_analysis_failure_persists_failed_analysis_and_is_not_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": []})
+            case = _case()
+            attempt_dir = root / "wind_x_00_y_04" / "runs" / "attempt_001"
+            attempt_dir.mkdir(parents=True)
+            source_bin = root / "source.BIN"
+            source_bin.write_bytes(b"bin")
+            ctx = AttemptContext(
+                case=case,
+                campaign_root=root,
+                attempt_dir=attempt_dir,
+                attempt_index=1,
+                target_run_index=1,
+                start_wall_s=0.0,
+                start_monotonic_s=0.0,
+            )
+            ctx.extra["wind_monitor_state"] = {
+                "mission_completed_full": True,
+                "square_completed": True,
+                "loiter_completed": True,
+            }
+            owned_run_one = legacy.run_one_module()
+            analyzer = WindMatrixAnalyzer(
+                WindMatrixConfig(campaign_root=root, require_analysis=True)
+            )
+
+            with (
+                patch.object(owned_run_one, "clamp_timeout_to_slot", return_value=0.0),
+                patch("test_suite.plugins.wind_matrix.analyzers.time.sleep", return_value=None),
+                patch.object(owned_run_one, "collect_bin_log", return_value=source_bin),
+                patch.object(owned_run_one, "ensure_run_alias_link", return_value=None),
+                patch.object(owned_run_one, "run_analysis", side_effect=RuntimeError("analysis boom")),
+            ):
+                result = analyzer.analyze(case, ctx)
+
+            self.assertFalse(result.ok)
+            self.assertEqual("failed_analysis", result.summary["legacy_status"])
+            self.assertEqual(
+                "failed_analysis",
+                ctx.extra["plugin_manifest_fields"]["status"],
+            )
+
+            record = AttemptRecord(
+                attempt_id=ctx.extra["plugin_manifest_fields"]["attempt_id"],
+                suite_name="wind_matrix",
+                case_id=case.case_id,
+                target_run_index=1,
+                attempt_index=1,
+                status=AttemptStatus.ANALYSIS_FAILED,
+                verdict=WindMatrixVerdictPolicy().classify(
+                    case, MonitorResult(True, "completed", 1.0), [result],
+                ),
+                analysis_results=[result],
+                parameters=dict(case.parameters),
+                stimulus_result={"kind": "wind_matrix"},
+                plugin_manifest_fields=ctx.extra["plugin_manifest_fields"],
+            )
+            WindMatrixManifest(root, require_analysis=True).append_attempt(record)
+            saved = WindMatrixManifest(root, require_analysis=True).load()["attempts"][0]
+            self.assertEqual("failed_analysis", saved["status"])
+            self.assertEqual(0, WindMatrixManifest(root, require_analysis=True).accepted_count(case))
 
     def test_staged_after_takeoff_rejected_before_environment_launch(self) -> None:
         events: list[str] = []
@@ -572,7 +893,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             self.assertIn("cleanup", events)
             self.assertEqual(AttemptStatus.ERROR, record.status)
             self._assert_legacy_compatible_error_row(root)
-            self.assertEqual(0, LegacyManifest(root).accepted_count(_case()))
+            self.assertEqual(0, WindMatrixManifest(root).accepted_count(_case()))
 
     def test_staged_control_and_monitor_failures_persist_legacy_error_rows(self) -> None:
         for failing_stage in ("control", "monitor"):
@@ -615,10 +936,184 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     self.assertIn("cleanup", events)
                     self.assertEqual(AttemptStatus.ERROR, record.status)
                     self._assert_legacy_compatible_error_row(root)
-                    self.assertEqual(0, LegacyManifest(root).accepted_count(_case()))
+                    self.assertEqual(0, WindMatrixManifest(root).accepted_count(_case()))
+
+    def test_wind_verdict_and_acceptance_matrix_covers_terminal_outcomes(self) -> None:
+        matrix = {
+            "success_full": (VerdictClass.SUCCESS, False, True, 1, 1),
+            "success_square_only": (VerdictClass.PARTIAL, False, True, 0, 1),
+            "failed": (VerdictClass.FAILED_RETRYABLE, True, False, 0, 0),
+            "error": (VerdictClass.FAILED_RETRYABLE, True, False, 0, 0),
+            "interrupted": (VerdictClass.FAILED_RETRYABLE, True, False, 0, 0),
+            "failed_analysis": (VerdictClass.ANALYSIS_FAILED, False, True, 0, 0),
+        }
+        policy = WindMatrixVerdictPolicy()
+        for status, (
+            expected_class,
+            expected_retryable,
+            expected_requires_analysis,
+            strict_count,
+            lenient_count,
+        ) in matrix.items():
+            with self.subTest(status=status):
+                result = AnalysisResult(
+                    "wind_matrix_legacy_analysis",
+                    status in {"success_full", "success_square_only"},
+                    {
+                        "legacy_status": status,
+                        "legacy_success_class": (
+                            "full_mission" if status == "success_full" else None
+                        ),
+                        "legacy_analysis_status": (
+                            "done" if status in {"success_full", "success_square_only"}
+                            else "not_run"
+                        ),
+                    },
+                )
+                verdict = policy.classify(
+                    _case(), MonitorResult(False, status, 1.0), [result],
+                )
+                self.assertEqual(expected_class, verdict.klass)
+                self.assertEqual(expected_retryable, verdict.retryable)
+                self.assertEqual(expected_requires_analysis, verdict.requires_analysis)
+
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    root = Path(temp_dir)
+                    run_one.save_manifest(root, {
+                        "campaign_root": str(root),
+                        "attempts": [
+                            {
+                                "attempt_id": (
+                                    "wind_x_00_y_04__rep_01__attempt_001"
+                                ),
+                                "combo_key": "wind_x_00_y_04",
+                                "x_wind_mps": 0,
+                                "y_wind_mps": 4,
+                                "status": status,
+                                "analysis_status": (
+                                    "done"
+                                    if status in {"success_full", "success_square_only"}
+                                    else "not_run"
+                                ),
+                            }
+                        ],
+                    })
+                    self.assertEqual(
+                        strict_count, WindMatrixManifest(root).accepted_count(_case()),
+                    )
+                    self.assertEqual(
+                        lenient_count,
+                        WindMatrixManifest(root, accept_square_only=True).accepted_count(
+                            _case()
+                        ),
+                    )
+                    generic = WindMatrixManifest(root).generic_view()["attempts"][0]
+                    self.assertEqual(status, generic["verdict"]["reason"])
+
+    def test_campaign_summary_respects_square_only_acceptance_policy(self) -> None:
+        case = _case()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_one.save_manifest(root, {
+                "campaign_root": str(root),
+                "target_run_count": 1,
+                "attempts": [
+                    {
+                        "attempt_id": "wind_x_00_y_04__rep_01__attempt_001",
+                        "combo_key": "wind_x_00_y_04",
+                        "x_wind_mps": 0,
+                        "y_wind_mps": 4,
+                        "status": "success_square_only",
+                        "analysis_status": "done",
+                    }
+                ],
+            })
+
+            strict_manifest = WindMatrixManifest(root)
+            manifest = strict_manifest.load()
+            strict_manifest.save_campaign_summary(manifest)
+            summary = json.loads(
+                (root / "summary" / "campaign_summary.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            combo = next(
+                item for item in summary["combos"]
+                if item["combo_key"] == case.case_id
+            )
+            self.assertEqual(0, strict_manifest.accepted_count(case))
+            self.assertEqual(0, combo["accepted_runs"])
+            self.assertEqual(1, combo["remaining_runs"])
+
+            lenient_manifest = WindMatrixManifest(root, accept_square_only=True)
+            lenient_manifest.save_campaign_summary(manifest)
+            summary = json.loads(
+                (root / "summary" / "campaign_summary.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            combo = next(
+                item for item in summary["combos"]
+                if item["combo_key"] == case.case_id
+            )
+            self.assertEqual(1, lenient_manifest.accepted_count(case))
+            self.assertEqual(1, combo["accepted_runs"])
+            self.assertEqual(0, combo["remaining_runs"])
+
+    def test_cli_attempt_strategy_defaults_and_explicit_selection(self) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            ["run_case", "--x", "0", "--y", "4", "--rep", "1"],
+        ):
+            self.assertEqual("legacy", cli_run_case._parse_args().attempt_strategy)
+
+        with patch.object(sys, "argv", ["run_suite", "--attempt-strategy", "staged"]):
+            args = cli_run_suite._parse_args()
+            self.assertEqual("staged", args.attempt_strategy)
+            self.assertEqual("before-arm", args.auto_wind_phase)
+
+        with patch.object(
+            sys,
+            "argv",
+            ["run_round_robin", "--attempt-strategy", "staged"],
+        ):
+            args = cli_run_round_robin._parse_args()
+            self.assertEqual("staged", args.attempt_strategy)
+            self.assertEqual("before-arm", args.auto_wind_phase)
+
+    def test_cli_staged_after_takeoff_mode_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "run_suite",
+                    "--attempt-strategy",
+                    "staged",
+                    "--auto-wind-phase",
+                    "after-takeoff",
+                    "--campaign-root",
+                    temp_dir,
+                    "--x-values",
+                    "0",
+                    "--y-values",
+                    "4",
+                ],
+            ):
+                args = cli_run_suite._parse_args()
+            with self.assertRaisesRegex(ValueError, "after-takeoff"):
+                build_plugin(
+                    WindMatrixConfig(
+                        campaign_root=Path(args.campaign_root),
+                        auto_control=True,
+                        auto_wind_phase=args.auto_wind_phase,
+                        attempt_strategy=args.attempt_strategy,
+                    )
+                )
 
     def _assert_legacy_compatible_error_row(self, root: Path) -> None:
-        saved = LegacyManifest(root).load()["attempts"][0]
+        saved = WindMatrixManifest(root).load()["attempts"][0]
         self.assertEqual("wind_x_00_y_04__rep_01__attempt_001", saved["attempt_id"])
         self.assertEqual("wind_x_00_y_04", saved["combo_key"])
         self.assertEqual(0, saved["x_wind_mps"])
