@@ -60,11 +60,18 @@ Raw evidence stays under `evidence/`.
   manifest atomic writes, staged `running`/terminal manifest persistence,
   stale-running reconciliation, and avoidable legacy helper use in stimulus
   attempt-directory/run-config creation.
+- Follow-up report (2026-05-31, H-1 .. H-9):
+  `evidence/reports/features/2026-05-31_test_suite_phase3c_followup_fixes.md`
+  with audit `governance/audits/2026-05-31_test_suite_phase3c_followup_findings.md`.
+  Migrates the Phase 3F analysis substage (BIN/analysis/summary/cleanup/run-alias/
+  slot-timeout) to plugin-owned `plugins/wind_matrix/analysis_helpers.py`,
+  canonicalizes staged running/terminal attempt directories (H-1), adds the
+  `run_suite` flag-parity guard (H-5), and fixes two test defects introduced
+  during the in-progress fix work (f-string braces, wrong mock namespace).
 - Limit:
   live zero-legacy staged runtime is not proven. Runtime/environment,
-  MAVLink control/monitor, wind stimulus, artifacts, analysis, and summary
-  helpers still need Phase 3D-3G replacement. Phase 3C is not a full generic
-  architecture proof.
+  MAVLink control/monitor, and runtime wind injection still need Phase 3D-3F
+  replacement. Phase 3C is not a full generic architecture proof.
 - Gate:
   Phase 4 remains blocked.
 
