@@ -8,7 +8,7 @@ from typing import Any, Sequence
 
 from sim_ard_gaw.campaigns.status import legacy_analysis_succeeded
 
-from ...core import _legacy
+from . import legacy
 from ...core.analysis import Analyzer
 from ...core.models import (
     AnalysisResult,
@@ -36,7 +36,7 @@ class WindMatrixAnalyzer(Analyzer):
             return self._terminal_error_result(case, ctx, exc)
 
     def _analyze(self, case: TestCase, ctx: AttemptContext) -> AnalysisResult:
-        run_one = _legacy.run_one_module()
+        run_one = legacy.run_one_module()
         state = ctx.extra.get("wind_monitor_state") or {}
         key = case.case_id
         x_wind = case.parameters["wind_x_mps"]
@@ -183,15 +183,21 @@ class WindMatrixAnalyzer(Analyzer):
     ) -> AnalysisResult:
         plugin_fields = build_wind_matrix_error_fields(self.config, ctx, exc)
         ctx.extra["plugin_manifest_fields"] = plugin_fields
+        ctx.extra["attempt_status"] = AttemptStatus.ERROR
         return _error_analysis_result(exc)
 
 
 def build_wind_matrix_error_record(
     config: WindMatrixConfig,
     ctx: AttemptContext,
-    exc: Exception,
+    exc: BaseException,
 ) -> AttemptRecord:
     plugin_fields = build_wind_matrix_error_fields(config, ctx, exc)
+    framework_status = (
+        AttemptStatus.INTERRUPTED
+        if plugin_fields.get("status") == "interrupted"
+        else AttemptStatus.ERROR
+    )
     ctx.extra["plugin_manifest_fields"] = plugin_fields
     analysis_result = _error_analysis_result(exc)
     return AttemptRecord(
@@ -200,10 +206,10 @@ def build_wind_matrix_error_record(
         case_id=ctx.case.case_id,
         target_run_index=ctx.target_run_index,
         attempt_index=ctx.attempt_index,
-        status=AttemptStatus.ERROR,
+        status=framework_status,
         verdict=Verdict(
             klass=VerdictClass.FAILED_RETRYABLE,
-            reason="error",
+            reason=str(plugin_fields["status"]),
             retryable=True,
             requires_analysis=False,
             metadata={"exception": analysis_result.error},
@@ -228,9 +234,9 @@ def build_wind_matrix_error_record(
 def build_wind_matrix_error_fields(
     config: WindMatrixConfig,
     ctx: AttemptContext,
-    exc: Exception,
+    exc: BaseException,
 ) -> dict[str, Any]:
-    run_one = _legacy.run_one_module()
+    run_one = legacy.run_one_module()
     state = ctx.extra.get("wind_monitor_state") or {}
     key = ctx.case.case_id
     attempt_dir = (
@@ -241,6 +247,7 @@ def build_wind_matrix_error_fields(
     ctx.attempt_dir = attempt_dir
     message = run_one.summarize_exception_text(exc)
     end_time = run_one.utc_now()
+    status = "error" if isinstance(exc, Exception) else "interrupted"
     return {
         "attempt_id": run_one.attempt_id(
             key, ctx.target_run_index, ctx.attempt_index,
@@ -250,7 +257,7 @@ def build_wind_matrix_error_fields(
         "y_wind_mps": ctx.case.parameters.get("wind_y_mps"),
         "target_run_index": ctx.target_run_index,
         "attempt_index": ctx.attempt_index,
-        "status": "error",
+        "status": status,
         "success_class": None,
         "mission_completed_full": bool(state.get("mission_completed_full", False)),
         "square_completed": bool(state.get("square_completed", False)),
@@ -267,14 +274,15 @@ def build_wind_matrix_error_fields(
     }
 
 
-def _error_analysis_result(exc: Exception) -> AnalysisResult:
-    run_one = _legacy.run_one_module()
+def _error_analysis_result(exc: BaseException) -> AnalysisResult:
+    run_one = legacy.run_one_module()
     message = run_one.summarize_exception_text(exc)
+    status = "error" if isinstance(exc, Exception) else "interrupted"
     return AnalysisResult(
         analyzer_name="wind_matrix_staged_exception",
         ok=False,
         summary={
-            "legacy_status": "error",
+            "legacy_status": status,
             "legacy_success_class": None,
             "legacy_analysis_status": run_one.ANALYSIS_NOT_RUN,
         },

@@ -5,7 +5,10 @@ import shutil
 from dataclasses import dataclass
 from typing import Any
 
-from ...core import _legacy
+from sim_ard_gaw.campaigns.mission_contract import validate_square_wind_mission_contract
+from sim_ard_gaw.campaigns.provenance import parameter_file_provenance
+
+from . import defaults, legacy
 from ...core.models import AttemptContext, TestCase
 from ...core.stimulus import StimulusAdapter
 from .config import WindMatrixConfig
@@ -16,11 +19,11 @@ class WindMatrixStimulus(StimulusAdapter):
     config: WindMatrixConfig
 
     def apply(self, case: TestCase, ctx: AttemptContext) -> dict[str, Any]:
-        run_one = _legacy.run_one_module()
         x_mps = float(case.parameters["wind_x_mps"])
         y_mps = float(case.parameters["wind_y_mps"])
         self._ensure_attempt_dir(ctx)
         self._write_run_config(case, ctx)
+        run_one = legacy.run_one_module()
 
         if self.config.auto_control and self.config.auto_wind_phase == "after-takeoff":
             raise RuntimeError(
@@ -49,8 +52,8 @@ class WindMatrixStimulus(StimulusAdapter):
                 source_world=preloaded_world,
                 archived_world=archived_world,
                 refresh_runtime_wind=preloaded_refresh,
-                refresh_strict_echo_verify=run_one.STRICT_WIND_ECHO_VERIFY,
-                timeout_s=run_one.remaining_deadline_s(
+                refresh_strict_echo_verify=defaults.STRICT_WIND_ECHO_VERIFY,
+                timeout_s=defaults.remaining_deadline_s(
                     ctx.slot_deadline_monotonic_s,
                 ),
             )
@@ -58,7 +61,7 @@ class WindMatrixStimulus(StimulusAdapter):
             result = run_one.inject_wind(
                 x_mps,
                 y_mps,
-                timeout_s=run_one.remaining_deadline_s(
+                timeout_s=defaults.remaining_deadline_s(
                     ctx.slot_deadline_monotonic_s,
                 ),
             )
@@ -70,48 +73,46 @@ class WindMatrixStimulus(StimulusAdapter):
         result["auto_wind_phase"] = (
             self.config.auto_wind_phase if self.config.auto_control else None
         )
-        run_one.write_json(ctx.attempt_dir / "wind_injection.json", result)
+        defaults.write_json(ctx.attempt_dir / "wind_injection.json", result)
         ctx.extra["wind_injection_artifact"] = ctx.attempt_dir / "wind_injection.json"
         return result
 
     def _ensure_attempt_dir(self, ctx: AttemptContext) -> None:
-        run_one = _legacy.run_one_module()
         expected = (
-            run_one.combo_runs_dir(self.config.campaign_root, ctx.case.case_id)
-            / run_one.attempt_key(ctx.attempt_index)
+            defaults.combo_runs_dir(self.config.campaign_root, ctx.case.case_id)
+            / defaults.attempt_key(ctx.attempt_index)
         )
         expected.mkdir(parents=True, exist_ok=True)
         ctx.attempt_dir = expected
 
     def _write_run_config(self, case: TestCase, ctx: AttemptContext) -> None:
-        run_one = _legacy.run_one_module()
-        mission_contract = run_one.validate_square_wind_mission_contract(
+        mission_contract = validate_square_wind_mission_contract(
             self.config.mission_file,
         )
-        param_stack = run_one.normalize_param_file_stack(self.config.param_file_stack)
-        param_provenance = run_one.parameter_file_provenance(param_stack)
+        param_stack = defaults.normalize_param_file_stack(self.config.param_file_stack)
+        param_provenance = parameter_file_provenance(param_stack)
         x_mps = float(case.parameters["wind_x_mps"])
         y_mps = float(case.parameters["wind_y_mps"])
         preloaded_world = ctx.extra.get(
             "preloaded_wind_world", self.config.preloaded_wind_world,
         )
-        copied_bin_name = run_one.named_bin_filename(
+        copied_bin_name = defaults.named_bin_filename(
             case.case_id, ctx.target_run_index, ctx.attempt_index,
         )
-        bin_search_dir = run_one.sitl_bin_dir(ctx.extra.get("sitl_log_dir"))
-        run_one.write_json(ctx.attempt_dir / "run_config.json", {
-            "attempt_id": run_one.attempt_id(
+        bin_search_dir = defaults.sitl_bin_dir(ctx.extra.get("sitl_log_dir"))
+        defaults.write_json(ctx.attempt_dir / "run_config.json", {
+            "attempt_id": defaults.attempt_id(
                 case.case_id, ctx.target_run_index, ctx.attempt_index,
             ),
-            "experiment_lane": run_one.CTE_LANE_NAME,
+            "experiment_lane": defaults.CTE_LANE_NAME,
             "x_wind_mps": x_mps,
             "y_wind_mps": y_mps,
             "target_run_index": ctx.target_run_index,
             "attempt_index": ctx.attempt_index,
-            "world_name": run_one.WORLD_NAME,
-            "wind_topic": run_one.WIND_TOPIC,
-            "wind_info_topic": run_one.WIND_INFO_TOPIC,
-            "wind_frame": run_one.WIND_FRAME_NOTE,
+            "world_name": defaults.WORLD_NAME,
+            "wind_topic": defaults.WIND_TOPIC,
+            "wind_info_topic": defaults.WIND_INFO_TOPIC,
+            "wind_frame": defaults.WIND_FRAME_NOTE,
             "world_default_wind_mps": (
                 {"x": x_mps, "y": y_mps, "z": 0.0}
                 if preloaded_world is not None else
@@ -131,7 +132,7 @@ class WindMatrixStimulus(StimulusAdapter):
             ),
             "mission_file": str(self.config.mission_file),
             "mission_contract": mission_contract.as_dict(),
-            "analysis_position_source": run_one.ANALYSIS_POSITION_SOURCE,
+            "analysis_position_source": defaults.ANALYSIS_POSITION_SOURCE,
             "expected_named_bin_file": copied_bin_name,
             "bin_collection_method": (
                 "isolated_sitl_use_dir"
@@ -145,7 +146,7 @@ class WindMatrixStimulus(StimulusAdapter):
                 if ctx.extra.get("sitl_log_dir") is not None else None
             ),
             "sitl_bin_dir": str(bin_search_dir),
-            "gazebo_plugin_runtime": run_one.gazebo_plugin_diagnostics(),
+            "gazebo_plugin_runtime": defaults.gazebo_plugin_diagnostics(),
             "param_files_loaded_at_sitl_start": param_stack,
             "param_file_provenance": param_provenance,
             "param_stack_order_note": (

@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 
-from ...core import _legacy
+from . import legacy
 from ...core.environment import EnvironmentAdapter
 from ...core.models import AttemptContext, TestCase
 from .config import WindMatrixConfig
@@ -34,8 +34,8 @@ class WindMatrixEnvironment(EnvironmentAdapter):
             # Single-case run_one parity: the operator owns SITL+Gazebo
             # launch, while this wrapper only delegates to run_one.
             return
-        run_one = _legacy.run_one_module()
-        run_matrix = _legacy.run_matrix_module()
+        run_one = legacy.run_one_module()
+        run_matrix = legacy.run_matrix_module()
 
         x = case.parameters["wind_x_mps"]
         y = case.parameters["wind_y_mps"]
@@ -109,7 +109,7 @@ class WindMatrixEnvironment(EnvironmentAdapter):
     def assert_ready(self, case: TestCase, ctx: AttemptContext) -> None:
         if self._config.attempt_strategy != "staged":
             return None
-        run_one = _legacy.run_one_module()
+        run_one = legacy.run_one_module()
         master = run_one.wait_for_heartbeat(
             self._config.mavlink_addr,
             run_one.clamp_timeout_to_slot(
@@ -134,7 +134,7 @@ class WindMatrixEnvironment(EnvironmentAdapter):
     def cleanup(self, case: TestCase, ctx: AttemptContext) -> None:
         if not self._config.launch_stack:
             return
-        run_matrix = _legacy.run_matrix_module()
+        run_matrix = legacy.run_matrix_module()
         try:
             run_matrix.cleanup_stack()
         finally:
