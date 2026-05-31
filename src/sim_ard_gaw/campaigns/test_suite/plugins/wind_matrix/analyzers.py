@@ -8,7 +8,16 @@ from typing import Any, Sequence
 
 from sim_ard_gaw.campaigns.status import legacy_analysis_succeeded
 
-from . import legacy
+from . import defaults
+from .analysis_helpers import (
+    build_run_summary,
+    clamp_timeout_to_slot,
+    cleanup_stack_for_analysis,
+    collect_bin_log,
+    ensure_run_alias_link,
+    run_analysis,
+    summarize_exception_text,
+)
 from ...core.analysis import Analyzer
 from ...core.models import (
     AnalysisResult,
@@ -36,29 +45,28 @@ class WindMatrixAnalyzer(Analyzer):
             return self._terminal_error_result(case, ctx, exc)
 
     def _analyze(self, case: TestCase, ctx: AttemptContext) -> AnalysisResult:
-        run_one = legacy.run_one_module()
         state = ctx.extra.get("wind_monitor_state") or {}
         key = case.case_id
         x_wind = case.parameters["wind_x_mps"]
         y_wind = case.parameters["wind_y_mps"]
-        attempt_name = run_one.attempt_id(
+        attempt_name = defaults.attempt_id(
             key, ctx.target_run_index, ctx.attempt_index,
         )
-        copied_bin_name = run_one.named_bin_filename(
+        copied_bin_name = defaults.named_bin_filename(
             key, ctx.target_run_index, ctx.attempt_index,
         )
-        bin_search_dir = run_one.sitl_bin_dir(ctx.extra.get("sitl_log_dir"))
+        bin_search_dir = defaults.sitl_bin_dir(ctx.extra.get("sitl_log_dir"))
         before_bins = set(ctx.extra.get("before_bin_names") or set())
         if state.get("completed_square_loiter_early"):
-            run_one.cleanup_stack_for_analysis()
-        flush_wait_s = run_one.clamp_timeout_to_slot(
-            run_one.BIN_FLUSH_DELAY_S,
+            cleanup_stack_for_analysis()
+        flush_wait_s = clamp_timeout_to_slot(
+            defaults.BIN_FLUSH_DELAY_S,
             ctx.slot_deadline_monotonic_s,
             phase="BIN flush wait",
-            reserve_s=run_one.ANALYSIS_HEADROOM_S,
+            reserve_s=defaults.ANALYSIS_HEADROOM_S,
         )
         time.sleep(flush_wait_s)
-        bin_path = run_one.collect_bin_log(
+        bin_path = collect_bin_log(
             before_bins,
             ctx.start_wall_s,
             log_dir=bin_search_dir,
@@ -74,24 +82,24 @@ class WindMatrixAnalyzer(Analyzer):
         status, success_class, notes = _legacy_status_from_monitor(
             state, accept_square_only=self.config.accept_square_only,
         )
-        analysis_status = run_one.ANALYSIS_NOT_RUN
+        analysis_status = defaults.ANALYSIS_NOT_RUN
         run_alias = None
-        if status in run_one.SUCCESS_STATUSES:
-            run_alias = run_one.run_alias(ctx.target_run_index)
-            run_one.ensure_run_alias_link(
-                run_one.combo_runs_dir(self.config.campaign_root, key) / run_alias,
+        if status in defaults.SUCCESS_STATUSES:
+            run_alias = defaults.run_alias(ctx.target_run_index)
+            ensure_run_alias_link(
+                defaults.combo_runs_dir(self.config.campaign_root, key) / run_alias,
                 ctx.attempt_dir,
             )
             try:
-                run_one.run_analysis(
+                run_analysis(
                     dest_bin,
                     ctx.attempt_dir,
-                    analysis_position_source=run_one.ANALYSIS_POSITION_SOURCE,
+                    analysis_position_source=defaults.ANALYSIS_POSITION_SOURCE,
                     slot_deadline_monotonic=ctx.slot_deadline_monotonic_s,
                 )
                 analysis_status = "done"
                 try:
-                    summary = run_one.build_run_summary(
+                    summary = build_run_summary(
                         {
                             "attempt_id": attempt_name,
                             "combo_key": key,
@@ -113,21 +121,21 @@ class WindMatrixAnalyzer(Analyzer):
                         dest_bin,
                         ctx.attempt_dir,
                     )
-                    run_one.write_json(ctx.attempt_dir / "run_summary.json", summary)
+                    defaults.write_json(ctx.attempt_dir / "run_summary.json", summary)
                 except Exception as exc:
-                    analysis_status = run_one.ANALYSIS_PARTIAL_RUN_SUMMARY_FAILED
+                    analysis_status = defaults.ANALYSIS_PARTIAL_RUN_SUMMARY_FAILED
                     notes.append(
-                        f"run_summary_failed: {run_one.summarize_exception_text(exc)}"
+                        f"run_summary_failed: {summarize_exception_text(exc)}"
                     )
             except Exception as exc:
-                analysis_status = f"failed: {run_one.summarize_exception_text(exc)}"
+                analysis_status = f"failed: {summarize_exception_text(exc)}"
                 notes.append(
-                    f"analysis_error: {run_one.summarize_exception_text(exc)}"
+                    f"analysis_error: {summarize_exception_text(exc)}"
                 )
 
         if (
             self.config.require_analysis
-            and status in run_one.SUCCESS_STATUSES
+            and status in defaults.SUCCESS_STATUSES
             and analysis_status != "done"
         ):
             status = "failed_analysis"
@@ -135,7 +143,7 @@ class WindMatrixAnalyzer(Analyzer):
             run_alias = None
             notes.append("downgraded_to_failed_analysis_for_require_analysis")
 
-        end_time = run_one.utc_now()
+        end_time = defaults.utc_now()
         plugin_fields = {
             "attempt_id": attempt_name,
             "combo_key": key,
@@ -236,20 +244,22 @@ def build_wind_matrix_error_fields(
     ctx: AttemptContext,
     exc: BaseException,
 ) -> dict[str, Any]:
-    run_one = legacy.run_one_module()
     state = ctx.extra.get("wind_monitor_state") or {}
     key = ctx.case.case_id
-    attempt_dir = (
-        run_one.combo_runs_dir(config.campaign_root, key)
-        / run_one.attempt_key(ctx.attempt_index)
+    # Re-derive the canonical attempt_NNN directory from the attempt index so a
+    # terminal error row records the same layout the staged success path would,
+    # even when the runner is handed the combo runs/ parent before the stimulus
+    # stage normalizes ctx.attempt_dir.
+    attempt_dir = defaults.attempt_dir(
+        config.campaign_root, key, ctx.attempt_index,
     )
-    attempt_dir.mkdir(parents=True, exist_ok=True)
     ctx.attempt_dir = attempt_dir
-    message = run_one.summarize_exception_text(exc)
-    end_time = run_one.utc_now()
+    attempt_dir.mkdir(parents=True, exist_ok=True)
+    message = summarize_exception_text(exc)
+    end_time = defaults.utc_now()
     status = "error" if isinstance(exc, Exception) else "interrupted"
     return {
-        "attempt_id": run_one.attempt_id(
+        "attempt_id": defaults.attempt_id(
             key, ctx.target_run_index, ctx.attempt_index,
         ),
         "combo_key": key,
@@ -262,7 +272,7 @@ def build_wind_matrix_error_fields(
         "mission_completed_full": bool(state.get("mission_completed_full", False)),
         "square_completed": bool(state.get("square_completed", False)),
         "loiter_completed": bool(state.get("loiter_completed", False)),
-        "analysis_status": run_one.ANALYSIS_NOT_RUN,
+        "analysis_status": defaults.ANALYSIS_NOT_RUN,
         "raw_log_path": None,
         "attempt_dir": str(attempt_dir),
         "run_alias": None,
@@ -275,8 +285,7 @@ def build_wind_matrix_error_fields(
 
 
 def _error_analysis_result(exc: BaseException) -> AnalysisResult:
-    run_one = legacy.run_one_module()
-    message = run_one.summarize_exception_text(exc)
+    message = summarize_exception_text(exc)
     status = "error" if isinstance(exc, Exception) else "interrupted"
     return AnalysisResult(
         analyzer_name="wind_matrix_staged_exception",
@@ -284,7 +293,7 @@ def _error_analysis_result(exc: BaseException) -> AnalysisResult:
         summary={
             "legacy_status": status,
             "legacy_success_class": None,
-            "legacy_analysis_status": run_one.ANALYSIS_NOT_RUN,
+            "legacy_analysis_status": defaults.ANALYSIS_NOT_RUN,
         },
         output_paths=[],
         error=message,
