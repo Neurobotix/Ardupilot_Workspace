@@ -18,7 +18,11 @@ src/SIM_ARD_GAW/logs/
 .claude/
 .codex/
 .agents/
+
 # External dependencies and build outputs
+docs/presentations/node_modules/
+docs/presentations/**/dist/
+docs/presentations/
 src/ardupilot/
 src/ardupilot_gazebo/
 src/SITL_Models/
