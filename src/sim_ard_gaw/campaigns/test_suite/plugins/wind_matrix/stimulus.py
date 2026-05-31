@@ -78,12 +78,15 @@ class WindMatrixStimulus(StimulusAdapter):
         return result
 
     def _ensure_attempt_dir(self, ctx: AttemptContext) -> None:
-        expected = (
-            defaults.combo_runs_dir(self.config.campaign_root, ctx.case.case_id)
-            / defaults.attempt_key(ctx.attempt_index)
+        expected = defaults.attempt_dir(
+            self.config.campaign_root, ctx.case.case_id, ctx.attempt_index,
         )
-        expected.mkdir(parents=True, exist_ok=True)
-        ctx.attempt_dir = expected
+        if ctx.attempt_dir != expected:
+            raise RuntimeError(
+                "Attempt directory mismatch: expected "
+                f"{expected} but got {ctx.attempt_dir}"
+            )
+        ctx.attempt_dir.mkdir(parents=True, exist_ok=True)
 
     def _write_run_config(self, case: TestCase, ctx: AttemptContext) -> None:
         mission_contract = validate_square_wind_mission_contract(
@@ -118,8 +121,11 @@ class WindMatrixStimulus(StimulusAdapter):
                 if preloaded_world is not None else
                 {"x": 0.0, "y": 0.0, "z": 0.0}
             ),
-            "wind_injection_source": (
-                "test_suite staged wind_matrix stimulus adapter"
+            "wind_injection_source": defaults.wind_injection_source(
+                preloaded_world=preloaded_world,
+                preloaded_refresh=bool(self.config.preloaded_wind_refresh),
+                manual_control=not self.config.auto_control,
+                auto_wind_phase=self.config.auto_wind_phase,
             ),
             "gazebo_world_file": str(preloaded_world) if preloaded_world else None,
             "archived_gazebo_world_file": (
@@ -141,11 +147,13 @@ class WindMatrixStimulus(StimulusAdapter):
             ),
             "mavlink_addr": self.config.mavlink_addr,
             "mission_timeout_s": self.config.mission_timeout_s,
+            "sitl_launch_command": defaults.CTE_SITL_COMMAND,
             "sitl_use_dir": (
                 str(ctx.extra.get("sitl_log_dir"))
                 if ctx.extra.get("sitl_log_dir") is not None else None
             ),
             "sitl_bin_dir": str(bin_search_dir),
+            "gazebo_launch_command": defaults.CTE_GAZEBO_COMMAND,
             "gazebo_plugin_runtime": defaults.gazebo_plugin_diagnostics(),
             "param_files_loaded_at_sitl_start": param_stack,
             "param_file_provenance": param_provenance,

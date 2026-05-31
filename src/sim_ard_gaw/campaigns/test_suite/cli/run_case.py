@@ -121,8 +121,12 @@ def main() -> None:
         mission_file=config.mission_file,
         acceptance_target_runs=1,
     )
-    attempt_dir = plugin.attempt_dir_factory()(plugin.manifest, case)
     attempt_index = plugin.manifest.next_attempt_index(case)
+    attempt_dir = plugin.attempt_dir_factory()(
+        plugin.manifest,
+        case,
+        attempt_index,
+    )
     runner.run(
         case=case,
         target_run_index=args.rep,

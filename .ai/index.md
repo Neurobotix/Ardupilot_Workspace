@@ -53,6 +53,12 @@
   `evidence/reports/features/2026-05-31_test_suite_phase3c_review_fixes.md`
 - test_suite migration Phase 3C review findings audit:
   `governance/audits/2026-05-31_test_suite_phase3c_review_findings.md`
+- test_suite migration Phase 3C follow-up fixes (H-1..H-9; Phase 3F analysis
+  substage now plugin-owned, canonical staged attempt dirs, run_suite flag
+  parity guard) evidence:
+  `evidence/reports/features/2026-05-31_test_suite_phase3c_followup_fixes.md`
+- test_suite migration Phase 3C follow-up review findings audit:
+  `governance/audits/2026-05-31_test_suite_phase3c_followup_findings.md`
 - Superseded Phase 8 partial-retirement evidence:
   `evidence/reports/migration/PHASE_8_COMPAT_RETIREMENT_2026-05-22.md`
 - Human migration status: `docs/operations/migration_status.md`

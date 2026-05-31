@@ -31,6 +31,20 @@ staged environment, wind injection, MAVLink control/monitor, artifact,
 analysis, or summary path still has legacy runner dependencies assigned to
 Phase 3D-3G.
 
+2026-05-31 follow-up review (H-1 .. H-9): the staged analyzer was migrated to
+plugin-owned `plugins/wind_matrix/analysis_helpers.py` (BIN collection,
+`run_analysis`, `build_run_summary`, analysis cleanup, run-alias linking,
+slot-timeout clamp), so the analysis substage of Phase 3F no longer imports
+`run_one`; the Phase 3C import-blocker hard test now executes
+`WindMatrixAnalyzer.analyze()` to success. Staged running/terminal manifest
+rows now record the canonical `attempt_NNN` directory (H-1). Two test defects
+introduced during in-progress fix work (unescaped f-string braces; analysis
+mocks aimed at the wrong namespace) were corrected. Runtime wind injection,
+environment launch/readiness, and MAVLink control/monitor execution still reach
+legacy runner helpers and remain Phase 3D/3E/3F work. Evidence:
+`evidence/reports/features/2026-05-31_test_suite_phase3c_followup_fixes.md`;
+audit: `governance/audits/2026-05-31_test_suite_phase3c_followup_findings.md`.
+
 ## Phase 3C acceptance review
 
 | Criterion | Result | Evidence |
@@ -49,7 +63,7 @@ Phase 3D-3G.
 | Legacy remains default | PASS | `WindMatrixConfig().attempt_strategy == "legacy"` and CLI parser defaults stay `legacy`. |
 | Staged remains explicit | PASS | CLI parser tests require `--attempt-strategy staged` for staged mode. |
 | Live zero-legacy runtime proof | NOT PROVEN | Phase 3C intentionally does not launch SITL/Gazebo, control MAVLink, inject wind, collect BIN logs, run analysis, or prove live campaign execution. |
-| Staged runtime has no legacy dependencies | NOT PROVEN / OUT OF SCOPE | `WindMatrixEnvironment` still calls `run_matrix.*` / `run_one.*`; staged control/monitor, runtime wind injection, analysis, summary, and terminal helper execution still reach legacy runner helpers until Phase 3D-3G. |
+| Staged runtime has no legacy dependencies | NOT PROVEN / OUT OF SCOPE | `WindMatrixEnvironment` still calls `run_matrix.*` / `run_one.*`; staged control/monitor and runtime wind injection still reach legacy runner helpers until Phase 3D-3F. The analysis/BIN/summary substage was migrated to plugin-owned `analysis_helpers.py` on 2026-05-31. |
 
 Phase 3C removed these staged-foundation blockers from Phase 3B:
 
@@ -81,10 +95,14 @@ Remaining legacy dependencies are later-phase blockers, not Phase 3C failures:
   during staged runtime launch/readiness/cleanup. Phase 3D owns this.
 - staged auto control and monitor still lazily import `run_one` when executed.
   Phase 3E owns this.
-- `WindMatrixStimulus` still imports/calls `run_one` during wind injection and
-  run-config artifact creation. Phase 3F owns this.
-- `WindMatrixAnalyzer` and terminal error-row helpers still import/call
-  `run_one` during BIN/artifact/analysis/summary work. Phase 3F owns this.
+- `WindMatrixStimulus` still imports/calls `run_one` during runtime wind
+  injection (`inject_wind` / `preloaded_wind_artifact`). Run-config and path
+  helpers were already moved to plugin-owned defaults in the C-3 fix; only
+  runtime injection remains. Phase 3F wind-injection substage owns this.
+- `WindMatrixAnalyzer` BIN/analysis/summary work was migrated to plugin-owned
+  `analysis_helpers.py` on 2026-05-31 and no longer imports `run_one`; the
+  terminal error-row builder re-derives the canonical attempt directory from
+  the attempt index.
 
 No second plugin was added. Phase 4 was not started. Legacy scripts were not
 retired or deleted. The old workspace was not modified.

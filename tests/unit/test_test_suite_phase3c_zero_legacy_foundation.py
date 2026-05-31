@@ -158,9 +158,12 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                 from sim_ard_gaw.campaigns.test_suite.core.suite_runner import SuiteRunner
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.case_generator import WindMatrixCaseGenerator
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.config import WindMatrixConfig
+                from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import analysis_helpers
+                from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import analyzers as wind_analyzers
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import defaults
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.defaults import combo_key, DEFAULT_STAGED_AUTO_WIND_PHASE
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.manifest import WindMatrixManifest
+                from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers import WindMatrixAnalyzer
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.plugin import build_plugin
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.stimulus import WindMatrixStimulus
 
@@ -195,7 +198,7 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                 stimulus_ctx = AttemptContext(
                     case=cases[0],
                     campaign_root=root,
-                    attempt_dir=root / "placeholder",
+                    attempt_dir=defaults.attempt_dir(root, cases[0].case_id, 1),
                     attempt_index=1,
                     target_run_index=1,
                     start_wall_s=0.0,
@@ -215,6 +218,71 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                 assert run_config["attempt_id"] == "wind_x_00_y_04__rep_01__attempt_001"
                 assert run_config["world_name"] == defaults.WORLD_NAME
                 assert run_config["wind_topic"] == defaults.WIND_TOPIC
+                assert run_config["sitl_launch_command"] == defaults.CTE_SITL_COMMAND
+                assert run_config["gazebo_launch_command"] == defaults.CTE_GAZEBO_COMMAND
+                assert (
+                    run_config["wind_injection_source"]
+                    == "run_one.py via Gazebo wind topic before user mission control"
+                )
+
+                analysis_ctx = AttemptContext(
+                    case=cases[0],
+                    campaign_root=root,
+                    attempt_dir=defaults.attempt_dir(root, cases[0].case_id, 1),
+                    attempt_index=1,
+                    target_run_index=1,
+                    start_wall_s=0.0,
+                    start_monotonic_s=0.0,
+                )
+                analysis_ctx.attempt_dir.mkdir(parents=True, exist_ok=True)
+                analysis_ctx.extra["wind_monitor_state"] = {{
+                    "mission_completed_full": True,
+                    "square_completed": True,
+                    "loiter_completed": True,
+                }}
+                bin_path = root / "source.BIN"
+                bin_path.write_bytes(b"bin")
+                analyzer = WindMatrixAnalyzer(cfg)
+
+                with (
+                    mock.patch.object(
+                        wind_analyzers,
+                        "cleanup_stack_for_analysis",
+                        return_value=None,
+                    ),
+                    mock.patch.object(
+                        wind_analyzers,
+                        "clamp_timeout_to_slot",
+                        return_value=0.0,
+                    ),
+                    mock.patch.object(
+                        wind_analyzers,
+                        "collect_bin_log",
+                        return_value=bin_path,
+                    ),
+                    mock.patch.object(
+                        wind_analyzers,
+                        "ensure_run_alias_link",
+                        return_value=None,
+                    ),
+                    mock.patch.object(
+                        wind_analyzers,
+                        "run_analysis",
+                        return_value=None,
+                    ),
+                    mock.patch.object(
+                        wind_analyzers,
+                        "build_run_summary",
+                        return_value={{}},
+                    ),
+                    mock.patch.object(
+                        wind_analyzers.time,
+                        "sleep",
+                        return_value=None,
+                    ),
+                ):
+                    result = analyzer.analyze(cases[0], analysis_ctx)
+                    assert result.ok is True
 
                 manifest = WindMatrixManifest(root)
                 record = AttemptRecord(
@@ -248,8 +316,10 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                 runner = plugin.attempt_runner()
                 assert isinstance(runner._strategy, StagedStrategy)
                 assert not isinstance(runner._strategy, LegacyDelegateStrategy)
-                assert str(plugin.attempt_dir_factory()(plugin.manifest, cases[0])).endswith(
-                    "wind_x_00_y_04/runs"
+                assert str(
+                    plugin.attempt_dir_factory()(plugin.manifest, cases[0], 1)
+                ).endswith(
+                    "wind_x_00_y_04/runs/attempt_001"
                 )
 
                 with mock.patch.object(sys, "argv", ["run_case", "--x", "0", "--y", "4", "--rep", "1"]):

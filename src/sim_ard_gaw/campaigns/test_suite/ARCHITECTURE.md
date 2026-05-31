@@ -77,7 +77,8 @@ or budgets are exhausted.
 |-----------------------------------|----------|
 | Attempt id / numbering            | core     |
 | Manifest read/write/atomicity     | core     |
-| Artifact directory layout         | core     |
+| Artifact directory root + atomicity | core   |
+| Per-attempt directory naming      | plugin (e.g. `defaults.attempt_dir` -> `attempt_NNN`) |
 | Slot deadlines / retry counting   | core     |
 | Process supervision plumbing      | core     |
 | Control-mode plumbing             | core     |
@@ -218,6 +219,15 @@ zero-legacy staged execution remain Stage 3D-3G work.
   collection, analysis invocation, run summary, terminal rows, and exception
   formatting into test-suite-owned modules.
 - Staged stimulus/analyzer must not call legacy runner helpers.
+
+Partial progress (2026-05-31): the analysis substage (BIN collection,
+`run_analysis`, `build_run_summary`, analysis cleanup, run-alias linking,
+slot-timeout clamp) is test-suite-owned in
+`plugins/wind_matrix/analysis_helpers.py`; the staged analyzer no longer imports
+`run_one`. Terminal/running manifest rows record the canonical `attempt_NNN`
+directory. Runtime wind injection (`run_one.inject_wind` /
+`preloaded_wind_artifact`) still remains the open Stage 3F substage. Evidence:
+`evidence/reports/features/2026-05-31_test_suite_phase3c_followup_fixes.md`.
 
 ### Stage 3G — full zero-legacy staged wind proof
 - Run the zero-legacy staged wind system beside the retained legacy mode.

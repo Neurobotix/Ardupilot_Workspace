@@ -193,6 +193,7 @@ class AttemptRunner:
             start_monotonic_s=time.monotonic(),
             slot_deadline_monotonic_s=slot_deadline_monotonic_s,
         )
+        attempt_dir.mkdir(parents=True, exist_ok=True)
         if attempt_metadata:
             ctx.extra.update(attempt_metadata)
 
