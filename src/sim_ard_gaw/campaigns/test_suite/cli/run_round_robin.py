@@ -16,26 +16,18 @@ import argparse
 import sys
 from pathlib import Path
 
-from ..core import _legacy
 from ..core.scheduler import RoundRobinScheduler
 from ..core.suite_runner import SuiteRunner, SuiteRunSettings
+from ..plugins.wind_matrix import defaults
 
 
 def _parse_int_list(text: str) -> list[int]:
     values = [int(s.strip()) for s in text.split(",") if s.strip()]
-    run_one = _legacy.run_one_module()
-    invalid = [value for value in values if value not in run_one.WIND_VALUES]
-    if invalid:
-        raise argparse.ArgumentTypeError(
-            f"Invalid wind values {invalid}; expected subset of {run_one.WIND_VALUES}"
-        )
+    defaults.validate_wind_values(values)
     return values
 
 
 def _parse_args() -> argparse.Namespace:
-    run_one = _legacy.run_one_module()
-    run_matrix = _legacy.run_matrix_module()
-    run_matrix_round_robin = _legacy.run_matrix_round_robin_module()
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix")
     p.add_argument("--attempt-strategy", choices=("legacy", "staged"),
@@ -44,30 +36,30 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--y-values", type=_parse_int_list, default=[0, 4, 8, 12])
     p.add_argument("--runs-per-combo", type=int, default=4)
     p.add_argument("--slot-minutes", type=float,
-                   default=run_matrix_round_robin.DEFAULT_SLOT_MINUTES)
+                   default=defaults.DEFAULT_SLOT_MINUTES)
     p.add_argument("--monitor-minutes", type=float, default=None)
     p.add_argument("--max-passes", type=int, default=0)
-    p.add_argument("--campaign-root", type=Path, default=run_one.DEFAULT_CAMPAIGN_ROOT)
-    p.add_argument("--mission-file", type=Path, default=run_one.MISSION_FILE)
+    p.add_argument("--campaign-root", type=Path, default=defaults.DEFAULT_CAMPAIGN_ROOT)
+    p.add_argument("--mission-file", type=Path, default=defaults.MISSION_FILE)
     p.add_argument("--param-base", type=Path,
-                   default=run_matrix.PLANE_BASE_PARAM_FILE)
+                   default=defaults.PLANE_BASE_PARAM_FILE)
     p.add_argument("--param-airspeed", type=Path,
-                   default=run_matrix.PLANE_AIRSPEED_PARAM_FILE)
+                   default=defaults.PLANE_AIRSPEED_PARAM_FILE)
     p.add_argument("--param-local", type=Path, default=None)
     p.add_argument("--no-param-local", action="store_true")
-    p.add_argument("--mavlink", type=str, default=run_one.DEFAULT_MAVLINK)
+    p.add_argument("--mavlink", type=str, default=defaults.DEFAULT_MAVLINK)
     p.add_argument("--heartbeat-timeout", type=float,
-                   default=run_one.DEFAULT_HEARTBEAT_TIMEOUT)
-    p.add_argument("--ready-timeout", type=float, default=run_one.DEFAULT_READY_TIMEOUT)
-    p.add_argument("--upload-timeout", type=float, default=run_one.DEFAULT_UPLOAD_TIMEOUT)
-    p.add_argument("--arm-timeout", type=float, default=run_one.DEFAULT_ARM_TIMEOUT)
-    p.add_argument("--mode-timeout", type=float, default=run_one.DEFAULT_MODE_TIMEOUT)
+                   default=defaults.DEFAULT_HEARTBEAT_TIMEOUT)
+    p.add_argument("--ready-timeout", type=float, default=defaults.DEFAULT_READY_TIMEOUT)
+    p.add_argument("--upload-timeout", type=float, default=defaults.DEFAULT_UPLOAD_TIMEOUT)
+    p.add_argument("--arm-timeout", type=float, default=defaults.DEFAULT_ARM_TIMEOUT)
+    p.add_argument("--mode-timeout", type=float, default=defaults.DEFAULT_MODE_TIMEOUT)
     p.add_argument("--stack-settle-s", type=float,
-                   default=run_matrix.DEFAULT_STACK_SETTLE)
+                   default=defaults.DEFAULT_STACK_SETTLE)
     p.add_argument("--retry-delay-s", type=float,
-                   default=run_matrix.DEFAULT_RETRY_DELAY)
-    p.add_argument("--auto-wind-phase", choices=run_one.AUTO_WIND_PHASES,
-                   default=run_one.DEFAULT_AUTO_WIND_PHASE)
+                   default=defaults.DEFAULT_RETRY_DELAY)
+    p.add_argument("--auto-wind-phase", choices=defaults.AUTO_WIND_PHASES,
+                   default=None)
     p.add_argument("--wind-world-mode",
                    choices=("calm-runtime", "preloaded-only", "preloaded-refresh"),
                    default="calm-runtime")
@@ -88,7 +80,7 @@ def _parse_args() -> argparse.Namespace:
         p.error("--max-passes must be >= 0")
     if args.focus_combo is not None:
         try:
-            fx, fy = run_matrix_round_robin.parse_focus_combo(args.focus_combo)
+            fx, fy = defaults.parse_focus_combo(args.focus_combo)
         except argparse.ArgumentTypeError as exc:
             p.error(str(exc))
         if fx not in args.x_values:
@@ -97,6 +89,11 @@ def _parse_args() -> argparse.Namespace:
             p.error(f"--focus-combo y={fy} is not in --y-values {args.y_values}")
         args.x_values = [fx]
         args.y_values = [fy]
+    if args.auto_wind_phase is None:
+        args.auto_wind_phase = defaults.default_auto_wind_phase(
+            args.attempt_strategy,
+            auto_control=True,
+        )
     return args
 
 
@@ -107,29 +104,44 @@ def main() -> None:
 
     from ..plugins.wind_matrix import build_plugin
     from ..plugins.wind_matrix.config import WindMatrixConfig
-    run_one = _legacy.run_one_module()
-    run_matrix = _legacy.run_matrix_module()
+    from sim_ard_gaw.campaigns.mission_contract import (
+        validate_square_wind_mission_contract,
+    )
 
     args.campaign_root = args.campaign_root.resolve()
     args.mission_file = args.mission_file.resolve()
-    run_one.validate_square_wind_mission_contract(args.mission_file)
-    param_files = run_matrix.resolve_param_files(args)
+    validate_square_wind_mission_contract(args.mission_file)
+    param_files = defaults.resolve_param_files(
+        param_base=args.param_base,
+        param_airspeed=args.param_airspeed,
+        param_local=args.param_local,
+        no_param_local=args.no_param_local,
+    )
     args.campaign_root.mkdir(parents=True, exist_ok=True)
-    with run_one.campaign_manifest_lock(args.campaign_root):
-        manifest = run_one.load_manifest(args.campaign_root)
+    from sim_ard_gaw.campaigns.manifest_safety import campaign_manifest_lock
+
+    with campaign_manifest_lock(args.campaign_root):
+        from ..plugins.wind_matrix.manifest import WindMatrixManifest
+        manifest_adapter = WindMatrixManifest(
+            args.campaign_root,
+            require_analysis=args.require_analysis,
+            accept_square_only=args.accept_square_only,
+        )
+        manifest = manifest_adapter.load()
         manifest["target_run_count"] = args.runs_per_combo
         manifest["require_analysis"] = args.require_analysis
-        run_one.save_manifest(args.campaign_root, manifest)
-        run_one.save_campaign_summary(args.campaign_root, manifest)
+        manifest["accept_square_only"] = args.accept_square_only
+        manifest_adapter.save(manifest)
+        manifest_adapter.save_campaign_summary(manifest)
 
-    mission_item_count = run_one.mission_item_count(args.mission_file)
+    mission_item_count = defaults.mission_item_count(args.mission_file)
     verify_timeout_s = args.upload_timeout + (
-        mission_item_count * run_one.VERIFY_MISSION_ITEM_TIMEOUT_S
+        mission_item_count * defaults.VERIFY_MISSION_ITEM_TIMEOUT_S
     )
     wind_retry_budget_s = (
         0.0
         if args.wind_world_mode == "preloaded-only"
-        else run_one.WIND_INJECTION_MAX_ATTEMPTS * run_one.WIND_INJECTION_RETRY_S
+        else defaults.WIND_INJECTION_MAX_ATTEMPTS * defaults.WIND_INJECTION_RETRY_S
     )
     infra_overhead_s = (
         args.heartbeat_timeout
@@ -137,14 +149,14 @@ def main() -> None:
         + args.upload_timeout
         + verify_timeout_s
         + args.arm_timeout
-        + run_one.AUTO_ARM_TO_AUTO_SETTLE_S
+        + defaults.AUTO_ARM_TO_AUTO_SETTLE_S
         + args.mode_timeout
         + 2 * args.stack_settle_s
-        + run_matrix.CLEANUP_TIMEOUT_S
+        + defaults.CLEANUP_TIMEOUT_S
         + args.retry_delay_s
         + wind_retry_budget_s
-        + run_one.BIN_FLUSH_DELAY_S
-        + run_one.ANALYSIS_HEADROOM_S
+        + defaults.BIN_FLUSH_DELAY_S
+        + defaults.ANALYSIS_HEADROOM_S
     )
     slot_seconds = args.slot_minutes * 60.0
     mission_timeout = (
@@ -157,25 +169,25 @@ def main() -> None:
     )
 
     print()
-    run_one.log("=" * 60)
-    run_one.log("Square Wind Matrix — test_suite.cli.run_round_robin")
-    run_one.log(f"  Campaign root : {args.campaign_root}")
-    run_one.log(f"  Mission       : {args.mission_file}")
-    run_one.log(f"  X values      : {args.x_values}")
-    run_one.log(f"  Y values      : {args.y_values}")
-    run_one.log(f"  Runs/combo    : {args.runs_per_combo}")
-    run_one.log("  Param stack   :")
+    defaults.log("=" * 60)
+    defaults.log("Square Wind Matrix - test_suite.cli.run_round_robin")
+    defaults.log(f"  Campaign root : {args.campaign_root}")
+    defaults.log(f"  Mission       : {args.mission_file}")
+    defaults.log(f"  X values      : {args.x_values}")
+    defaults.log(f"  Y values      : {args.y_values}")
+    defaults.log(f"  Runs/combo    : {args.runs_per_combo}")
+    defaults.log("  Param stack   :")
     for param_file in param_files:
-        run_one.log(f"    {param_file}")
-    run_one.log(f"  Wind world    : {args.wind_world_mode}")
-    run_one.log(f"  Auto wind     : {args.auto_wind_phase}")
-    run_one.log(f"  Slot minutes  : {args.slot_minutes}")
-    run_one.log(
+        defaults.log(f"    {param_file}")
+    defaults.log(f"  Wind world    : {args.wind_world_mode}")
+    defaults.log(f"  Auto wind     : {args.auto_wind_phase}")
+    defaults.log(f"  Slot minutes  : {args.slot_minutes}")
+    defaults.log(
         "  Monitor mins  : "
         f"{mission_timeout/60:.1f} ({monitor_budget_note})"
     )
-    run_one.log(f"  Mission items : {mission_item_count}")
-    run_one.log("=" * 60)
+    defaults.log(f"  Mission items : {mission_item_count}")
+    defaults.log("=" * 60)
     print()
 
     config = WindMatrixConfig(
@@ -205,7 +217,7 @@ def main() -> None:
         param_file_stack=param_files,
         stack_log_subdir="round_robin_logs",
         isolated_sitl_state=True,
-        slot_deadline_margin_s=run_matrix.CLEANUP_TIMEOUT_S + args.retry_delay_s,
+        slot_deadline_margin_s=defaults.CLEANUP_TIMEOUT_S + args.retry_delay_s,
         attempt_strategy=args.attempt_strategy,
     )
 
