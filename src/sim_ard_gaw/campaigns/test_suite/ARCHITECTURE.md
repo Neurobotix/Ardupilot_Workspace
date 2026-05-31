@@ -203,11 +203,16 @@ control/monitor, wind stimulus, artifacts, analysis, summary, and live
 zero-legacy staged execution remain Stage 3D-3G work.
 
 ### Stage 3D — zero-legacy runtime/environment
-- Move staged runtime environment, workspace plugin enforcement, SITL/Gazebo
-  launch, static wind world writing, process cleanup, diagnostics, and timeout
-  helpers into test-suite-owned modules.
-- `WindMatrixEnvironment` staged mode must not call `run_matrix.*` or
-  `run_one.*`.
+
+Implemented 2026-05-31: `plugins/wind_matrix/runtime.py` owns
+`cleanup_stack`, `tail_text`, `ensure_process_alive`, `launch_process`,
+`launch_sitl`, `launch_gazebo`, and `write_static_wind_world`. Constants
+`SIM_VEHICLE`, `PLANE_WIND_WORLD`, `STACK_CLEANUP_TIMEOUT_S` and
+`preferred_python()` (now in `defaults.py`) are test-suite-owned.
+`WindMatrixEnvironment.launch()` and `.cleanup()` now call `runtime.*` only;
+neither resolves `run_matrix.*` or `run_one.*`. `assert_ready()` readiness
+(heartbeat / vehicle readiness / slot timeout) remains Phase 3E work.
+Evidence: `evidence/reports/features/2026-05-31_test_suite_migration_phase_3d.md`.
 
 ### Stage 3E — zero-legacy MAVLink control and monitor
 - Move heartbeat/readiness, mission upload/verification, arm/mode control, and
