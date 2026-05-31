@@ -688,7 +688,6 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 "square_completed": True,
                 "loiter_completed": True,
             }
-            owned_run_one = legacy.run_one_module()
             analyzer = WindMatrixAnalyzer(
                 WindMatrixConfig(
                     campaign_root=root,
@@ -698,13 +697,13 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             )
 
             with (
-                patch.object(owned_run_one, "cleanup_stack_for_analysis", side_effect=lambda: events.append("cleanup")),
-                patch.object(owned_run_one, "clamp_timeout_to_slot", side_effect=lambda *args, **kwargs: events.append("clamp") or 0.0),
+                patch("test_suite.plugins.wind_matrix.analyzers.cleanup_stack_for_analysis", side_effect=lambda: events.append("cleanup")),
+                patch("test_suite.plugins.wind_matrix.analyzers.clamp_timeout_to_slot", side_effect=lambda *args, **kwargs: events.append("clamp") or 0.0),
                 patch("test_suite.plugins.wind_matrix.analyzers.time.sleep", side_effect=lambda _s: events.append("sleep")),
-                patch.object(owned_run_one, "collect_bin_log", side_effect=lambda *args, **kwargs: events.append("collect") or source_bin),
-                patch.object(owned_run_one, "run_analysis", side_effect=lambda *args, **kwargs: events.append("analysis")),
-                patch.object(owned_run_one, "build_run_summary", return_value={}),
-                patch.object(owned_run_one, "ensure_run_alias_link", side_effect=lambda *args, **kwargs: events.append("alias")),
+                patch("test_suite.plugins.wind_matrix.analyzers.collect_bin_log", side_effect=lambda *args, **kwargs: events.append("collect") or source_bin),
+                patch("test_suite.plugins.wind_matrix.analyzers.run_analysis", side_effect=lambda *args, **kwargs: events.append("analysis")),
+                patch("test_suite.plugins.wind_matrix.analyzers.build_run_summary", return_value={}),
+                patch("test_suite.plugins.wind_matrix.analyzers.ensure_run_alias_link", side_effect=lambda *args, **kwargs: events.append("alias")),
             ):
                 result = analyzer.analyze(case, ctx)
 
@@ -754,11 +753,10 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 artifact_root=root,
                 log=lambda _msg: None,
             )
-            owned_run_one = legacy.run_one_module()
             with (
-                patch.object(owned_run_one, "clamp_timeout_to_slot", return_value=0.0),
+                patch("test_suite.plugins.wind_matrix.analyzers.clamp_timeout_to_slot", return_value=0.0),
                 patch("test_suite.plugins.wind_matrix.analyzers.time.sleep", return_value=None),
-                patch.object(owned_run_one, "collect_bin_log", return_value=None),
+                patch("test_suite.plugins.wind_matrix.analyzers.collect_bin_log", return_value=None),
             ):
                 record = runner.run(
                     case=case,
@@ -805,17 +803,16 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 "square_completed": True,
                 "loiter_completed": True,
             }
-            owned_run_one = legacy.run_one_module()
             analyzer = WindMatrixAnalyzer(
                 WindMatrixConfig(campaign_root=root, require_analysis=True)
             )
 
             with (
-                patch.object(owned_run_one, "clamp_timeout_to_slot", return_value=0.0),
+                patch("test_suite.plugins.wind_matrix.analyzers.clamp_timeout_to_slot", return_value=0.0),
                 patch("test_suite.plugins.wind_matrix.analyzers.time.sleep", return_value=None),
-                patch.object(owned_run_one, "collect_bin_log", return_value=source_bin),
-                patch.object(owned_run_one, "ensure_run_alias_link", return_value=None),
-                patch.object(owned_run_one, "run_analysis", side_effect=RuntimeError("analysis boom")),
+                patch("test_suite.plugins.wind_matrix.analyzers.collect_bin_log", return_value=source_bin),
+                patch("test_suite.plugins.wind_matrix.analyzers.ensure_run_alias_link", return_value=None),
+                patch("test_suite.plugins.wind_matrix.analyzers.run_analysis", side_effect=RuntimeError("analysis boom")),
             ):
                 result = analyzer.analyze(case, ctx)
 

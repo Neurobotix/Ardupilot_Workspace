@@ -94,6 +94,16 @@ class Phase1ParityTests(unittest.TestCase):
                     new_flags - legacy_flags,
                 )
 
+    def test_suite_cli_does_not_adopt_round_robin_require_analysis_flag(self) -> None:
+        suite_flags = _help_flags(
+            [sys.executable, "-m", "test_suite.cli.run_suite", "--help"]
+        )
+        rr_flags = _help_flags(
+            [sys.executable, "-m", "test_suite.cli.run_round_robin", "--help"]
+        )
+        self.assertNotIn("--require-analysis", suite_flags)
+        self.assertIn("--require-analysis", rr_flags)
+
     def test_wind_config_defaults_track_legacy_matrix(self) -> None:
         cfg = WindMatrixConfig()
         self.assertEqual(run_matrix.DEFAULT_STACK_SETTLE, cfg.stack_settle_s)
