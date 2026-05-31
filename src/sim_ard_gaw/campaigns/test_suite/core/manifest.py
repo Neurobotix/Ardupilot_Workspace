@@ -1,10 +1,8 @@
 """Manifest read/write interface.
 
 The manifest is the durable record of every attempt: which cases were
-attempted, when, with what verdict. `LegacyManifest` delegates legacy
-wind-matrix loading and saving to `run_one.load_manifest` /
-`save_manifest`, while exposing an additive generic view for the
-framework.
+attempted, when, with what verdict. Plugin-specific legacy schemas and
+summaries belong in the plugin layer.
 """
 from __future__ import annotations
 
@@ -13,12 +11,6 @@ from dataclasses import asdict
 from enum import Enum
 from pathlib import Path
 from typing import Any
-
-from sim_ard_gaw.campaigns.manifest_safety import campaign_manifest_lock
-from sim_ard_gaw.campaigns.status import (
-    legacy_analysis_succeeded,
-    terminal_status_for_legacy,
-)
 
 from .models import (
     AnalysisResult,
@@ -78,88 +70,6 @@ class Manifest(ABC):
         the persisted manifest.
         """
         return generic_manifest_view(self.load())
-
-
-class LegacyManifest(Manifest):
-    """Delegates to `run_one.load_manifest` / `save_manifest`.
-
-    This keeps the wind-matrix campaign-log schema compatible while
-    Phase 2 adds framework fields additively to rows written through
-    the test_suite path. Legacy fields are not renamed or overwritten.
-
-    Acceptance counting is policy-aware: when ``accept_square_only`` is
-    False, legacy attempts with ``status == "success_square_only"`` are
-    treated as partial successes and do not contribute to the accepted
-    count. This prevents an older square-only manifest row from silently
-    satisfying acceptance for a new full-mission policy.
-    """
-
-    def __init__(
-        self,
-        campaign_root: Path,
-        *,
-        require_analysis: bool = False,
-        accept_square_only: bool = False,
-    ) -> None:
-        from . import _legacy
-        self._run_one = _legacy.run_one_module()
-        self._root = campaign_root
-        self._require_analysis = require_analysis
-        self._accept_square_only = accept_square_only
-
-    def load(self) -> dict[str, Any]:
-        return self._run_one.load_manifest(self._root)
-
-    def save(self, manifest: dict[str, Any]) -> None:
-        self._run_one.save_manifest(self._root, manifest)
-
-    def accepted_count(self, case: TestCase) -> int:
-        manifest = self.load()
-        key = case.case_id
-        successes = self._run_one.combo_successes(
-            manifest, key, require_analysis=self._require_analysis,
-        )
-        if self._accept_square_only:
-            return len(successes)
-        return sum(
-            1 for attempt in successes
-            if attempt.get("status") != "success_square_only"
-        )
-
-    def next_attempt_index(self, case: TestCase) -> int:
-        manifest = self.load()
-        return self._run_one.next_attempt_index(self._root, manifest, case.case_id)
-
-    def append_attempt(self, record: AttemptRecord) -> None:
-        with campaign_manifest_lock(self._root):
-            manifest = self.load()
-            attempts = manifest.setdefault("attempts", [])
-            generic_fields = attempt_record_to_generic_fields(record)
-
-            for attempt in attempts:
-                if (
-                    isinstance(attempt, dict)
-                    and attempt.get("attempt_id") == record.attempt_id
-                ):
-                    additive_fields = dict(generic_fields)
-                    additive_fields.pop("attempt_id", None)
-                    attempt.update(additive_fields)
-                    self.save(manifest)
-                    save_summary = getattr(self._run_one, "save_campaign_summary", None)
-                    if callable(save_summary):
-                        save_summary(self._root, manifest)
-                    return
-
-            row = _to_jsonable(record.plugin_manifest_fields)
-            if row:
-                row.update(generic_fields)
-            else:
-                row = generic_fields
-            attempts.append(row)
-            self.save(manifest)
-            save_summary = getattr(self._run_one, "save_campaign_summary", None)
-            if callable(save_summary):
-                save_summary(self._root, manifest)
 
 
 def generic_manifest_view(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -254,18 +164,12 @@ def _suite_name(attempt: dict[str, Any]) -> str:
     suite_name = attempt.get("suite_name")
     if suite_name:
         return str(suite_name)
-    if attempt.get("combo_key") or (
-        "x_wind_mps" in attempt and "y_wind_mps" in attempt
-    ):
-        return "wind_matrix"
     return ""
 
 
 def _case_id(attempt: dict[str, Any]) -> str:
     if attempt.get("case_id"):
         return str(attempt["case_id"])
-    if attempt.get("combo_key"):
-        return str(attempt["combo_key"])
     attempt_id = str(attempt.get("attempt_id") or "")
     return attempt_id.split("__", 1)[0] if attempt_id else ""
 
@@ -274,29 +178,13 @@ def _parameters(attempt: dict[str, Any]) -> dict[str, Any]:
     params = attempt.get("parameters")
     if isinstance(params, dict):
         return _to_jsonable(params)
-
-    inferred: dict[str, Any] = {}
-    if "x_wind_mps" in attempt:
-        inferred["wind_x_mps"] = attempt.get("x_wind_mps")
-    if "y_wind_mps" in attempt:
-        inferred["wind_y_mps"] = attempt.get("y_wind_mps")
-    return inferred
+    return {}
 
 
 def _stimulus_result(attempt: dict[str, Any]) -> dict[str, Any]:
     stimulus = attempt.get("stimulus_result")
     if isinstance(stimulus, dict):
         return _to_jsonable(stimulus)
-
-    if "x_wind_mps" in attempt or "y_wind_mps" in attempt:
-        return {
-            "kind": "wind_matrix",
-            "wind_mps": {
-                "x": attempt.get("x_wind_mps"),
-                "y": attempt.get("y_wind_mps"),
-                "z": 0.0,
-            },
-        }
     return {}
 
 
@@ -304,19 +192,7 @@ def _analysis_results(attempt: dict[str, Any]) -> list[dict[str, Any]]:
     results = attempt.get("analysis_results")
     if isinstance(results, list):
         return _to_jsonable(results)
-
-    analysis_status = attempt.get("analysis_status")
-    if analysis_status is None:
-        return []
-    return [
-        {
-            "analyzer_name": "legacy_run_analysis",
-            "ok": legacy_analysis_succeeded(analysis_status),
-            "summary": {"legacy_status": str(analysis_status)},
-            "output_paths": [],
-            "error": None,
-        }
-    ]
+    return []
 
 
 def _verdict(attempt: dict[str, Any]) -> dict[str, Any]:
@@ -325,26 +201,13 @@ def _verdict(attempt: dict[str, Any]) -> dict[str, Any]:
         return _to_jsonable(verdict)
 
     status = attempt.get("status")
-    terminal = attempt.get("terminal_status") or terminal_status_for_legacy(status)
-    if terminal is None and status is not None:
-        terminal = str(status)
+    terminal = str(attempt.get("terminal_status") or status or "")
     return {
         "class": terminal,
         "reason": str(status or ""),
-        "retryable": str(status or "") in {"failed", "error", "interrupted"},
-        "requires_analysis": str(status or "")
-        in {"success_full", "success_square_only", "failed_analysis"},
-        "metadata": {
-            key: _to_jsonable(attempt.get(key))
-            for key in (
-                "success_class",
-                "mission_completed_full",
-                "square_completed",
-                "loiter_completed",
-                "analysis_status",
-            )
-            if key in attempt
-        },
+        "retryable": False,
+        "requires_analysis": False,
+        "metadata": {},
     }
 
 
@@ -352,15 +215,7 @@ def _artifacts(attempt: dict[str, Any]) -> dict[str, Any]:
     artifacts = attempt.get("artifacts")
     if isinstance(artifacts, dict):
         return _to_jsonable(artifacts)
-
-    inferred: dict[str, Any] = {}
-    if attempt.get("raw_log_path") is not None:
-        inferred["raw_log"] = attempt.get("raw_log_path")
-    if attempt.get("attempt_dir") is not None:
-        inferred["attempt_dir"] = attempt.get("attempt_dir")
-    if attempt.get("run_alias") is not None:
-        inferred["run_alias"] = attempt.get("run_alias")
-    return inferred
+    return {}
 
 
 def _terminal_from_framework_status(status: AttemptStatus) -> str:

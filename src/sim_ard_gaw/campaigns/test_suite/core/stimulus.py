@@ -1,8 +1,8 @@
 """Stimulus injection interface.
 
 A `StimulusAdapter` applies the test condition that defines the case:
-inject wind, modify sensor noise params, publish fake GPS traffic,
-toggle a fault plugin, etc.
+modify sensor parameters, publish protocol traffic, toggle a fault plugin,
+or perform another plugin-owned setup action.
 """
 from __future__ import annotations
 

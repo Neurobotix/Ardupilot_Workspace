@@ -1,17 +1,8 @@
-"""Control strategies: how the vehicle/subject is driven.
+"""Control strategies: how the vehicle or subject is driven.
 
-Three named strategies map onto the modes the legacy stack already
-supports:
-
-- `ManualControl`  — print operator instructions, do not send commands
-                     (matches `run_one.py` without `--auto`)
-- `AutoControl`    — upload mission, arm, switch mode
-                     (matches `run_one.py --auto` and `run_matrix.py`)
-- `PassiveControl` — never command, only observe
-                     (matches `run_one_og.py`)
-
-A plugin selects the default strategy for its CLI but every strategy is
-plugin-overridable.
+Core provides generic manual, automatic, and passive strategy shapes. A plugin
+selects the default strategy for its CLI and may supply plugin-specific
+instructions or protocol helper functions.
 """
 from __future__ import annotations
 
@@ -54,10 +45,6 @@ class AutoControl(ControlStrategy):
     mode = ControlMode.AUTO
 
     def execute(self, case: TestCase, ctx: AttemptContext) -> None:
-        # Phase 1: legacy run_one.run_one performs upload+arm+mode
-        # internally when called with manual_control=False. Phase 3
-        # extracts that flow here and this method becomes the only auto
-        # commanding path.
         return None
 
 

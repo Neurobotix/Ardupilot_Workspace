@@ -1,9 +1,7 @@
 """Scheduler policies.
 
-A scheduler decides which case to attempt next given the current
-manifest state and the pending case set. Two policies ship with the
-framework: `SequentialScheduler` (matches `run_matrix.py`) and
-`RoundRobinScheduler` (matches `run_matrix_round_robin.py`).
+A scheduler decides which case to attempt next given the current manifest
+state and the pending case set. Core ships sequential and round-robin policies.
 """
 from __future__ import annotations
 
@@ -43,10 +41,7 @@ def _accepted(manifest: Manifest, case: TestCase) -> int:
 
 
 class SequentialScheduler(SchedulerPolicy):
-    """Drain each case to acceptance before moving to the next.
-
-    Matches the inner loop of `run_matrix.main()`.
-    """
+    """Drain each case to acceptance before moving to the next."""
 
     def initial_pending(self, cases: Iterable[TestCase], manifest: Manifest) -> list[TestCase]:
         out: list[TestCase] = []

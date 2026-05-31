@@ -109,7 +109,7 @@ class Verdict:
 
 @dataclass
 class AttemptRecord:
-    """Generalized form of the wind-matrix manifest attempt entry."""
+    """Generic record persisted for one attempt."""
     attempt_id: str
     suite_name: str
     case_id: str
