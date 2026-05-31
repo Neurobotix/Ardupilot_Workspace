@@ -1,16 +1,13 @@
 """AttemptRunner: orchestrates one attempt's lifecycle.
 
-Phase 1 supports two strategies:
+The framework supports two strategy shapes:
 
-- `LegacyDelegateStrategy` — calls `run_one.run_one(...)` as a single
-  body for stages 4-10. Used by the wind_matrix plugin to preserve
-  exact current behavior.
-- `StagedStrategy` — walks each stage adapter explicitly. Used by new
-  plugins that don't have legacy delegates to lean on, and by the
-  Phase-3 split-up wind_matrix plugin.
+- `LegacyDelegateStrategy` hands the attempt body to a plugin-supplied
+  callable for compatibility paths.
+- `StagedStrategy` walks each stage adapter explicitly.
 
-Both strategies share stages 1-3 (env prepare/launch/ready) and stage
-12 (cleanup) — those are framework-owned in every case.
+Both strategies share stages 1-3 (environment prepare/launch/ready) and
+stage 12 (cleanup). Those are framework-owned in every case.
 """
 from __future__ import annotations
 
@@ -32,6 +29,7 @@ from .models import (
     MonitorResult,
     TestCase,
     Verdict,
+    VerdictClass,
 )
 from .monitor import CompletionMonitor
 from .stimulus import StimulusAdapter
@@ -98,16 +96,13 @@ class StagedStrategy(AttemptStrategy):
         return AttemptRecord(
             attempt_id=plugin_manifest_fields.get(
                 "attempt_id",
-                f"{ctx.case.case_id}__attempt_{ctx.attempt_index:03d}",
+                _default_attempt_id(ctx),
             ),
             suite_name=ctx.case.suite_name,
             case_id=ctx.case.case_id,
             target_run_index=ctx.target_run_index,
             attempt_index=ctx.attempt_index,
-            status=_status_from_plugin_manifest(
-                plugin_manifest_fields,
-                fallback=_status_from_verdict(verdict),
-            ),
+            status=_status_from_context(ctx, verdict),
             verdict=verdict,
             monitor_result=monitor_result,
             analysis_results=list(analysis_results),
@@ -135,31 +130,21 @@ def _status_from_verdict(v: Verdict) -> AttemptStatus:
     }[v.klass]
 
 
-def _status_from_plugin_manifest(
-    fields: dict,
-    *,
-    fallback: AttemptStatus,
-) -> AttemptStatus:
-    status = fields.get("status")
-    if status is None:
-        return fallback
-    return {
-        "success_full": AttemptStatus.SUCCESS,
-        "success_square_only": AttemptStatus.PARTIAL,
-        "failed": AttemptStatus.FAILED,
-        "failed_analysis": AttemptStatus.ANALYSIS_FAILED,
-        "error": AttemptStatus.ERROR,
-        "interrupted": AttemptStatus.INTERRUPTED,
-    }.get(str(status), fallback)
+def _status_from_context(ctx: AttemptContext, verdict: Verdict) -> AttemptStatus:
+    explicit = ctx.extra.get("attempt_status")
+    if isinstance(explicit, AttemptStatus):
+        return explicit
+    if explicit is not None:
+        try:
+            return AttemptStatus(str(explicit))
+        except ValueError:
+            pass
+    return _status_from_verdict(verdict)
 
 
 @dataclass
 class LegacyDelegateStrategy(AttemptStrategy):
-    """Phase-1 escape hatch: hand stages 4-10 to a single callable.
-
-    The wind_matrix plugin uses this to call `run_one.run_one(...)` as
-    one block, preserving exact behavior of the existing campaign.
-    """
+    """Compatibility escape hatch: hand stages 4-10 to one callable."""
     body: Callable[[AttemptContext], AttemptRecord]
 
     def execute(self, ctx: AttemptContext) -> AttemptRecord:
@@ -174,12 +159,20 @@ class AttemptRunner:
         manifest: Manifest,
         artifact_root: Path,
         log: Callable[[str], None] | None = None,
+        prewrite_running_record: bool = False,
+        running_record_factory: Callable[[AttemptContext], AttemptRecord] | None = None,
+        exception_record_factory: (
+            Callable[[AttemptContext, BaseException], AttemptRecord] | None
+        ) = None,
     ) -> None:
         self._env = environment
         self._strategy = strategy
         self._manifest = manifest
         self._artifact_root = artifact_root
         self._log = log or (lambda msg: print(msg))
+        self._prewrite_running_record = prewrite_running_record
+        self._running_record_factory = running_record_factory
+        self._exception_record_factory = exception_record_factory
 
     def run(
         self,
@@ -203,7 +196,18 @@ class AttemptRunner:
         if attempt_metadata:
             ctx.extra.update(attempt_metadata)
 
+        running_persisted = False
+        terminal_persisted = False
         try:
+            if self._prewrite_running_record:
+                running_record = (
+                    self._running_record_factory(ctx)
+                    if self._running_record_factory is not None
+                    else _running_attempt_record(ctx)
+                )
+                self._manifest.append_attempt(running_record)
+                running_persisted = True
+
             self._env.prepare_case(case)
             self._env.launch(case, ctx)
             self._env.assert_ready(case, ctx)
@@ -212,10 +216,28 @@ class AttemptRunner:
                 record.end_time_utc = _utc_now_iso()
             record.duration_wall_s = time.time() - ctx.start_wall_s
             self._manifest.append_attempt(record)
+            terminal_persisted = True
             return record
-        except Exception as exc:
+        except BaseException as exc:
             self._log(f"[attempt_runner] error in {case.case_id}: "
                       f"{type(exc).__name__}: {exc}")
+            if running_persisted and not terminal_persisted:
+                try:
+                    record = (
+                        self._exception_record_factory(ctx, exc)
+                        if self._exception_record_factory is not None
+                        else _exception_attempt_record(ctx, exc)
+                    )
+                    if not record.end_time_utc:
+                        record.end_time_utc = _utc_now_iso()
+                    record.duration_wall_s = time.time() - ctx.start_wall_s
+                    self._manifest.append_attempt(record)
+                    terminal_persisted = True
+                except Exception as persist_exc:
+                    self._log(
+                        "[attempt_runner] terminal manifest error: "
+                        f"{type(persist_exc).__name__}: {persist_exc}"
+                    )
             raise
         finally:
             try:
@@ -223,3 +245,69 @@ class AttemptRunner:
             except Exception as cleanup_exc:
                 self._log(f"[attempt_runner] cleanup error: "
                           f"{type(cleanup_exc).__name__}: {cleanup_exc}")
+
+
+def _default_attempt_id(ctx: AttemptContext) -> str:
+    return (
+        f"{ctx.case.case_id}__rep_{ctx.target_run_index:02d}"
+        f"__attempt_{ctx.attempt_index:03d}"
+    )
+
+
+def _running_attempt_record(ctx: AttemptContext) -> AttemptRecord:
+    start_time = _utc_now_iso()
+    ctx.extra.setdefault("attempt_start_time_utc", start_time)
+    return AttemptRecord(
+        attempt_id=_default_attempt_id(ctx),
+        suite_name=ctx.case.suite_name,
+        case_id=ctx.case.case_id,
+        target_run_index=ctx.target_run_index,
+        attempt_index=ctx.attempt_index,
+        status=AttemptStatus.RUNNING,
+        start_time_utc=start_time,
+        parameters=dict(ctx.case.parameters),
+        stimulus_result=dict(ctx.stimulus_result),
+    )
+
+
+def _exception_attempt_record(
+    ctx: AttemptContext,
+    exc: BaseException,
+) -> AttemptRecord:
+    status = (
+        AttemptStatus.ERROR if isinstance(exc, Exception)
+        else AttemptStatus.INTERRUPTED
+    )
+    message = str(exc)
+    end_time = _utc_now_iso()
+    return AttemptRecord(
+        attempt_id=_default_attempt_id(ctx),
+        suite_name=ctx.case.suite_name,
+        case_id=ctx.case.case_id,
+        target_run_index=ctx.target_run_index,
+        attempt_index=ctx.attempt_index,
+        status=status,
+        verdict=Verdict(
+            klass=VerdictClass.FAILED_RETRYABLE,
+            reason=status.value,
+            retryable=True,
+            requires_analysis=False,
+            metadata={"exception": message},
+        ),
+        monitor_result=MonitorResult(
+            completed=False,
+            reason=f"exception: {message}",
+            duration_s=time.time() - ctx.start_wall_s,
+        ),
+        analysis_results=[],
+        start_time_utc=str(ctx.extra.get("attempt_start_time_utc") or ""),
+        end_time_utc=end_time,
+        duration_wall_s=time.time() - ctx.start_wall_s,
+        artifacts={
+            name: str(path)
+            for name, path in ctx.artifacts.items()
+        },
+        parameters=dict(ctx.case.parameters),
+        stimulus_result=dict(ctx.stimulus_result),
+        notes=[f"exception: {message}"] if message else ["exception"],
+    )
