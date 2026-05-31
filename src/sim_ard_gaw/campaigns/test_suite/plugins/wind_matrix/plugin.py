@@ -52,9 +52,8 @@ from .defaults import (
     ANALYSIS_HEADROOM_S,
     AUTO_ARM_TO_AUTO_SETTLE_S,
     BIN_FLUSH_DELAY_S,
+    attempt_dir as attempt_dir_path,
     attempt_id,
-    attempt_key,
-    combo_runs_dir,
     log,
     utc_now,
 )
@@ -115,12 +114,17 @@ class WindMatrixPlugin:
         )
 
     def attempt_dir_factory(self):
-        def _factory(manifest: Manifest, case) -> Path:
-            # Match the legacy layout exactly; the legacy run_one will
-            # also create/own its own attempt directory under
-            # `combo_runs_dir(...)`. We return a stable per-case path
-            # so the framework can still reason about it.
-            return combo_runs_dir(self.config.campaign_root, case.case_id)
+        def _factory(
+            manifest: Manifest,
+            case,
+            attempt_index: int | None = None,
+        ) -> Path:
+            idx = (
+                int(attempt_index)
+                if attempt_index is not None
+                else manifest.next_attempt_index(case)
+            )
+            return attempt_dir_path(self.config.campaign_root, case.case_id, idx)
 
         return _factory
 
@@ -186,11 +190,12 @@ def build_wind_matrix_running_record(
     ctx: AttemptContext,
 ) -> AttemptRecord:
     key = ctx.case.case_id
-    attempt_dir = combo_runs_dir(config.campaign_root, key) / attempt_key(
-        ctx.attempt_index,
-    )
-    attempt_dir.mkdir(parents=True, exist_ok=True)
+    # Record the canonical attempt_NNN directory so the prewritten running row
+    # matches the terminal row even if the runner was handed the combo runs/
+    # parent before the stimulus stage normalized ctx.attempt_dir.
+    attempt_dir = attempt_dir_path(config.campaign_root, key, ctx.attempt_index)
     ctx.attempt_dir = attempt_dir
+    attempt_dir.mkdir(parents=True, exist_ok=True)
     start_time = str(
         ctx.extra.get("legacy_start_time_utc")
         or ctx.extra.get("attempt_start_time_utc")

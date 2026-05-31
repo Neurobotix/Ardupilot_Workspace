@@ -80,6 +80,8 @@ WIND_FRAME_NOTE = (
     "ArduPilot Gazebo plugin handles NED<->ENU internally."
 )
 SUCCESS_STATUSES = {"success_full", "success_square_only"}
+ANALYSIS_NOT_RUN = "not_run"
+ANALYSIS_PARTIAL_RUN_SUMMARY_FAILED = "partial: run_summary_failed"
 STRICT_WIND_ECHO_VERIFY = os.environ.get("SIM_ARD_GAW_STRICT_WIND_ECHO_VERIFY", "1") != "0"
 
 
@@ -130,8 +132,34 @@ def named_bin_filename(key: str, rep: int, attempt_idx: int) -> str:
     return f"{attempt_id(key, rep, attempt_idx)}.BIN"
 
 
+def attempt_dir(root: Path, key: str, attempt_idx: int) -> Path:
+    return combo_runs_dir(root, key) / attempt_key(attempt_idx)
+
+
 def combo_runs_dir(root: Path, key: str) -> Path:
     return root / key / "runs"
+
+
+def wind_injection_source(
+    *,
+    preloaded_world: Path | None,
+    preloaded_refresh: bool,
+    manual_control: bool,
+    auto_wind_phase: str | None,
+) -> str:
+    if preloaded_world is not None:
+        if preloaded_refresh:
+            return (
+                "generated Gazebo world launched with static <wind><linear_velocity>, "
+                f"then refreshed via Gazebo wind topic during {auto_wind_phase}"
+            )
+        return (
+            "generated Gazebo world launched with static <wind><linear_velocity>, "
+            "with no runtime wind topic refresh"
+        )
+    if manual_control:
+        return "run_one.py via Gazebo wind topic before user mission control"
+    return f"run_one.py via Gazebo wind topic during {auto_wind_phase}"
 
 
 def combo_order(
@@ -291,10 +319,8 @@ def resolve_param_files(
 
 
 def mission_item_count(mission_file: Path) -> int:
-    count = 0
-    for line in mission_file.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or stripped.startswith("QGC "):
-            continue
-        count += 1
-    return count
+    from pymavlink import mavwp
+
+    loader = mavwp.MAVWPLoader()
+    loader.load(str(mission_file))
+    return loader.count()

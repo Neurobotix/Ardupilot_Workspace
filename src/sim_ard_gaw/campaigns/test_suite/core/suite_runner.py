@@ -32,7 +32,7 @@ class SuiteRunner:
         scheduler: SchedulerPolicy,
         attempt_runner: AttemptRunner,
         manifest: Manifest,
-        attempt_dir_factory: Callable[[Manifest, "object"], Path],
+        attempt_dir_factory: Callable[[Manifest, "object", int], Path],
         settings: SuiteRunSettings | None = None,
         log: Callable[[str], None] | None = None,
     ) -> None:
@@ -69,7 +69,11 @@ class SuiteRunner:
 
             target_run_index = self._manifest.accepted_count(case) + 1
             attempt_index = self._manifest.next_attempt_index(case)
-            attempt_dir = self._attempt_dir_factory(self._manifest, case)
+            attempt_dir = self._attempt_dir_factory(
+                self._manifest,
+                case,
+                attempt_index,
+            )
 
             self._log(
                 f"[suite] {case.case_id}: attempt={attempt_index} "

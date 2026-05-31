@@ -48,8 +48,10 @@ class WindMatrixManifest(Manifest):
         self._root = campaign_root
         self._require_analysis = require_analysis
         self._accept_square_only = accept_square_only
+        self._cache: dict[str, Any] | None = None
+        self._cache_reconciled = False
 
-    def load(self) -> dict[str, Any]:
+    def _load_manifest(self) -> dict[str, Any]:
         path = self._root / "manifest.json"
         default: dict[str, Any] = {
             "campaign_root": str(self._root),
@@ -61,8 +63,25 @@ class WindMatrixManifest(Manifest):
             return default
         return json.loads(path.read_text(encoding="utf-8"))
 
+    def load(self) -> dict[str, Any]:
+        manifest = self._load_manifest()
+        self._cache = manifest
+        self._cache_reconciled = False
+        return manifest
+
+    def _reconciled_manifest(self) -> dict[str, Any]:
+        if self._cache is not None and self._cache_reconciled:
+            return self._cache
+        self.reconcile_bookkeeping()
+        if self._cache is None:
+            self._cache = self._load_manifest()
+            self._cache_reconciled = False
+        return self._cache
+
     def save(self, manifest: dict[str, Any]) -> None:
         _save_wind_manifest(self._root, manifest)
+        self._cache = manifest
+        self._cache_reconciled = True
 
     def save_campaign_summary(self, manifest: dict[str, Any]) -> None:
         _save_campaign_summary(
@@ -74,16 +93,18 @@ class WindMatrixManifest(Manifest):
 
     def reconcile_bookkeeping(self) -> list[str]:
         with campaign_manifest_lock(self._root):
-            manifest = self.load()
+            manifest = self._load_manifest()
             changes = _reconcile_manifest_bookkeeping(self._root, manifest)
             if changes:
                 self.save(manifest)
                 self.save_campaign_summary(manifest)
+            else:
+                self._cache = manifest
+                self._cache_reconciled = True
             return changes
 
     def accepted_count(self, case: TestCase) -> int:
-        self.reconcile_bookkeeping()
-        manifest = self.load()
+        manifest = self._reconciled_manifest()
         successes = _combo_successes(
             manifest,
             case.case_id,
@@ -97,8 +118,7 @@ class WindMatrixManifest(Manifest):
         )
 
     def next_attempt_index(self, case: TestCase) -> int:
-        self.reconcile_bookkeeping()
-        manifest = self.load()
+        manifest = self._reconciled_manifest()
         return _next_attempt_index(self._root, manifest, case.case_id)
 
     def append_attempt(self, record: AttemptRecord) -> None:
