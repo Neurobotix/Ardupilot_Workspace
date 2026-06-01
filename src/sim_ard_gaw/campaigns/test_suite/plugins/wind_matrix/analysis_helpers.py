@@ -48,23 +48,19 @@ def clamp_timeout_to_slot(
     return min(requested_timeout_s, remaining)
 
 
-def normalize_manifest_text(value: Any) -> str:
-    return " ".join(str(value).split())
-
-
 def summarize_exception_text(value: Any) -> str:
     lines = [
         line.strip() for line in str(value).splitlines()
         if line.strip() and not set(line.strip()) <= {"^"}
     ]
     if not lines:
-        return normalize_manifest_text(value)
+        return defaults.normalize_manifest_text(value)
 
     head = re.sub(r":\s*\^+$", "", lines[0]).strip()
     tail = lines[-1]
     if tail != head and ("Error:" in tail or tail.endswith("Error")):
-        return normalize_manifest_text(f"{head} ({tail})")
-    return normalize_manifest_text(head)
+        return defaults.normalize_manifest_text(f"{head} ({tail})")
+    return defaults.normalize_manifest_text(head)
 
 
 def csv_rows(path: Path) -> list[dict[str, str]]:

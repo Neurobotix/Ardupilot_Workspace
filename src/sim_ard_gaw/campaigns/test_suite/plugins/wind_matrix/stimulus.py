@@ -9,7 +9,7 @@ from typing import Any
 from sim_ard_gaw.campaigns.mission_contract import validate_square_wind_mission_contract
 from sim_ard_gaw.campaigns.provenance import parameter_file_provenance
 
-from . import defaults, legacy
+from . import defaults, wind_injection
 from ...core.models import AttemptContext, TestCase
 from ...core.stimulus import StimulusAdapter
 from .config import WindMatrixConfig
@@ -24,8 +24,6 @@ class WindMatrixStimulus(StimulusAdapter):
         y_mps = float(case.parameters["wind_y_mps"])
         self._ensure_attempt_dir(ctx)
         self._write_run_config(case, ctx)
-        run_one = legacy.run_one_module()
-
         if self.config.auto_control and self.config.auto_wind_phase == "after-takeoff":
             raise RuntimeError(
                 "The staged wind_matrix strategy does not yet support "
@@ -47,7 +45,7 @@ class WindMatrixStimulus(StimulusAdapter):
                     f"Preloaded wind world does not exist: {preloaded_world}"
                 )
             shutil.copy2(preloaded_world, archived_world)
-            result = run_one.preloaded_wind_artifact(
+            result = wind_injection.preloaded_wind_artifact(
                 x_mps,
                 y_mps,
                 source_world=preloaded_world,
@@ -59,7 +57,7 @@ class WindMatrixStimulus(StimulusAdapter):
                 ),
             )
         else:
-            result = run_one.inject_wind(
+            result = wind_injection.inject_wind(
                 x_mps,
                 y_mps,
                 timeout_s=defaults.remaining_deadline_s(
