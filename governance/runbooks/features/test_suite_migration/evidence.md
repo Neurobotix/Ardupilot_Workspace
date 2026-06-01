@@ -132,17 +132,24 @@ Raw evidence stays under `evidence/`.
 - Gate:
   Phase 4 remains blocked until Phase 3G.
 
-## Phase 3G (matched live staged-vs-legacy comparison)
+## Phase 3G (matched live staged-vs-legacy comparison) — ACCEPTED 2026-06-01
 
 - Primary report:
-  not yet available.
+  `evidence/reports/features/2026-06-01_test_suite_migration_phase_3g.md`
+- Curated evidence:
+  staged `evidence/curated_logs/test_suite_phase3f_staged_live_20260601/`;
+  legacy-direct `evidence/curated_logs/test_suite_phase3g_legacy_compare_20260601/`.
 - Scope:
-  run a bounded live staged wind case beside a matching live legacy case and
-  compare manifests/artifacts with documented accepted differences. The staged
-  live half is already demonstrated by the Phase 3F run above; the matching
-  legacy comparison run is the remaining piece.
+  the zero-legacy staged wind path was run live and compared against the
+  retained legacy tool invoked directly (`compat_scripts/run_matrix.py` →
+  `run_one.run_one(...)`, touching no `test_suite` code). Both reached
+  `success_full`; flight metrics agree within SITL run-to-run noise (square RMS
+  Δ 0.14 m); `run_config.json` schema and shared manifest legacy fields match
+  exactly; all differences are the documented intended ones.
 - Gate:
-  Phase 4 remains blocked until Phase 3G accepts the matched comparison.
+  **Phase 4 is now unblocked.** One second non-wind plugin may be added with
+  zero framework-core edits. Phase 5 (legacy retirement) still requires Phase 4
+  acceptance.
 
 ## Plan correction (2026-05-29)
 

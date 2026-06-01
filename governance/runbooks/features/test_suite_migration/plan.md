@@ -451,12 +451,15 @@ resuming campaigns via the new CLIs must account for it. See `review.md`
 - A matching legacy case is run and compared.
 - Only after this evidence may Phase 4 begin.
 
-## Phase 4 gate
+## Phase 4 gate — OPEN (Phase 3G accepted 2026-06-01)
 
-Do not start Phase 4 until Phase 3G is accepted. The Phase 4 second plugin
-must test general framework boundaries after the first plugin is a full
-zero-legacy staged system; it must not be used to distract from unresolved
-wind-specific legacy runner dependencies.
+Phase 3G is accepted: `wind_matrix` is a full zero-legacy staged system proven
+live against the legacy tool run directly
+(`evidence/reports/features/2026-06-01_test_suite_migration_phase_3g.md`).
+Phase 4 is therefore authorized. The Phase 4 second plugin must test general
+framework boundaries with **zero framework-core edits** (if a `core/` edit is
+needed, the abstractions are still wrong). It must not be used to distract from
+the wind plugin's correctness, which is now evidence-backed.
 
 ## Phase 5 gate
 

@@ -19,6 +19,15 @@ campaign test-suite implementation ownership into organized
 and script paths. Evidence:
 `evidence/reports/migration/PHASE_8_COMPAT_RETIREMENT_2026-05-24.md`.
 
+Active feature work: the `test_suite` migration completed its Phase 3 sequence
+(3A–3G) on 2026-06-01. The staged `wind_matrix` plugin is fully zero-legacy
+(environment, MAVLink control/monitor, and wind injection all plugin-owned) and
+was live-proven against the retained legacy tool run directly; the Phase 3G gate
+is accepted and Phase 4 (one second non-wind plugin, zero framework-core edits)
+is unblocked. Phase 5 (legacy script retirement) still requires Phase 4. See
+`governance/runbooks/features/test_suite_migration/` and
+`evidence/reports/features/2026-06-01_test_suite_migration_phase_3g.md`.
+
 Active plan:
 
 - `governance/runbooks/migration/full_migration_plan.md`

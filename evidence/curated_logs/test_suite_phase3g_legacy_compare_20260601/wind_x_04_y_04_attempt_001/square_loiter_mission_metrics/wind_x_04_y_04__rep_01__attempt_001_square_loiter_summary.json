@@ -1,0 +1,305 @@
+{
+  "position_source": "sim",
+  "mission_validation": {
+    "ok": true,
+    "errors": [],
+    "warnings": [],
+    "expected_commands": {
+      "1": 22,
+      "2": 16,
+      "3": 16,
+      "4": 16,
+      "5": 16,
+      "6": 16,
+      "7": 16,
+      "8": 16,
+      "9": 16,
+      "10": 16,
+      "11": 16,
+      "12": 16,
+      "13": 16,
+      "14": 16,
+      "15": 16,
+      "16": 16,
+      "17": 16,
+      "18": 16,
+      "19": 16,
+      "20": 16,
+      "21": 16,
+      "22": 16,
+      "23": 18
+    },
+    "location_frame_ids_allowed": [
+      0,
+      3,
+      10
+    ],
+    "location_frame_records": [
+      {
+        "seq": 0,
+        "cmd_id": 16,
+        "frame": 0
+      },
+      {
+        "seq": 1,
+        "cmd_id": 22,
+        "frame": 3
+      },
+      {
+        "seq": 2,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 3,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 4,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 5,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 6,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 7,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 8,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 9,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 10,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 11,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 12,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 13,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 14,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 15,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 16,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 17,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 18,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 19,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 20,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 21,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 22,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 23,
+        "cmd_id": 18,
+        "frame": 3
+      },
+      {
+        "seq": 25,
+        "cmd_id": 31,
+        "frame": 3
+      },
+      {
+        "seq": 26,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 27,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 28,
+        "cmd_id": 16,
+        "frame": 3
+      },
+      {
+        "seq": 29,
+        "cmd_id": 21,
+        "frame": 3
+      }
+    ],
+    "square_seq_start": 3,
+    "square_seq_end": 22,
+    "square_segment_count": 20,
+    "expected_square_segment_count": 20,
+    "square_side_length_target_m": 500.0,
+    "square_side_length_tolerance_m": 25.0,
+    "square_side_lengths_m": [
+      500.00262484744616,
+      500.00326167840194,
+      500.00262484744616,
+      500.00326167840194,
+      500.00262484744616,
+      500.00326167840194,
+      500.00262484744616,
+      500.00326167840194,
+      500.00262484744616,
+      500.00326167840194,
+      500.00262484744616,
+      500.00326167840194,
+      500.00262484744616,
+      500.00326167840194,
+      500.00262484744616,
+      500.00326167840194,
+      500.00262484744616,
+      500.00326167840194,
+      500.00262484744616,
+      500.00326167840194
+    ]
+  },
+  "square": {
+    "overall": {
+      "segment_count": 20,
+      "sample_count": 13222,
+      "mean_true_path_dev_m": 38.33339894612394,
+      "rms_true_path_dev_m": 58.56768215051583,
+      "p95_true_path_dev_m": 131.95599714307187,
+      "max_true_path_dev_m": 218.69128460991425
+    },
+    "by_heading": {
+      "northbound": {
+        "samples": 3194,
+        "mean_true_path_dev_m": 78.0137576314724,
+        "rms_true_path_dev_m": 98.23050516317679,
+        "p95_true_path_dev_m": 194.06877023766378,
+        "max_true_path_dev_m": 218.69128460991425,
+        "mean_signed_line_dev_m": -76.76401047941286
+      },
+      "westbound": {
+        "samples": 3807,
+        "mean_true_path_dev_m": 32.1674584413001,
+        "rms_true_path_dev_m": 46.87951284831425,
+        "p95_true_path_dev_m": 96.38598110279216,
+        "max_true_path_dev_m": 100.13188196792674,
+        "mean_signed_line_dev_m": -29.228752543167243
+      },
+      "southbound": {
+        "samples": 3516,
+        "mean_true_path_dev_m": 14.48267375731163,
+        "rms_true_path_dev_m": 21.59550848187999,
+        "p95_true_path_dev_m": 46.23700229941259,
+        "max_true_path_dev_m": 48.549646746321265,
+        "mean_signed_line_dev_m": -11.885491996330405
+      },
+      "eastbound": {
+        "samples": 2705,
+        "mean_true_path_dev_m": 31.159210267649097,
+        "rms_true_path_dev_m": 40.91269881813344,
+        "p95_true_path_dev_m": 73.83153907380404,
+        "max_true_path_dev_m": 75.70838568874859,
+        "mean_signed_line_dev_m": -29.952095455192612
+      }
+    }
+  },
+  "loiter": {
+    "available": true,
+    "command_seq": 23,
+    "command_center_lat_deg": -35.363262,
+    "command_center_lng_deg": 149.165237,
+    "command_radius_m": 100.0,
+    "loiter_window_start_seq": 23,
+    "loiter_window_end_seq": 24,
+    "loiter_window_start_time_s": 580.608332,
+    "loiter_window_end_time_s": 810.7083319999999,
+    "loiter_window_status": "bounded_by_next_mise",
+    "expected_turns": 5.0,
+    "turns_complete": true,
+    "start_time_s": 580.608332,
+    "end_time_s": 810.688332,
+    "duration_s": 230.07999999999998,
+    "capture_time_s": 37.16,
+    "samples": 5753,
+    "samples_after_capture": 4824,
+    "turns_flown_total": 5.003849240130172,
+    "turns_flown_after_capture": 4.971091632336769,
+    "completed_turns_after_capture": 4,
+    "mean_radial_error_full_window_m": 79.52990092237368,
+    "rms_radial_error_full_window_m": 148.0180893137468,
+    "p95_abs_radial_error_full_window_m": 443.96335167722395,
+    "mean_radial_error_m": 79.52990092237368,
+    "rms_radial_error_m": 148.0180893137468,
+    "p95_abs_radial_error_m": 443.96335167722395,
+    "mean_radial_error_after_capture_m": 33.29667830234557,
+    "rms_radial_error_after_capture_m": 41.44358935986032,
+    "p95_abs_radial_error_after_capture_m": 76.53198659915182,
+    "fitted_radius_after_capture_m": 133.1546660575681,
+    "fitted_center_offset_after_capture_m": 32.527895461806985,
+    "observed_direction_after_capture": "clockwise",
+    "median_angular_rate_deg_s_after_capture": -9.24818999782268
+  },
+  "notes": {
+    "mission_expected_square_seq_range": [
+      3,
+      22
+    ],
+    "mission_expected_loiter_seq": 23,
+    "loiter_window_status": "bounded_by_next_mise",
+    "loiter_window_end_seq": 24,
+    "loiter_metrics_note": "Full-window loiter radial metrics include capture/transit from loiter start; use *_after_capture_* fields for steady loiter tracking quality.",
+    "landing_metrics_generated": false,
+    "landing_reason": "Landing metrics are intentionally not generated by this square/loiter analyzer; loiter end handling is reported by loiter_window_status."
+  }
+}
