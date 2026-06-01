@@ -31,6 +31,11 @@ The old workspace `/home/ahmed/ardupilot_workspace` was not modified.
 | H-8 | (Defect introduced by in-progress fix work) Two unit-test files built subprocess/inline code via `textwrap.dedent(f"""...""")` with unescaped single-brace dict literals (`return_value={}`, `extra[...] = { ... }`), raising `SyntaxError` / `ValueError` at module import or runtime. | Single-brace literals inside the f-string code blocks are escaped (`{{ ... }}`). Both files compile and run. |
 | H-9 | (Defect introduced by in-progress fix work) The staged-attempt and Phase 3C tests mocked `run_one.<fn>` / `analysis_helpers.<fn>` while the analyzer looks up those names in the `plugins/wind_matrix/analyzers` namespace (`from .analysis_helpers import ...`), so the mocks did not take effect and the real analysis ran. | All analysis helper mocks now patch `test_suite.plugins.wind_matrix.analyzers.<fn>` (the namespace the analyzer actually uses). |
 
+Addendum (2026-05-31, later same day): the H-7 resolution text above
+overstated exact staged `run_config.json` parity. Exact migrated-field
+schema/value parity was completed and evidenced in
+`evidence/reports/features/2026-05-31_test_suite_phase3c_manifest_run_config_parity_fixes.md`.
+
 ## What This Changes In The Phase Map
 
 The Phase 3F analysis substage (BIN collection, `run_analysis`, `build_run_summary`,
