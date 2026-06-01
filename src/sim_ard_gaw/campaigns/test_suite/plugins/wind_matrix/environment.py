@@ -2,8 +2,8 @@
 
 Phase 3D: launch() and cleanup() are now owned by the plugin via runtime.py.
 The environment no longer calls run_matrix.*/run_one.* during SITL/Gazebo
-launch or stack cleanup. MAVLink readiness (assert_ready) remains legacy-backed
-and is Phase 3E work.
+launch or stack cleanup. Phase 3E: assert_ready() now uses plugin-owned
+MAVLink readiness helpers, with no legacy runner import.
 """
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ import time
 from datetime import datetime, timezone
 
 from . import defaults
-from . import legacy
+from . import analysis_helpers
+from . import mavlink_control
 from . import runtime
 from ...core.environment import EnvironmentAdapter
 from ...core.models import AttemptContext, TestCase
@@ -111,21 +112,20 @@ class WindMatrixEnvironment(EnvironmentAdapter):
     def assert_ready(self, case: TestCase, ctx: AttemptContext) -> None:
         if self._config.attempt_strategy != "staged":
             return None
-        run_one = legacy.run_one_module()
-        master = run_one.wait_for_heartbeat(
+        master = mavlink_control.wait_for_heartbeat(
             self._config.mavlink_addr,
-            run_one.clamp_timeout_to_slot(
+            analysis_helpers.clamp_timeout_to_slot(
                 self._config.heartbeat_timeout_s,
                 ctx.slot_deadline_monotonic_s,
                 phase="heartbeat wait",
             ),
         )
         ctx.extra["mavlink_master"] = master
-        ctx.extra["legacy_start_time_utc"] = run_one.utc_now()
+        ctx.extra["legacy_start_time_utc"] = defaults.utc_now()
         if self._config.auto_control:
-            run_one.wait_for_vehicle_ready(
+            mavlink_control.wait_for_vehicle_ready(
                 master,
-                run_one.clamp_timeout_to_slot(
+                analysis_helpers.clamp_timeout_to_slot(
                     self._config.ready_timeout_s,
                     ctx.slot_deadline_monotonic_s,
                     phase="vehicle readiness",
