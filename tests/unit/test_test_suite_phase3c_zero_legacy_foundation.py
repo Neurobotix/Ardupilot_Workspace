@@ -414,6 +414,66 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                 assert "sitl" in launch_ctx.process_handles, "sitl proc handle missing after launch"
                 assert "gazebo" in launch_ctx.process_handles, "gazebo proc handle missing after launch"
 
+                # Phase 3E: prove staged assert_ready/control/monitor run with
+                # legacy runner imports blocked and plugin-owned mavlink helpers.
+                from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import mavlink_control
+
+                phase3e_cfg = WindMatrixConfig(
+                    campaign_root=root,
+                    x_values=(0,),
+                    y_values=(4,),
+                    launch_stack=False,
+                    auto_control=True,
+                    attempt_strategy="staged",
+                )
+                phase3e_plugin = build_plugin(phase3e_cfg)
+                phase3e_case = cases[0]
+                phase3e_ctx = AttemptContext(
+                    case=phase3e_case,
+                    campaign_root=root,
+                    attempt_dir=defaults.attempt_dir(root, phase3e_case.case_id, 3),
+                    attempt_index=3,
+                    target_run_index=1,
+                    start_wall_s=0.0,
+                    start_monotonic_s=0.0,
+                )
+                phase3e_ctx.attempt_dir.mkdir(parents=True, exist_ok=True)
+                fake_master = object()
+                fake_monitor_state = {{
+                    "mission_completed_full": True,
+                    "square_completed": True,
+                    "loiter_started": True,
+                    "loiter_completed": True,
+                    "reached": [3, 23, 25, 29],
+                    "statustext": ["Mission complete"],
+                    "invalid_start_reason": None,
+                    "timed_out": False,
+                }}
+                with (
+                    mock.patch.object(defaults, "log", return_value=None),
+                    mock.patch(
+                        "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.plugin.log",
+                        return_value=None,
+                    ),
+                    mock.patch.object(mavlink_control, "wait_for_heartbeat", return_value=fake_master),
+                    mock.patch.object(mavlink_control, "wait_for_vehicle_ready", return_value=None),
+                    mock.patch.object(mavlink_control, "upload_mission", return_value=[object()]),
+                    mock.patch.object(mavlink_control, "verify_mission", return_value=None),
+                    mock.patch.object(mavlink_control, "arm_vehicle", return_value=None),
+                    mock.patch.object(mavlink_control, "settle_after_arm_before_auto", return_value=None),
+                    mock.patch.object(mavlink_control, "set_auto_mode", return_value=None),
+                    mock.patch.object(mavlink_control, "monitor_until_disarm", return_value=fake_monitor_state),
+                ):
+                    phase3e_plugin.environment.assert_ready(phase3e_case, phase3e_ctx)
+                    assert phase3e_ctx.extra["mavlink_master"] is fake_master
+                    assert "legacy_start_time_utc" in phase3e_ctx.extra
+                    assert phase3e_plugin.staged_strategy is not None
+                    phase3e_plugin.staged_strategy.control.execute(phase3e_case, phase3e_ctx)
+                    monitor_result = phase3e_plugin.staged_strategy.monitor.run(
+                        phase3e_case, phase3e_ctx,
+                    )
+                    assert monitor_result.completed is True
+
                 imported = sorted(name for name in blocked if name in sys.modules)
                 assert imported == [], imported
                 print(json.dumps({{"case_ids": [case.case_id for case in cases]}}))
@@ -521,6 +581,83 @@ class Phase3DEnvironmentOwnershipTests(unittest.TestCase):
 
             self.assertIn("sitl", ctx.process_handles)
             self.assertIn("gazebo", ctx.process_handles)
+            legacy_blocker.assert_not_called()
+
+
+class Phase3EControlMonitorOwnershipTests(unittest.TestCase):
+    """Phase 3E: staged assert_ready/control/monitor use owned mavlink module."""
+
+    def test_phase3e_staged_control_and_monitor_do_not_use_legacy_run_one(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from sim_ard_gaw.campaigns.test_suite.core.models import AttemptContext, TestCase
+        from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import defaults as wm_defaults
+        from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import mavlink_control
+        from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.config import WindMatrixConfig
+        from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.plugin import build_plugin
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            cfg = WindMatrixConfig(
+                campaign_root=root,
+                x_values=(0,),
+                y_values=(4,),
+                launch_stack=False,
+                auto_control=True,
+                attempt_strategy="staged",
+            )
+            plugin = build_plugin(cfg)
+            case = TestCase(
+                suite_name="wind_matrix",
+                case_id="wind_x_00_y_04",
+                parameters={"wind_x_mps": 0, "wind_y_mps": 4},
+            )
+            ctx = AttemptContext(
+                case=case,
+                campaign_root=root,
+                attempt_dir=wm_defaults.attempt_dir(root, case.case_id, 1),
+                attempt_index=1,
+                target_run_index=1,
+                start_wall_s=0.0,
+                start_monotonic_s=0.0,
+            )
+            ctx.attempt_dir.mkdir(parents=True, exist_ok=True)
+
+            legacy_blocker = MagicMock(side_effect=AssertionError("legacy run_one_module used"))
+            fake_master = object()
+            fake_monitor_state = {
+                "mission_completed_full": True,
+                "square_completed": True,
+                "loiter_started": True,
+                "loiter_completed": True,
+                "reached": [3, 23, 25, 29],
+                "statustext": ["Mission complete"],
+                "invalid_start_reason": None,
+                "timed_out": False,
+            }
+
+            with (
+                patch(
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.legacy.run_one_module",
+                    legacy_blocker,
+                ),
+                patch.object(mavlink_control, "wait_for_heartbeat", return_value=fake_master),
+                patch.object(mavlink_control, "wait_for_vehicle_ready", return_value=None),
+                patch.object(mavlink_control, "upload_mission", return_value=[object()]),
+                patch.object(mavlink_control, "verify_mission", return_value=None),
+                patch.object(mavlink_control, "arm_vehicle", return_value=None),
+                patch.object(mavlink_control, "settle_after_arm_before_auto", return_value=None),
+                patch.object(mavlink_control, "set_auto_mode", return_value=None),
+                patch.object(mavlink_control, "monitor_until_disarm", return_value=fake_monitor_state),
+            ):
+                plugin.environment.assert_ready(case, ctx)
+                self.assertIs(fake_master, ctx.extra.get("mavlink_master"))
+                self.assertIsNotNone(ctx.extra.get("legacy_start_time_utc"))
+                self.assertIsNotNone(plugin.staged_strategy)
+                plugin.staged_strategy.control.execute(case, ctx)  # type: ignore[union-attr]
+                monitor_result = plugin.staged_strategy.monitor.run(case, ctx)  # type: ignore[union-attr]
+                self.assertTrue(monitor_result.completed)
+
             legacy_blocker.assert_not_called()
 
 

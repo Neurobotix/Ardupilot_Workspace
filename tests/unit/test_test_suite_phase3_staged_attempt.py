@@ -616,22 +616,44 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     "run_one",
                     side_effect=AssertionError("staged path called run_one.run_one"),
                 ))
-                _stack.enter_context(patch.object(owned_run_one, "wait_for_heartbeat", side_effect=_wait_for_heartbeat))
-                _stack.enter_context(patch.object(owned_run_one, "wait_for_vehicle_ready", side_effect=_wait_for_vehicle_ready))
                 _stack.enter_context(patch.object(owned_run_one, "inject_wind", side_effect=_inject_wind))
                 _stack.enter_context(patch.object(owned_run_one, "preloaded_wind_artifact", side_effect=_inject_wind))
-                _stack.enter_context(patch.object(owned_run_one, "upload_mission", side_effect=_upload_mission))
-                _stack.enter_context(patch.object(owned_run_one, "verify_mission", side_effect=_verify_mission))
-                _stack.enter_context(patch.object(owned_run_one, "arm_vehicle", side_effect=_arm_vehicle))
-                _stack.enter_context(patch.object(owned_run_one, "settle_after_arm_before_auto", side_effect=_settle_after_arm))
-                _stack.enter_context(patch.object(owned_run_one, "set_auto_mode", side_effect=_set_auto_mode))
-                _stack.enter_context(patch.object(
-                    owned_run_one,
-                    "clamp_timeout_to_slot",
-                    side_effect=lambda timeout, *_args, **_kwargs: timeout,
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.mavlink_control.wait_for_heartbeat",
+                    side_effect=_wait_for_heartbeat,
                 ))
-                _stack.enter_context(patch.object(owned_run_one, "monitor_until_disarm", side_effect=_monitor_until_disarm))
-                _stack.enter_context(patch.object(owned_run_one, "log", side_effect=lambda _msg: None))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.mavlink_control.wait_for_vehicle_ready",
+                    side_effect=_wait_for_vehicle_ready,
+                ))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.mavlink_control.upload_mission",
+                    side_effect=_upload_mission,
+                ))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.mavlink_control.verify_mission",
+                    side_effect=_verify_mission,
+                ))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.mavlink_control.arm_vehicle",
+                    side_effect=_arm_vehicle,
+                ))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.mavlink_control.settle_after_arm_before_auto",
+                    side_effect=_settle_after_arm,
+                ))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.mavlink_control.set_auto_mode",
+                    side_effect=_set_auto_mode,
+                ))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.mavlink_control.monitor_until_disarm",
+                    side_effect=_monitor_until_disarm,
+                ))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.plugin.log",
+                    side_effect=lambda _msg: None,
+                ))
                 _stack.enter_context(patch.object(
                     defaults,
                     "gazebo_plugin_diagnostics",
