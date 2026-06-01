@@ -66,6 +66,10 @@
   call plugin-owned mavlink_control.*; only WindMatrixStimulus wind injection
   remains Phase 3F) evidence:
   `evidence/reports/features/2026-06-01_test_suite_migration_phase_3e.md`
+- test_suite migration Phase 3F (zero-legacy wind injection; staged path now
+  fully zero-legacy; first live completed staged run `success_full`) evidence:
+  `evidence/reports/features/2026-06-01_test_suite_migration_phase_3f.md`;
+  curated: `evidence/curated_logs/test_suite_phase3f_staged_live_20260601/`
 - test_suite migration Phase 3C follow-up review findings audit:
   `governance/audits/2026-05-31_test_suite_phase3c_followup_findings.md`
 - test_suite migration Phase 3C strict high-finding fixes (manifest

@@ -90,6 +90,27 @@ strategy path and are unchanged. Evidence:
 - H-C (accept_square_only divergence documentation): see the clarification note
   added to the Phase 3B acceptance table and to `plan.md`.
 
+## Phase 3F acceptance review
+
+Date: 2026-06-01
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| Staged `WindMatrixStimulus.apply()` calls no `run_one.*` / `run_matrix.*` | PASS | `stimulus.py` now calls `wind_injection.inject_wind` / `preloaded_wind_artifact`; `from . import legacy` removed. |
+| `wind_injection.py` reproduces legacy behavior (parity test) | PASS | `test_wind_matrix_wind_injection`: `parse_wind_echo` / `wind_echo_matches` parity; `inject_wind` success + retry parity (subprocess patched); `parse_sdf_world_wind` / `preloaded_wind_artifact` parity (refresh off and on). |
+| Phase 3F in-subprocess import-blocker exercises staged stimulus with legacy blocked | PASS | `test_test_suite_phase3c_zero_legacy_foundation` Phase 3F block runs `WindMatrixStimulus.apply()` and writes `wind_injection.json` with `run_one`/`run_matrix` imports blocked. |
+| Non-subprocess ownership test verifies stimulus wiring | PASS | `Phase3FWindInjectionOwnershipTests` patches `legacy.run_one_module` to raise and runs `apply()` through `wind_injection.*` without it. |
+| Staged path is fully zero-legacy | PASS | The only live `legacy.run_one_module()` call in the plugin is `_legacy_run_one_body` (legacy strategy). Environment (3D), MAVLink (3E), and wind injection (3F) are all plugin-owned. |
+| Misleading `wind_injection_source` provenance corrected | PASS | Value changed from `run_one.py ...` to `test_suite staged ...`; run_config schema (key set) unchanged. Intentional value-only divergence from legacy, recorded in the 3F report. |
+| First live completed staged run captured | PASS | `wind_x_04_y_04` → `success_full`, `analysis_status=done`, `run_alias=run_01`, strict gz echo verified `{x:4.0,y:4.0,z:0.0}`. Curated: `evidence/curated_logs/test_suite_phase3f_staged_live_20260601/`. |
+| Matched live legacy comparison | NOT DONE / Phase 3G | Phase 3F captured the staged live half only; the matching legacy run is Phase 3G. |
+| Legacy runner scripts unmodified | PASS | Only plugin files touched. |
+| No Phase 4 / second-plugin work | PASS | Phase 4 remains blocked until Phase 3G. |
+
+Remaining legacy dependencies after Phase 3F (later-phase blockers):
+
+- `_legacy_run_one_body` → `run_one.run_one`. **Legacy-mode-only delegate; correct and intended.** No staged-path legacy dependency remains.
+
 ## Phase 3E acceptance review
 
 Date: 2026-06-01

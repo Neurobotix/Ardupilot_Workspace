@@ -110,17 +110,39 @@ Raw evidence stays under `evidence/`.
 - Gate:
   Phase 4 remains blocked.
 
-## Phase 3F-3G (zero-legacy stimulus, artifacts, analysis, summary, live proof)
+## Phase 3F (zero-legacy wind injection) + first live staged run
+
+- Primary report:
+  `evidence/reports/features/2026-06-01_test_suite_migration_phase_3f.md`
+- Curated evidence:
+  `evidence/curated_logs/test_suite_phase3f_staged_live_20260601/`
+- Scope:
+  runtime wind injection (gz-topic publish/echo/verify and preloaded SDF
+  artifact handling) is now plugin-owned in `wind_injection.py`; `stimulus.py`
+  no longer imports `legacy`. With this change the staged attempt path is fully
+  zero-legacy (environment, MAVLink control/monitor, and wind injection). Parity
+  vs legacy verified in `test_wind_matrix_wind_injection`; the import-blocker
+  hard test extended with a Phase 3F block. The misleading
+  `wind_injection_source` provenance value (`run_one.py ...`) was corrected to
+  `test_suite staged ...` (run_config schema unchanged). A single live completed
+  staged run (`wind_x_04_y_04`, `success_full`, strict gz echo verified) was
+  captured.
+- Limit:
+  one live combo, not a matched legacy side-by-side and not a full matrix.
+- Gate:
+  Phase 4 remains blocked until Phase 3G.
+
+## Phase 3G (matched live staged-vs-legacy comparison)
 
 - Primary report:
   not yet available.
 - Scope:
-  planned follow-on work. Build test-suite-owned staged wind stimulus, BIN
-  collection, analysis invocation, run summary, artifact handling, terminal
-  error rows, and full live proof beside legacy mode.
+  run a bounded live staged wind case beside a matching live legacy case and
+  compare manifests/artifacts with documented accepted differences. The staged
+  live half is already demonstrated by the Phase 3F run above; the matching
+  legacy comparison run is the remaining piece.
 - Gate:
-  Phase 4 remains blocked until Phase 3G accepts full no-legacy staged tests
-  plus bounded live staged wind proof and matching legacy comparison.
+  Phase 4 remains blocked until Phase 3G accepts the matched comparison.
 
 ## Plan correction (2026-05-29)
 

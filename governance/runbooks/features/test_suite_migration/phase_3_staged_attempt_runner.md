@@ -14,11 +14,12 @@ legacy runner modules. Generic `core/manifest.py` and `core/monitor.py` no
 longer carry wind-matrix fallback behavior. Phase 3D is complete: environment
 launch/cleanup are plugin-owned via `runtime.py`. Phase 3E is complete: staged
 `assert_ready`, `WindMatrixAutoMissionControl`, and `WindMatrixDisarmMonitor`
-now call plugin-owned `mavlink_control.*` only. The only remaining staged
-legacy dependency is `WindMatrixStimulus` runtime wind injection
-(`run_one.inject_wind` / `preloaded_wind_artifact`), owned by Phase 3F.
-Phase 3F-3G are still required to build and prove a full zero-legacy staged
-wind system in parallel with legacy mode.
+now call plugin-owned `mavlink_control.*` only. Phase 3F is complete: staged
+wind injection is plugin-owned in `wind_injection.py` and `stimulus.py` no
+longer imports `legacy`, so the staged attempt path is now fully zero-legacy.
+A first live completed staged run (`success_full`, strict gz echo verified) was
+captured. Phase 3G is still required: a matched live legacy comparison run
+beside the staged live run. Phase 4 remains blocked until Phase 3G.
 
 ## Objective
 
@@ -222,10 +223,13 @@ Phase 4 remains blocked until all of these are accepted:
   test-suite-owned. Accepted on 2026-06-01 as no-SITL control/monitor
   ownership proof only:
   `evidence/reports/features/2026-06-01_test_suite_migration_phase_3e.md`.
-- **Phase 3F:** staged wind stimulus, BIN/artifact, analysis, summary, and
-  terminal-row implementation is test-suite-owned. Runtime wind injection
-  (`run_one.inject_wind` / `preloaded_wind_artifact`) is the remaining
-  open dependency.
+- **Phase 3F:** staged wind injection is test-suite-owned in
+  `wind_injection.py`; `stimulus.py` no longer imports `legacy`, so the staged
+  path is fully zero-legacy. A first live completed staged run was captured.
+  Accepted on 2026-06-01:
+  `evidence/reports/features/2026-06-01_test_suite_migration_phase_3f.md`
+  (BIN/artifact/analysis/summary substage was already plugin-owned via
+  `analysis_helpers.py` since the 2026-05-31 follow-up).
 - **Phase 3G:** the full zero-legacy staged wind system passes no-SITL hard
   tests, completes at least one bounded live staged wind case, and has a
   matching legacy comparison case.
