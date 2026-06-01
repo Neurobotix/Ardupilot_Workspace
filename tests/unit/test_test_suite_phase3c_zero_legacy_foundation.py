@@ -161,6 +161,7 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import analysis_helpers
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import analyzers as wind_analyzers
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import defaults
+                from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import wind_injection
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.defaults import combo_key, DEFAULT_STAGED_AUTO_WIND_PHASE
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.manifest import WindMatrixManifest
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers import WindMatrixAnalyzer
@@ -222,7 +223,8 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                 assert run_config["gazebo_launch_command"] == defaults.CTE_GAZEBO_COMMAND
                 assert (
                     run_config["wind_injection_source"]
-                    == "run_one.py via Gazebo wind topic before user mission control"
+                    == "test_suite staged wind_matrix plugin via Gazebo wind topic "
+                    "before user mission control"
                 )
 
                 analysis_ctx = AttemptContext(
@@ -474,6 +476,74 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                     )
                     assert monitor_result.completed is True
 
+                # Phase 3F: prove staged stimulus uses plugin-owned wind_injection
+                # with legacy runner imports blocked.
+                phase3f_cfg = WindMatrixConfig(
+                    campaign_root=root,
+                    x_values=(0,),
+                    y_values=(4,),
+                    launch_stack=False,
+                    auto_control=True,
+                    auto_wind_phase="before-arm",
+                    attempt_strategy="staged",
+                )
+                phase3f_stimulus = WindMatrixStimulus(phase3f_cfg)
+                phase3f_ctx = AttemptContext(
+                    case=cases[0],
+                    campaign_root=root,
+                    attempt_dir=defaults.attempt_dir(root, cases[0].case_id, 4),
+                    attempt_index=4,
+                    target_run_index=1,
+                    start_wall_s=0.0,
+                    start_monotonic_s=0.0,
+                )
+
+                class _FakeMissionContract:
+                    def as_dict(self):
+                        return {{"contract": "ok"}}
+
+                fake_injection = {{
+                    "status": "ok",
+                    "x_wind_mps": 0.0,
+                    "y_wind_mps": 4.0,
+                    "verification": "test",
+                }}
+                with (
+                    mock.patch(
+                        "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.stimulus.validate_square_wind_mission_contract",
+                        return_value=_FakeMissionContract(),
+                    ),
+                    mock.patch(
+                        "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.stimulus.parameter_file_provenance",
+                        return_value=[],
+                    ),
+                    mock.patch.object(
+                        defaults,
+                        "gazebo_plugin_diagnostics",
+                        return_value={{"policy": "test"}},
+                    ),
+                    mock.patch.object(
+                        wind_injection,
+                        "inject_wind",
+                        return_value=dict(fake_injection),
+                    ),
+                    mock.patch.object(
+                        wind_injection,
+                        "preloaded_wind_artifact",
+                        return_value=dict(fake_injection),
+                    ),
+                ):
+                    phase3f_result = phase3f_stimulus.apply(cases[0], phase3f_ctx)
+                assert phase3f_result["status"] == "ok"
+                assert phase3f_result["x_wind_mps"] == 0.0
+                assert phase3f_result["y_wind_mps"] == 4.0
+                wind_artifact_path = phase3f_ctx.attempt_dir / "wind_injection.json"
+                assert wind_artifact_path.exists()
+                wind_artifact = json.loads(wind_artifact_path.read_text())
+                assert wind_artifact["status"] == "ok"
+                assert wind_artifact["x_wind_mps"] == 0.0
+                assert wind_artifact["y_wind_mps"] == 4.0
+
                 imported = sorted(name for name in blocked if name in sys.modules)
                 assert imported == [], imported
                 print(json.dumps({{"case_ids": [case.case_id for case in cases]}}))
@@ -658,6 +728,98 @@ class Phase3EControlMonitorOwnershipTests(unittest.TestCase):
                 monitor_result = plugin.staged_strategy.monitor.run(case, ctx)  # type: ignore[union-attr]
                 self.assertTrue(monitor_result.completed)
 
+            legacy_blocker.assert_not_called()
+
+
+class Phase3FWindInjectionOwnershipTests(unittest.TestCase):
+    """Phase 3F: staged stimulus uses owned wind_injection helpers only."""
+
+    def test_phase3f_stimulus_apply_does_not_use_legacy_run_one(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from sim_ard_gaw.campaigns.test_suite.core.models import AttemptContext, TestCase
+        from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import defaults as wm_defaults
+        from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import wind_injection
+        from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.config import WindMatrixConfig
+        from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.stimulus import WindMatrixStimulus
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            cfg = WindMatrixConfig(
+                campaign_root=root,
+                x_values=(0,),
+                y_values=(4,),
+                launch_stack=False,
+                auto_control=True,
+                auto_wind_phase="before-arm",
+                attempt_strategy="staged",
+            )
+            case = TestCase(
+                suite_name="wind_matrix",
+                case_id="wind_x_00_y_04",
+                parameters={"wind_x_mps": 0, "wind_y_mps": 4},
+            )
+            ctx = AttemptContext(
+                case=case,
+                campaign_root=root,
+                attempt_dir=wm_defaults.attempt_dir(root, case.case_id, 1),
+                attempt_index=1,
+                target_run_index=1,
+                start_wall_s=0.0,
+                start_monotonic_s=0.0,
+            )
+            stimulus = WindMatrixStimulus(cfg)
+            legacy_blocker = MagicMock(side_effect=AssertionError("legacy run_one_module used"))
+
+            class _FakeMissionContract:
+                def as_dict(self) -> dict[str, str]:
+                    return {"contract": "ok"}
+
+            fake_result = {
+                "status": "ok",
+                "x_wind_mps": 0.0,
+                "y_wind_mps": 4.0,
+                "verification": "test",
+            }
+
+            with (
+                patch(
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.legacy.run_one_module",
+                    legacy_blocker,
+                ),
+                patch(
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.stimulus.validate_square_wind_mission_contract",
+                    return_value=_FakeMissionContract(),
+                ),
+                patch(
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.stimulus.parameter_file_provenance",
+                    return_value=[],
+                ),
+                patch.object(
+                    wm_defaults,
+                    "gazebo_plugin_diagnostics",
+                    return_value={"policy": "test"},
+                ),
+                patch.object(
+                    wind_injection,
+                    "inject_wind",
+                    return_value=dict(fake_result),
+                ),
+                patch.object(
+                    wind_injection,
+                    "preloaded_wind_artifact",
+                    return_value=dict(fake_result),
+                ),
+            ):
+                result = stimulus.apply(case, ctx)
+
+            artifact = ctx.attempt_dir / "wind_injection.json"
+            self.assertTrue(artifact.exists())
+            artifact_payload = json.loads(artifact.read_text(encoding="utf-8"))
+            self.assertEqual("ok", result["status"])
+            self.assertEqual("ok", artifact_payload["status"])
+            self.assertEqual(0.0, artifact_payload["x_wind_mps"])
+            self.assertEqual(4.0, artifact_payload["y_wind_mps"])
             legacy_blocker.assert_not_called()
 
 
