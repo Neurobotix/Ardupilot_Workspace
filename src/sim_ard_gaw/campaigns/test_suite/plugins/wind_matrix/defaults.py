@@ -75,7 +75,10 @@ AUTO_WIND_INJECTION_ALT_TIMEOUT_S = 180.0
 AUTO_WIND_PHASES = ("after-takeoff", "before-arm")
 DEFAULT_AUTO_WIND_PHASE = "after-takeoff"
 DEFAULT_STAGED_AUTO_WIND_PHASE = "before-arm"
+FORCE_ARM_MAGIC = 21196.0
+READY_HEARTBEATS_REQUIRED = 2
 ENTRY_WAYPOINT_MAX_PASS_DISTANCE_M = 200
+PASSED_WAYPOINT_RE = re.compile(r"Passed waypoint #(?P<seq>\d+) dist (?P<dist>\d+)m")
 
 ANALYSIS_POSITION_SOURCE = "sim"
 WIND_FRAME_NOTE = (
@@ -227,6 +230,13 @@ def remaining_deadline_s(slot_deadline_monotonic: float | None) -> float | None:
     if slot_deadline_monotonic is None:
         return None
     return slot_deadline_monotonic - time.monotonic()
+
+
+def coerce_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _prepend_path_entry(entry: str, current: str) -> str:

@@ -4,16 +4,21 @@ Scope: feature-level Phase 3A of the `test_suite` migration. This is the
 first half of the old "Stage 3 - split run_one into plugin pieces" phase from
 `src/sim_ard_gaw/campaigns/test_suite/ARCHITECTURE.md`.
 
-Status as of 2026-05-29: Phase 3A is complete as an opt-in staged
+Status as of 2026-06-01: Phase 3A is complete as an opt-in staged
 implementation. Phase 3B proves the staged wind lifecycle is not hidden behind
 `run_one.run_one(...)`, but it also records that staged mode still depends on
 legacy runner helper code. Phase 3C is complete for staged foundation only:
 config/defaults, case generation, plugin-owned wind manifest/monitor
 foundation, plugin construction, and CLI parser/bootstrap no longer import
 legacy runner modules. Generic `core/manifest.py` and `core/monitor.py` no
-longer carry wind-matrix fallback behavior. Phase 3D-3G are still required to
-build and prove a full zero-legacy staged wind system in parallel with legacy
-mode.
+longer carry wind-matrix fallback behavior. Phase 3D is complete: environment
+launch/cleanup are plugin-owned via `runtime.py`. Phase 3E is complete: staged
+`assert_ready`, `WindMatrixAutoMissionControl`, and `WindMatrixDisarmMonitor`
+now call plugin-owned `mavlink_control.*` only. The only remaining staged
+legacy dependency is `WindMatrixStimulus` runtime wind injection
+(`run_one.inject_wind` / `preloaded_wind_artifact`), owned by Phase 3F.
+Phase 3F-3G are still required to build and prove a full zero-legacy staged
+wind system in parallel with legacy mode.
 
 ## Objective
 
@@ -211,11 +216,16 @@ Phase 4 remains blocked until all of these are accepted:
   imports blocked. Accepted on 2026-05-29 as no-SITL foundation proof only:
   `evidence/reports/features/2026-05-29_test_suite_migration_phase_3c.md`.
 - **Phase 3D:** staged environment/runtime launch, world writing, cleanup,
-  diagnostics, and timeouts are test-suite-owned.
+  diagnostics, and timeouts are test-suite-owned. Accepted on 2026-05-31:
+  `evidence/reports/features/2026-05-31_test_suite_migration_phase_3d.md`.
 - **Phase 3E:** staged MAVLink readiness/control/monitor implementation is
-  test-suite-owned.
+  test-suite-owned. Accepted on 2026-06-01 as no-SITL control/monitor
+  ownership proof only:
+  `evidence/reports/features/2026-06-01_test_suite_migration_phase_3e.md`.
 - **Phase 3F:** staged wind stimulus, BIN/artifact, analysis, summary, and
-  terminal-row implementation is test-suite-owned.
+  terminal-row implementation is test-suite-owned. Runtime wind injection
+  (`run_one.inject_wind` / `preloaded_wind_artifact`) is the remaining
+  open dependency.
 - **Phase 3G:** the full zero-legacy staged wind system passes no-SITL hard
   tests, completes at least one bounded live staged wind case, and has a
   matching legacy comparison case.

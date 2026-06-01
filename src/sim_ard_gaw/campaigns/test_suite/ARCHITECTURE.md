@@ -211,10 +211,29 @@ Implemented 2026-05-31: `plugins/wind_matrix/runtime.py` owns
 `preferred_python()` (now in `defaults.py`) are test-suite-owned.
 `WindMatrixEnvironment.launch()` and `.cleanup()` now call `runtime.*` only;
 neither resolves `run_matrix.*` or `run_one.*`. `assert_ready()` readiness
-(heartbeat / vehicle readiness / slot timeout) remains Phase 3E work.
+(heartbeat / vehicle readiness / slot timeout) was Phase 3E work and is now
+resolved — see Stage 3E below.
 Evidence: `evidence/reports/features/2026-05-31_test_suite_migration_phase_3d.md`.
 
 ### Stage 3E — zero-legacy MAVLink control and monitor
+
+Implemented 2026-06-01: `plugins/wind_matrix/mavlink_control.py` owns
+`wait_for_heartbeat`, `wait_for_vehicle_ready`, `settle_after_arm_before_auto`,
+`wait_for_relative_altitude`, `mission_item_count`, `mission_item_int`,
+`upload_mission`, `verify_mission`, `arm_vehicle`, `set_auto_mode`, and
+`monitor_until_disarm`. Constants `FORCE_ARM_MAGIC`, `READY_HEARTBEATS_REQUIRED`,
+`PASSED_WAYPOINT_RE`, and `coerce_int` added to `defaults.py`.
+`WindMatrixEnvironment.assert_ready()` (staged path) now calls
+`mavlink_control.*` and `analysis_helpers.clamp_timeout_to_slot`;
+`_LazyLegacyAutoMissionControl` and `_LazyLegacyDisarmMonitor` are renamed
+`WindMatrixAutoMissionControl` and `WindMatrixDisarmMonitor` and call
+`mavlink_control.*` only. The only remaining staged legacy dependency is
+`WindMatrixStimulus` runtime wind injection (`run_one.inject_wind` /
+`preloaded_wind_artifact`), owned by Stage 3F.
+Evidence: `evidence/reports/features/2026-06-01_test_suite_migration_phase_3e.md`.
+
+Original scope:
+
 - Move heartbeat/readiness, mission upload/verification, arm/mode control, and
   mission monitoring into test-suite-owned modules.
 - Staged control/monitor must not inject legacy helper functions.
@@ -230,9 +249,13 @@ Partial progress (2026-05-31): the analysis substage (BIN collection,
 slot-timeout clamp) is test-suite-owned in
 `plugins/wind_matrix/analysis_helpers.py`; the staged analyzer no longer imports
 `run_one`. Terminal/running manifest rows record the canonical `attempt_NNN`
-directory. Runtime wind injection (`run_one.inject_wind` /
-`preloaded_wind_artifact`) still remains the open Stage 3F substage. Evidence:
+directory. Evidence:
 `evidence/reports/features/2026-05-31_test_suite_phase3c_followup_fixes.md`.
+
+Open substage (as of 2026-06-01 after Phase 3E): runtime wind injection
+(`run_one.inject_wind` / `preloaded_wind_artifact`) in `WindMatrixStimulus`
+is the only remaining staged legacy dependency. This is the Stage 3F open
+substage.
 
 ### Stage 3G — full zero-legacy staged wind proof
 - Run the zero-legacy staged wind system beside the retained legacy mode.

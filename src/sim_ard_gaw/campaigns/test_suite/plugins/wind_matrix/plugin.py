@@ -58,7 +58,9 @@ from .defaults import (
     utc_now,
 )
 from .environment import WindMatrixEnvironment
+from . import analysis_helpers
 from . import legacy
+from . import mavlink_control
 from .manifest import WindMatrixManifest
 from .monitor import WindMatrixDisarmCompletionMonitor
 from .analyzers import (
@@ -241,12 +243,11 @@ def build_wind_matrix_running_record(
 
 
 @dataclass
-class _LazyLegacyAutoMissionControl(ControlStrategy):
+class WindMatrixAutoMissionControl(ControlStrategy):
     config: WindMatrixConfig
     mode: ControlMode = ControlMode.AUTO
 
     def execute(self, case, ctx: AttemptContext) -> None:
-        run_one = legacy.run_one_module()
         return MavlinkAutoMissionControl(
             mission_file=self.config.mission_file,
             upload_timeout_s=self.config.upload_timeout_s,
@@ -254,28 +255,27 @@ class _LazyLegacyAutoMissionControl(ControlStrategy):
             mode_timeout_s=self.config.mode_timeout_s,
             settle_s=AUTO_ARM_TO_AUTO_SETTLE_S,
             force_arm=self.config.force_arm,
-            upload_mission=run_one.upload_mission,
-            verify_mission=run_one.verify_mission,
-            arm_vehicle=run_one.arm_vehicle,
-            settle_after_arm_before_auto=run_one.settle_after_arm_before_auto,
-            set_auto_mode=run_one.set_auto_mode,
-            clamp_timeout_to_slot=run_one.clamp_timeout_to_slot,
+            upload_mission=mavlink_control.upload_mission,
+            verify_mission=mavlink_control.verify_mission,
+            arm_vehicle=mavlink_control.arm_vehicle,
+            settle_after_arm_before_auto=mavlink_control.settle_after_arm_before_auto,
+            set_auto_mode=mavlink_control.set_auto_mode,
+            clamp_timeout_to_slot=analysis_helpers.clamp_timeout_to_slot,
             bin_flush_delay_s=BIN_FLUSH_DELAY_S,
             analysis_headroom_s=ANALYSIS_HEADROOM_S,
-            log=run_one.log,
+            log=log,
         ).execute(case, ctx)
 
 
 @dataclass
-class _LazyLegacyDisarmMonitor(CompletionMonitor):
+class WindMatrixDisarmMonitor(CompletionMonitor):
     config: WindMatrixConfig
 
     def run(self, case, ctx: AttemptContext) -> MonitorResult:
-        run_one = legacy.run_one_module()
         return WindMatrixDisarmCompletionMonitor(
             mission_timeout_s=self.config.mission_timeout_s,
-            monitor_until_disarm=run_one.monitor_until_disarm,
-            clamp_timeout_to_slot=run_one.clamp_timeout_to_slot,
+            monitor_until_disarm=mavlink_control.monitor_until_disarm,
+            clamp_timeout_to_slot=analysis_helpers.clamp_timeout_to_slot,
             mission_pre_loaded=self.config.auto_control,
             stop_on_square_loiter=self.config.accept_square_only,
             bin_flush_delay_s=BIN_FLUSH_DELAY_S,
@@ -401,14 +401,14 @@ def build_plugin(config: WindMatrixConfig) -> WindMatrixPlugin:
 
 def _staged_strategy(config: WindMatrixConfig) -> StagedStrategy:
     control = (
-        _LazyLegacyAutoMissionControl(config)
+        WindMatrixAutoMissionControl(config)
         if config.auto_control
         else ManualMissionControl(config.mission_file, log=log)
     )
     return StagedStrategy(
         stimulus=WindMatrixStimulus(config),
         control=control,
-        monitor=_LazyLegacyDisarmMonitor(config),
+        monitor=WindMatrixDisarmMonitor(config),
         analyzers=AnalyzerChain([WindMatrixAnalyzer(config)]),
         verdict_policy=WindMatrixVerdictPolicy(),
         on_exception=lambda ctx, exc: build_wind_matrix_error_record(

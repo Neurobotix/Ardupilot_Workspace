@@ -93,14 +93,31 @@ Raw evidence stays under `evidence/`.
 - Gate:
   Phase 4 remains blocked.
 
-## Phase 3E-3G (zero-legacy MAVLink control/monitor, stimulus, live proof)
+## Phase 3E (zero-legacy MAVLink control and monitor)
+
+- Primary report:
+  `evidence/reports/features/2026-06-01_test_suite_migration_phase_3e.md`
+- Scope:
+  no-SITL MAVLink control/monitor-ownership proof. Staged `assert_ready`,
+  `WindMatrixAutoMissionControl`, and `WindMatrixDisarmMonitor` now call
+  plugin-owned `mavlink_control.*` only; none resolves `run_one.*` or
+  `run_matrix.*`. The Phase 3C import-blocker hard test extended with a
+  Phase 3E block covering `assert_ready` + control + monitor execution with
+  legacy runner imports blocked. The only remaining staged legacy dependency
+  is `WindMatrixStimulus` runtime wind injection (`run_one.inject_wind` /
+  `preloaded_wind_artifact`), owned by Phase 3F. Not live proof; Phase 4
+  remains blocked.
+- Gate:
+  Phase 4 remains blocked.
+
+## Phase 3F-3G (zero-legacy stimulus, artifacts, analysis, summary, live proof)
 
 - Primary report:
   not yet available.
 - Scope:
-  planned follow-on work. Build test-suite-owned staged runtime/environment,
-  MAVLink control/monitor, wind stimulus, artifacts, analysis, summary, and
-  full live proof beside legacy mode.
+  planned follow-on work. Build test-suite-owned staged wind stimulus, BIN
+  collection, analysis invocation, run summary, artifact handling, terminal
+  error rows, and full live proof beside legacy mode.
 - Gate:
   Phase 4 remains blocked until Phase 3G accepts full no-legacy staged tests
   plus bounded live staged wind proof and matching legacy comparison.

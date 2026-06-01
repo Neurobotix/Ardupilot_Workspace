@@ -61,6 +61,11 @@
   now plugin-owned via runtime.py; assert_ready readiness remains Phase 3E)
   evidence:
   `evidence/reports/features/2026-05-31_test_suite_migration_phase_3d.md`
+- test_suite migration Phase 3E (zero-legacy MAVLink control/monitor; staged
+  assert_ready + WindMatrixAutoMissionControl + WindMatrixDisarmMonitor now
+  call plugin-owned mavlink_control.*; only WindMatrixStimulus wind injection
+  remains Phase 3F) evidence:
+  `evidence/reports/features/2026-06-01_test_suite_migration_phase_3e.md`
 - test_suite migration Phase 3C follow-up review findings audit:
   `governance/audits/2026-05-31_test_suite_phase3c_followup_findings.md`
 - test_suite migration Phase 3C strict high-finding fixes (manifest

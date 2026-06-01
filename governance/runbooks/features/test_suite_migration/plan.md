@@ -257,6 +257,13 @@ Acceptance:
 
 ### Phase 3E — zero-legacy MAVLink control and monitor stages
 
+Status as of 2026-06-01: implemented for no-SITL MAVLink control/monitor
+ownership. Staged `assert_ready`, `WindMatrixAutoMissionControl`, and
+`WindMatrixDisarmMonitor` call plugin-owned `mavlink_control.*` only. The
+only remaining staged legacy dependency after Phase 3E is `WindMatrixStimulus`
+runtime wind injection (`run_one.inject_wind` / `preloaded_wind_artifact`),
+owned by Phase 3F.
+
 Create test-suite-owned MAVLink readiness, mission-control, and monitor
 implementation for staged mode.
 
@@ -277,6 +284,8 @@ Acceptance:
 - unit tests cover successful control order, readiness failures, monitor
   terminal states, timeout behavior, and interrupt cleanup;
 - live proof is still not claimed until Phase 3G.
+
+Evidence: `evidence/reports/features/2026-06-01_test_suite_migration_phase_3e.md`.
 
 ### Phase 3F — zero-legacy stimulus, artifacts, analysis, and summary stages
 
