@@ -315,6 +315,8 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
     def test_square_only_generic_verdict_stays_partial_not_success(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
+            attempt_dir = root / "wind_x_00_y_00" / "runs" / "attempt_001"
+            attempt_dir.mkdir(parents=True, exist_ok=True)
             run_one.save_manifest(root, {
                 "campaign_root": str(root),
                 "attempts": [
@@ -323,6 +325,9 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
                         "combo_key": "wind_x_00_y_00",
                         "x_wind_mps": 0,
                         "y_wind_mps": 0,
+                        "target_run_index": 1,
+                        "attempt_index": 1,
+                        "attempt_dir": str(attempt_dir),
                         "status": "success_square_only",
                         "analysis_status": "done",
                     },

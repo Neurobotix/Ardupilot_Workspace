@@ -160,16 +160,28 @@ class Phase1ParityTests(unittest.TestCase):
     def test_legacy_manifest_does_not_accept_square_only_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
+            attempt_001 = root / "wind_x_04_y_04" / "runs" / "attempt_001"
+            attempt_002 = root / "wind_x_04_y_04" / "runs" / "attempt_002"
+            attempt_001.mkdir(parents=True, exist_ok=True)
+            attempt_002.mkdir(parents=True, exist_ok=True)
             run_one.save_manifest(root, {
                 "campaign_root": str(root),
                 "attempts": [
                     {
+                        "attempt_id": "wind_x_04_y_04__rep_01__attempt_001",
                         "combo_key": "wind_x_04_y_04",
+                        "target_run_index": 1,
+                        "attempt_index": 1,
+                        "attempt_dir": str(attempt_001),
                         "status": "success_full",
                         "analysis_status": "done",
                     },
                     {
+                        "attempt_id": "wind_x_04_y_04__rep_02__attempt_002",
                         "combo_key": "wind_x_04_y_04",
+                        "target_run_index": 2,
+                        "attempt_index": 2,
+                        "attempt_dir": str(attempt_002),
                         "status": "success_square_only",
                         "analysis_status": "done",
                     },
@@ -189,19 +201,27 @@ class Phase1ParityTests(unittest.TestCase):
     def test_legacy_manifest_partial_alone_is_not_accepted_under_strict_policy(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
+            attempt_001 = root / "wind_x_00_y_00" / "runs" / "attempt_001"
+            attempt_001.mkdir(parents=True, exist_ok=True)
             run_one.save_manifest(root, {
                 "campaign_root": str(root),
                 "attempts": [
                     {
+                        "attempt_id": "wind_x_00_y_00__rep_01__attempt_001",
                         "combo_key": "wind_x_00_y_00",
+                        "target_run_index": 1,
+                        "attempt_index": 1,
+                        "attempt_dir": str(attempt_001),
                         "status": "success_square_only",
                         "analysis_status": "done",
                     },
                     {
+                        "attempt_id": "wind_x_00_y_00__rep_02__attempt_002",
                         "combo_key": "wind_x_00_y_00",
                         "status": "failed",
                     },
                     {
+                        "attempt_id": "wind_x_00_y_00__rep_03__attempt_003",
                         "combo_key": "wind_x_00_y_00",
                         "status": "failed_analysis",
                     },
