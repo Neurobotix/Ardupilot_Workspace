@@ -1,0 +1,206 @@
+{
+  "attempts": [
+    {
+      "analysis_status": "done",
+      "attempt_dir": "/home/ahmed/ardupilot_workspace_next/var/runs/test_suite_phase3g_legacy_direct_20260601T142339/wind_x_04_y_04/runs/attempt_001",
+      "attempt_id": "wind_x_04_y_04__rep_01__attempt_001",
+      "attempt_index": 1,
+      "combo_key": "wind_x_04_y_04",
+      "duration_wall_s": 1306.9,
+      "end_time_utc": "2026-06-01T11:45:45+00:00",
+      "loiter_completed": true,
+      "mission_completed_full": true,
+      "mission_contract": {
+        "contract": {
+          "expected_item_count": 30,
+          "final_seq": 29,
+          "loiter_seq": 23,
+          "loiter_to_alt_seq": 25,
+          "name": "square_500m_five_laps_loiter5_land",
+          "requirements": [
+            {
+              "command": 16,
+              "label": "QGC home row",
+              "seq": 0
+            },
+            {
+              "command": 22,
+              "label": "takeoff",
+              "seq": 1
+            },
+            {
+              "command": 16,
+              "label": "square entry",
+              "seq": 2
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 3",
+              "seq": 3
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 4",
+              "seq": 4
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 5",
+              "seq": 5
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 6",
+              "seq": 6
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 7",
+              "seq": 7
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 8",
+              "seq": 8
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 9",
+              "seq": 9
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 10",
+              "seq": 10
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 11",
+              "seq": 11
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 12",
+              "seq": 12
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 13",
+              "seq": 13
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 14",
+              "seq": 14
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 15",
+              "seq": 15
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 16",
+              "seq": 16
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 17",
+              "seq": 17
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 18",
+              "seq": 18
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 19",
+              "seq": 19
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 20",
+              "seq": 20
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 21",
+              "seq": 21
+            },
+            {
+              "command": 16,
+              "label": "square waypoint 22",
+              "seq": 22
+            },
+            {
+              "command": 18,
+              "label": "loiter turns",
+              "seq": 23
+            },
+            {
+              "command": 189,
+              "label": "land start",
+              "seq": 24
+            },
+            {
+              "command": 31,
+              "label": "loiter to altitude",
+              "seq": 25
+            },
+            {
+              "command": 21,
+              "label": "land",
+              "seq": 29
+            }
+          ],
+          "square_end_seq": 22,
+          "square_segment_count": 20,
+          "square_side_m": 500.0,
+          "square_side_tolerance_m": 25.0,
+          "square_start_seq": 3,
+          "supported_location_frames": [
+            0,
+            3,
+            10
+          ]
+        },
+        "item_count": 30,
+        "mission_file": "/home/ahmed/ardupilot_workspace_next/assets/missions/square_500m_five_laps_loiter5_land.waypoints",
+        "mission_sha256": "de4f39f5adb156532a1e10048e565a4b92fa7941abdca48fdffdc64caf39af97"
+      },
+      "notes": [
+        "wind_injection_artifact=/home/ahmed/ardupilot_workspace_next/var/runs/test_suite_phase3g_legacy_direct_20260601T142339/wind_x_04_y_04/runs/attempt_001/wind_injection.json",
+        "last_statustext=['Throttle disarmed', 'Auto disarmed', 'Distance from LAND point=44.71m']",
+        "source_bin_name=00000001.BIN",
+        "bin_collection_method=isolated_sitl_use_dir"
+      ],
+      "param_file_provenance": [
+        {
+          "path": "/home/ahmed/ardupilot_workspace_next/config/vehicles/plane_base.parm",
+          "sha256": "8941fa559f762fb4111c150db04e4d36c0ad05d680f8cff2cd28219ba8ceaa01",
+          "size_bytes": 2828
+        },
+        {
+          "path": "/home/ahmed/ardupilot_workspace_next/config/overlays/plane_airspeed.parm",
+          "sha256": "ebf99c7e5b65e24ddfacb0bafa2295579c9cb073600c8548f6050f10d778e577",
+          "size_bytes": 1361
+        }
+      ],
+      "raw_log_path": "/home/ahmed/ardupilot_workspace_next/var/runs/test_suite_phase3g_legacy_direct_20260601T142339/wind_x_04_y_04/runs/attempt_001/wind_x_04_y_04__rep_01__attempt_001.BIN",
+      "run_alias": "run_01",
+      "square_completed": true,
+      "start_time_utc": "2026-06-01T11:23:58+00:00",
+      "status": "success_full",
+      "success_class": "full_mission",
+      "target_run_index": 1,
+      "terminal_status": "success",
+      "x_wind_mps": 4,
+      "y_wind_mps": 4
+    }
+  ],
+  "campaign_root": "/home/ahmed/ardupilot_workspace_next/var/runs/test_suite_phase3g_legacy_direct_20260601T142339",
+  "created_at_utc": "2026-06-01T11:23:39+00:00",
+  "target_run_count": 1,
+  "updated_at_utc": "2026-06-01T11:45:45+00:00"
+}

@@ -208,9 +208,10 @@ The complete Phase 3B gate requires:
 - any live staged wind result or blocker recorded without claiming replacement
   readiness.
 
-## Phase 3C-3G Completion Gate
+## Phase 3C-3G Completion Gate — ALL ACCEPTED (2026-06-01); Phase 4 unblocked
 
-Phase 4 remains blocked until all of these are accepted:
+Phase 4 was blocked until all of these were accepted. As of 2026-06-01 all are
+accepted and **Phase 4 is authorized**:
 
 - **Phase 3C:** staged construction, defaults, paths, case generation,
   manifest, and CLI bootstrap are test-suite-owned and work with legacy runner
@@ -231,11 +232,16 @@ Phase 4 remains blocked until all of these are accepted:
   (BIN/artifact/analysis/summary substage was already plugin-owned via
   `analysis_helpers.py` since the 2026-05-31 follow-up).
 - **Phase 3G:** the full zero-legacy staged wind system passes no-SITL hard
-  tests, completes at least one bounded live staged wind case, and has a
-  matching legacy comparison case.
+  tests, completed a bounded live staged wind case, and was compared against a
+  matching live legacy case run through the legacy tool directly
+  (`compat_scripts/run_matrix.py` → `run_one.run_one`, no `test_suite` code).
+  Both `success_full`; metrics within SITL noise; schema/shared-field parity.
+  Accepted on 2026-06-01:
+  `evidence/reports/features/2026-06-01_test_suite_migration_phase_3g.md`.
 
-A second plugin would be architecture theater if it were used to imply generic
-runtime readiness while the first plugin still depends on legacy runner code.
+With Phase 3G accepted, the first plugin (`wind_matrix`) is a full zero-legacy
+staged system proven live, so a second plugin is no longer architecture theater:
+Phase 4 may now add one non-wind plugin with zero framework-core edits.
 
 ## Out Of Scope
 

@@ -54,6 +54,13 @@ for the `wind_injection_source` field only. The run_config **schema** (the set
 of keys) is unchanged, so the schema-parity contract still holds; the
 schema-parity test asserts the key is present, not its exact string value.
 
+Note on the curated live artifact: the live staged run below was captured
+before this label fix was applied to the code, so its committed
+`run_config.json` still shows the old `"run_one.py ..."` value. That artifact
+is preserved as-captured (evidence is not retroactively edited); the corrected
+string applies to staged runs produced after this change and is locked by the
+import-blocker test assertion.
+
 Out of scope (no change in this phase):
 
 - `_legacy_run_one_body` → legacy-mode-only delegate; correct and intended.

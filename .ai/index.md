@@ -70,6 +70,12 @@
   fully zero-legacy; first live completed staged run `success_full`) evidence:
   `evidence/reports/features/2026-06-01_test_suite_migration_phase_3f.md`;
   curated: `evidence/curated_logs/test_suite_phase3f_staged_live_20260601/`
+- test_suite migration Phase 3G (live staged-vs-legacy comparison; GATE
+  ACCEPTED, Phase 4 unblocked; staged matches legacy-direct within SITL noise)
+  evidence:
+  `evidence/reports/features/2026-06-01_test_suite_migration_phase_3g.md`;
+  curated legacy baseline:
+  `evidence/curated_logs/test_suite_phase3g_legacy_compare_20260601/`
 - test_suite migration Phase 3C follow-up review findings audit:
   `governance/audits/2026-05-31_test_suite_phase3c_followup_findings.md`
 - test_suite migration Phase 3C strict high-finding fixes (manifest

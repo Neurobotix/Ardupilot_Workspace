@@ -1,14 +1,22 @@
 # Feature Runbook: test_suite Migration — Review
 
-Status as of 2026-05-29: **Phase 3C is accepted for the legacy-runner import
-blocker and current core/plugin foundation boundary only.** The staged
-foundation no longer imports legacy runner modules during config, case
-generation, manifest, plugin construction, or CLI parser/bootstrap setup.
-The wind-compatible manifest implementation and wind/square monitor behavior
-are plugin-owned; generic core no longer carries wind-matrix manifest,
-monitor, or legacy status-string fallback behavior. Runtime/environment, MAVLink
-control/monitor execution, wind stimulus, artifacts, analysis, summary, and
-live proof remain Phase 3D-3G work. Phase 4 is not authorized.
+Status as of 2026-06-01: **Phases 3A–3G are accepted. The staged wind_matrix
+path is fully zero-legacy and live-proven against the retained legacy tool, and
+Phase 4 (second plugin) is now unblocked.** Phases 3D (environment), 3E (MAVLink
+control/monitor), and 3F (wind injection) moved every staged runtime stage into
+plugin-owned modules; the only remaining `run_one` use is the intended
+legacy-strategy delegate. Phase 3G ran the staged path live and compared it
+against `compat_scripts/run_matrix.py` invoked directly (no `test_suite` code in
+that baseline): both `success_full`, flight metrics within SITL noise, schema
+and shared manifest fields matching. Evidence:
+`evidence/reports/features/2026-06-01_test_suite_migration_phase_3g.md`.
+Phase 5 (legacy retirement) still requires Phase 4 acceptance.
+
+Earlier status (2026-05-29): Phase 3C was accepted for the legacy-runner import
+blocker and core/plugin foundation boundary only; staged foundation no longer
+imported legacy runner modules during config, case generation, manifest, plugin
+construction, or CLI parser/bootstrap setup, while runtime stages remained
+Phase 3D-3G work. That sequence is now complete.
 
 2026-05-30 correction: a stricter review found `core/attempt_runner.py`
 decoded wind legacy status strings (`success_full`, `success_square_only`).
@@ -89,6 +97,27 @@ strategy path and are unchanged. Evidence:
 
 - H-C (accept_square_only divergence documentation): see the clarification note
   added to the Phase 3B acceptance table and to `plan.md`.
+
+## Phase 3G acceptance review — gate accepted, Phase 4 unblocked
+
+Date: 2026-06-01
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| Hard no-legacy staged tests pass (no-SITL) | PASS | Import-blocker suite (Phase 3C–3F blocks); 100 unit tests. |
+| Bounded live staged wind case completes | PASS | `wind_x_04_y_04` → `success_full`; `evidence/curated_logs/test_suite_phase3f_staged_live_20260601/`. |
+| Matching live legacy case via the legacy tool directly | PASS | `compat_scripts/run_matrix.py` → `run_one.run_one`; `success_full`; `evidence/curated_logs/test_suite_phase3g_legacy_compare_20260601/`. No `test_suite` code in this baseline. |
+| Staged/legacy flight metrics agree within SITL noise | PASS | square RMS 58.71 vs 58.57 (Δ0.14 m), p95 Δ0.96 m, max Δ0.65 m, 20 vs 20 segments. |
+| `run_config.json` schema parity | PASS | Identical key set; only `sitl_bin_dir`/`sitl_use_dir` differ (different campaign-root paths). |
+| Shared manifest legacy fields match | PASS | status/combo/wind/target_run_index/attempt_index/success_class/flags/analysis_status/run_alias all equal. |
+| Differences documented as intended | PASS | Additive generic fields; `mission_contract`/`param_file_provenance` placement; `accept_square_only` policy; `wind_injection_source` value. See the 3G report. |
+| Staged remains opt-in; legacy default unchanged; no second plugin; no legacy retirement | PASS | `WindMatrixConfig().attempt_strategy == "legacy"`; only plugin files touched. |
+
+Full comparison: `evidence/reports/features/2026-06-01_test_suite_migration_phase_3g.md`.
+
+Gate decision: **Phase 4 (one second non-wind plugin, zero framework-core
+edits) is authorized.** Phase 5 (legacy retirement) remains blocked until
+Phase 4 acceptance.
 
 ## Phase 3F acceptance review
 

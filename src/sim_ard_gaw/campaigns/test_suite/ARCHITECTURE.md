@@ -264,16 +264,24 @@ only remaining staged-path use of `run_one` is the legacy-strategy delegate
 (`_legacy_run_one_body`), which is intended. Stage 3G (matched live legacy
 comparison) is the remaining gate before Phase 4.
 
-### Stage 3G — full zero-legacy staged wind proof
-- Run the zero-legacy staged wind system beside the retained legacy mode.
-- Hard-test that staged mode passes no-SITL with `run_one.py`,
-  `run_matrix.py`, and `run_matrix_round_robin.py` imports/calls blocked.
-- Run at least one bounded live staged wind case and a matching legacy
-  comparison case.
+### Stage 3G — full zero-legacy staged wind proof — ACCEPTED 2026-06-01
+- The zero-legacy staged wind system was run live and compared against the
+  retained legacy tool invoked directly (`compat_scripts/run_matrix.py` →
+  `run_one.run_one`, no `test_suite` code in that baseline). Both `success_full`;
+  flight metrics within SITL run-to-run noise (square RMS Δ0.14 m); `run_config`
+  schema and shared manifest legacy fields match; differences are the documented
+  intended ones.
+- Hard no-SITL import-blocker tests pass with `run_one.py`, `run_matrix.py`,
+  `run_matrix_round_robin.py` imports/calls blocked across the staged path.
+- Evidence:
+  `evidence/reports/features/2026-06-01_test_suite_migration_phase_3g.md`;
+  curated staged `evidence/curated_logs/test_suite_phase3f_staged_live_20260601/`
+  and legacy `evidence/curated_logs/test_suite_phase3g_legacy_compare_20260601/`.
 
-### Stage 4 — second plugin proof, gated
-- Begins only after Phase 3G accepts a full zero-legacy staged wind system
-  with live proof.
+### Stage 4 — second plugin proof — UNBLOCKED 2026-06-01
+- Phase 3G is accepted, so this stage is authorized.
+- Stand up a second non-wind plugin (suggested: a no-stimulus airspeed
+  validation bench, or a GPS dropout injector).
 - Stand up a second non-wind plugin (suggested: a no-stimulus airspeed
   validation bench, or a GPS dropout injector).
 - If it requires editing `core/`, the boundaries are still wrong.
