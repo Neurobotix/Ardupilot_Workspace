@@ -45,6 +45,41 @@ legacy runner helpers and remain Phase 3D/3E/3F work. Evidence:
 `evidence/reports/features/2026-05-31_test_suite_phase3c_followup_fixes.md`;
 audit: `governance/audits/2026-05-31_test_suite_phase3c_followup_findings.md`.
 
+2026-05-31 strict-audit correction: the prior H-7 wording overclaimed exact
+staged `run_config.json` parity. Exact migrated-field schema/value parity and
+manifest-reconciliation strict fixes are evidenced in
+`evidence/reports/features/2026-05-31_test_suite_phase3c_manifest_run_config_parity_fixes.md`.
+
+2026-06-01 strict-audit correction (H-A, H-B, H-C):
+
+- H-A (manifest reconciliation legacy parity): the plugin
+  `_reconcile_manifest_bookkeeping()` incorrectly raised `RuntimeError` for
+  success rows lacking `attempt_index >= 1`. Legacy `reconcile_manifest_bookkeeping`
+  imposes no such requirement on success rows. The strict guard is removed;
+  success-row handling now matches legacy exactly. Regression test
+  `test_manifest_reconcile_success_row_with_missing_attempt_index_does_not_raise`
+  added to `tests/unit/test_test_suite_phase3_staged_attempt.py`, asserting no
+  raise and parity against the legacy reconciler on the same fixture.
+
+- H-B (analysis substage executing coverage): the prior wording implied
+  `run_analysis` and `build_run_summary` were verified only via mocked tests.
+  Executing tests have now been added in
+  `tests/unit/test_wind_matrix_analysis_helpers.py`:
+  `TestCollectBinLogBehavior` covers `collect_bin_log` pure-filesystem behavior
+  (strict single/multiple new BIN, mtime-fallback, empty/missing dir) with
+  parity assertions against the legacy `run_one.collect_bin_log`;
+  `TestAnalysisHelperRealLog.test_build_run_summary_is_byte_equal_to_legacy_on_real_log`
+  runs both legacy and migrated analysis paths on the same real flight log
+  (`var/runs/phase5_live_rr_workspace_plugin_recheck_20260521/wind_x_04_y_04/runs/run_01/wind_x_04_y_04__rep_01__attempt_002.BIN`,
+  sha256 `771fa52785154b215e9650adfd3971f2077299a8fc1dbbfa9aedf8cfd62b5711`) and
+  asserts the `build_run_summary` dicts are deeply equal to legacy. The test is
+  skipped when the log is absent (clean checkout). Evidence:
+  `evidence/reports/features/2026-05-31_test_suite_phase3c_manifest_run_config_parity_fixes.md`
+  (4th correction entry).
+
+- H-C (accept_square_only divergence documentation): see the clarification note
+  added to the Phase 3B acceptance table and to `plan.md`.
+
 ## Phase 3C acceptance review
 
 | Criterion | Result | Evidence |
@@ -111,8 +146,8 @@ retired or deleted. The old workspace was not modified.
 
 | Criterion | Result | Evidence |
 | --- | --- | --- |
-| Staged wind does not call `run_one.run_one(...)` | PASS | `test_real_staged_wind_path_does_not_call_legacy_run_one_body` patches `run_one.run_one` to fail and verifies staged wind order persists a row. |
-| Real staged lifecycle order is explicit | PASS | `test_real_staged_wind_path_does_not_call_legacy_run_one_body`; `test_staged_strategy_calls_stages_in_expected_order` |
+| Staged wind does not call `run_one.run_one(...)` | PASS | `test_staged_orchestration_shell_does_not_call_legacy_run_one_body` plus `test_real_staged_wind_adapters_run_with_boundary_mocks` both block `run_one.run_one` while staged execution persists a row. |
+| Staged adapter lifecycle order (boundary-mocked) | PASS | `test_real_staged_wind_adapters_run_with_boundary_mocks`; `test_staged_strategy_calls_stages_in_expected_order` |
 | Cleanup on success/failure/interrupt-like paths | PASS | `test_cleanup_runs_on_success`; `test_cleanup_runs_on_failure`; `test_cleanup_runs_on_interrupt_like_error` |
 | Terminal error persistence | PASS | `test_collect_bin_failure_persists_legacy_compatible_error_row`; `test_staged_stimulus_failure_persists_legacy_error_row_and_cleans_up`; `test_staged_control_and_monitor_failures_persist_legacy_error_rows` |
 | Verdict/acceptance matrix | PASS | `test_wind_verdict_and_acceptance_matrix_covers_terminal_outcomes`; `test_analysis_failure_persists_failed_analysis_and_is_not_accepted` |
@@ -120,6 +155,25 @@ retired or deleted. The old workspace was not modified.
 | CLI default and explicit staged selection | PASS | `test_cli_attempt_strategy_defaults_and_explicit_selection`; Phase 1 parity flag tests |
 | Unsupported staged mode fails closed | PASS | `test_cli_staged_after_takeoff_mode_fails_closed`; `test_staged_after_takeoff_rejected_before_environment_launch` |
 | Bounded live staged wind case | BLOCKED | Two bounded `run_suite --attempt-strategy staged --auto-wind-phase before-arm` attempts exited during SITL launch before heartbeat. Raw output: `var/runs/test_suite_phase3b_staged_live_20260529/` and `var/runs/test_suite_phase3b_staged_live_20260529_no_wipe/`. |
+
+Post-legacy acceptance policy note: staged and legacy-compatible manifests now
+apply a stricter safety policy by default, excluding `success_square_only`
+from accepted counts unless `accept_square_only=True`. This intentionally
+diverges from legacy `combo_successes` behavior, so running the new
+suite/round-robin logic over an old campaign root can trigger retries and
+renumbering where legacy would have counted square-only success as accepted.
+
+**H-C clarification (2026-06-01):** the strict `accept_square_only` gate is a
+property of the new orchestrator's `WindMatrixManifest.accepted_count()` and
+applies to **both** `legacy` and `staged` attempt strategies when the campaign
+is run through `test_suite.cli.*` (`run_case`, `run_suite`, `run_round_robin`).
+Running these CLIs in `--attempt-strategy legacy` mode over an existing campaign
+root that contains `success_square_only` rows will renumber/retry those combos
+that `run_matrix.py` would have counted as complete. This is an intentional
+stricter safety policy divergence, not a bug; but operators resuming an existing
+campaign through the new CLIs must be aware that square-only successes recorded
+by `run_matrix.py` do not satisfy the strict acceptance gate by default. See
+`plan.md` (Phase 3C success criteria) for the corresponding contract note.
 
 Phase 3B proves only that the staged wind attempt lifecycle is not hidden
 behind the single `run_one.run_one(...)` body. It also proves the current

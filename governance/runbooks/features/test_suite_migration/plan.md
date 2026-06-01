@@ -174,7 +174,7 @@ body, and also records every remaining dependency on `run_one.py`,
 
 Phase 3B acceptance requires:
 
-- stage-order tests that cover the real staged wind lifecycle;
+- staged orchestration-shell order tests (whole adapters may be faked) plus, where available, boundary-mocked adapter coverage;
 - cleanup tests on success, failure, and interrupt-like paths;
 - verdict and acceptance tests for full, partial, failed, error, interrupted,
   and analysis-failure outcomes;
@@ -417,6 +417,17 @@ modules become thin wrappers that import and call
 - Legacy mode remains the default and stays available.
 - No live runtime proof, second plugin, Phase 4 work, or legacy script
   retirement is claimed.
+
+**Manifest Compatibility Contract — accept_square_only (H-C, 2026-06-01):**
+The strict `accept_square_only` gate in `WindMatrixManifest.accepted_count()` is
+a property of the new orchestrator and applies to **both** `legacy` and `staged`
+attempt strategies when a campaign is run through `test_suite.cli.*`. Running the
+new CLIs in `--attempt-strategy legacy` mode over an existing campaign root that
+contains `success_square_only` rows will renumber/retry those combos; the legacy
+`run_matrix.py` tool would have counted those rows as complete. This is an
+intentional stricter safety policy, not a legacy parity bug, but operators
+resuming campaigns via the new CLIs must account for it. See `review.md`
+(Post-legacy acceptance policy note and H-C clarification) for detail.
 
 ## Phase 3D-3G success criteria
 
