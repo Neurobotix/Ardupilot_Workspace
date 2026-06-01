@@ -79,7 +79,21 @@ Raw evidence stays under `evidence/`.
 - Gate:
   Phase 4 remains blocked.
 
-## Phase 3D-3G (zero-legacy staged runtime and live proof)
+## Phase 3D (zero-legacy runtime/environment)
+
+- Primary report:
+  `evidence/reports/features/2026-05-31_test_suite_migration_phase_3d.md`
+- Scope:
+  no-SITL environment-ownership proof. `WindMatrixEnvironment.launch()` and
+  `.cleanup()` now call plugin-owned `runtime.py`; neither resolves
+  `run_matrix.*` or `run_one.*`. The Phase 3C import-blocker hard test
+  now also exercises `env.launch()+cleanup()` with legacy runner imports
+  blocked. MAVLink readiness (`assert_ready`) remains Phase 3E. Not live
+  proof; Phase 4 remains blocked.
+- Gate:
+  Phase 4 remains blocked.
+
+## Phase 3E-3G (zero-legacy MAVLink control/monitor, stimulus, live proof)
 
 - Primary report:
   not yet available.

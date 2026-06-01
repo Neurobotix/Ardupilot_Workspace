@@ -1,14 +1,18 @@
 """Wind-matrix environment adapter.
 
-Wraps `run_matrix.launch_sitl` / `launch_gazebo` / `cleanup_stack` so
-the framework's lifecycle hooks fire while behavior stays identical.
+Phase 3D: launch() and cleanup() are now owned by the plugin via runtime.py.
+The environment no longer calls run_matrix.*/run_one.* during SITL/Gazebo
+launch or stack cleanup. MAVLink readiness (assert_ready) remains legacy-backed
+and is Phase 3E work.
 """
 from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
 
+from . import defaults
 from . import legacy
+from . import runtime
 from ...core.environment import EnvironmentAdapter
 from ...core.models import AttemptContext, TestCase
 from .config import WindMatrixConfig
@@ -34,8 +38,6 @@ class WindMatrixEnvironment(EnvironmentAdapter):
             # Single-case run_one parity: the operator owns SITL+Gazebo
             # launch, while this wrapper only delegates to run_one.
             return
-        run_one = legacy.run_one_module()
-        run_matrix = legacy.run_matrix_module()
 
         x = case.parameters["wind_x_mps"]
         y = case.parameters["wind_y_mps"]
@@ -55,16 +57,16 @@ class WindMatrixEnvironment(EnvironmentAdapter):
         )
 
         if sitl_use_dir is not None:
-            sitl_bin_dir = run_one.sitl_bin_dir(sitl_use_dir)
+            sitl_bin_dir = defaults.sitl_bin_dir(sitl_use_dir)
             ctx.extra["before_bin_names"] = (
                 {p.name for p in sitl_bin_dir.glob("*.BIN")}
                 if sitl_bin_dir.exists() else set()
             )
             ctx.extra["sitl_log_dir"] = sitl_use_dir
 
-        run_matrix.cleanup_stack()
+        runtime.cleanup_stack()
 
-        sitl_proc, sitl_handle = run_matrix.launch_sitl(
+        sitl_proc, sitl_handle = runtime.launch_sitl(
             sitl_log,
             no_rebuild=not self._config.rebuild,
             wipe_eeprom=self._config.wipe_eeprom,
@@ -78,16 +80,16 @@ class WindMatrixEnvironment(EnvironmentAdapter):
         ctx.log_paths["sitl"] = sitl_log
         ctx.extra["sitl_handle"] = sitl_handle
         time.sleep(self._config.stack_settle_s)
-        run_matrix.ensure_process_alive("SITL", sitl_proc, sitl_log)
+        runtime.ensure_process_alive("SITL", sitl_proc, sitl_log)
 
         if self._config.wind_world_mode == "calm-runtime":
             # Start calm so high-wind cases don't flip the parked aircraft.
             # The legacy run_one body applies requested wind later by topic.
-            run_matrix.write_static_wind_world(0.0, 0.0, gazebo_world)
+            runtime.write_static_wind_world(0.0, 0.0, gazebo_world)
             ctx.extra["preloaded_wind_world"] = None
             ctx.extra["preloaded_wind_refresh"] = True
         elif self._config.wind_world_mode in {"preloaded-only", "preloaded-refresh"}:
-            run_matrix.write_static_wind_world(float(x), float(y), gazebo_world)
+            runtime.write_static_wind_world(float(x), float(y), gazebo_world)
             ctx.extra["preloaded_wind_world"] = gazebo_world
             ctx.extra["preloaded_wind_refresh"] = (
                 self._config.wind_world_mode == "preloaded-refresh"
@@ -97,14 +99,14 @@ class WindMatrixEnvironment(EnvironmentAdapter):
                 "wind_world_mode must be one of calm-runtime, preloaded-only, "
                 f"preloaded-refresh; got {self._config.wind_world_mode!r}"
             )
-        gazebo_proc, gazebo_handle = run_matrix.launch_gazebo(
+        gazebo_proc, gazebo_handle = runtime.launch_gazebo(
             gazebo_log, world_path=gazebo_world,
         )
         ctx.process_handles["gazebo"] = gazebo_proc
         ctx.log_paths["gazebo"] = gazebo_log
         ctx.extra["gazebo_handle"] = gazebo_handle
         time.sleep(self._config.stack_settle_s)
-        run_matrix.ensure_process_alive("Gazebo", gazebo_proc, gazebo_log)
+        runtime.ensure_process_alive("Gazebo", gazebo_proc, gazebo_log)
 
     def assert_ready(self, case: TestCase, ctx: AttemptContext) -> None:
         if self._config.attempt_strategy != "staged":
@@ -134,9 +136,8 @@ class WindMatrixEnvironment(EnvironmentAdapter):
     def cleanup(self, case: TestCase, ctx: AttemptContext) -> None:
         if not self._config.launch_stack:
             return
-        run_matrix = legacy.run_matrix_module()
         try:
-            run_matrix.cleanup_stack()
+            runtime.cleanup_stack()
         finally:
             for handle_name in ("sitl_handle", "gazebo_handle"):
                 handle = ctx.extra.pop(handle_name, None)

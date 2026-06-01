@@ -88,6 +88,10 @@ ANALYSIS_PARTIAL_RUN_SUMMARY_FAILED = "partial: run_summary_failed"
 STRICT_WIND_ECHO_VERIFY = os.environ.get("SIM_ARD_GAW_STRICT_WIND_ECHO_VERIFY", "1") != "0"
 
 
+def preferred_python() -> str:
+    return str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
+
+
 def default_auto_wind_phase(
     attempt_strategy: str,
     *,

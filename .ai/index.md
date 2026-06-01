@@ -57,6 +57,10 @@
   substage now plugin-owned, canonical staged attempt dirs, run_suite flag
   parity guard) evidence:
   `evidence/reports/features/2026-05-31_test_suite_phase3c_followup_fixes.md`
+- test_suite migration Phase 3D (zero-legacy runtime/environment; launch/cleanup
+  now plugin-owned via runtime.py; assert_ready readiness remains Phase 3E)
+  evidence:
+  `evidence/reports/features/2026-05-31_test_suite_migration_phase_3d.md`
 - test_suite migration Phase 3C follow-up review findings audit:
   `governance/audits/2026-05-31_test_suite_phase3c_followup_findings.md`
 - test_suite migration Phase 3C strict high-finding fixes (manifest

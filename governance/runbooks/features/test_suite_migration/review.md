@@ -80,6 +80,30 @@ manifest-reconciliation strict fixes are evidenced in
 - H-C (accept_square_only divergence documentation): see the clarification note
   added to the Phase 3B acceptance table and to `plan.md`.
 
+## Phase 3D acceptance review
+
+Date: 2026-05-31
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| `WindMatrixEnvironment.launch()` calls no `run_matrix.*` / `run_one.*` | PASS | `environment.py` now imports and calls `runtime.*`; `legacy.run_matrix_module()` / `legacy.run_one_module()` are not called in `launch()`. |
+| `WindMatrixEnvironment.cleanup()` calls no `run_matrix.*` / `run_one.*` | PASS | `cleanup()` calls `runtime.cleanup_stack()` directly; no legacy module resolve. |
+| `assert_ready()` is unchanged and still uses `legacy.run_one_module()` | PASS | Phase 3E boundary intact; `assert_ready` body unmodified. |
+| `runtime.py` reproduces legacy behavior byte-for-byte | PASS | All seven functions and three constants ported from `run_matrix.py`/`run_one.py` with identical subprocess commands, env, flag order, and world-writing branches. |
+| In-subprocess import-blocker test exercises `env.launch()+cleanup()` with legacy blocked | PASS | `test_staged_foundation_constructs_with_legacy_runner_imports_blocked` now includes Phase 3D env.launch()/cleanup() block with runtime mocked. Any `run_one`/`run_matrix` import raises `AssertionError`. |
+| Non-subprocess unit test verifies owned-runtime path | PASS | `Phase3DEnvironmentOwnershipTests.test_phase3d_environment_launch_uses_owned_runtime_not_legacy` patches `legacy.run_matrix_module` and `.run_one_module` to raise, patches runtime.* and time.sleep, calls launch()+cleanup(), asserts success and legacy never called. |
+| Legacy mode remains default and unchanged | PASS | `WindMatrixConfig().attempt_strategy == "legacy"`; legacy delegate path unmodified. |
+| No live SITL/Gazebo run | PASS | All tests run with mocked runtime functions. |
+| No Phase 3E/3F/3G/4 work | PASS | `assert_ready`, stimulus, control/monitor, analyzer, legacy scripts unchanged. |
+| Legacy runner scripts (`run_matrix.py`, `run_one.py`) unmodified | PASS | Only plugin files touched. |
+
+Remaining legacy dependencies after Phase 3D (later-phase blockers):
+
+- `WindMatrixEnvironment.assert_ready()` still calls `legacy.run_one_module()` for heartbeat, vehicle-readiness, slot-timeout. **Phase 3E owns this.**
+- `_LazyLegacyAutoMissionControl` mission upload/arm/mode and `_LazyLegacyDisarmMonitor` still lazily import `run_one` at execute time. **Phase 3E owns this.**
+- `WindMatrixStimulus` runtime wind injection still calls `run_one.inject_wind` / `preloaded_wind_artifact`. **Phase 3F wind-injection substage owns this.**
+- `_legacy_run_one_body` → `run_one.run_one`. **Legacy-mode-only delegate; correct and intended.**
+
 ## Phase 3C acceptance review
 
 | Criterion | Result | Evidence |

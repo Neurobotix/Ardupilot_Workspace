@@ -367,6 +367,53 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                 ):
                     run_round_robin.main()
 
+                # Phase 3D: prove env.launch()+cleanup() run with legacy runner
+                # imports blocked and no real processes spawn.
+                from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import runtime as wm_runtime
+                from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.environment import WindMatrixEnvironment
+
+                class _FakePopen3D:
+                    def poll(self):
+                        return None
+
+                class _FakeHandle3D:
+                    def close(self):
+                        pass
+
+                launch_cfg = WindMatrixConfig(
+                    campaign_root=root,
+                    x_values=(0,),
+                    y_values=(4,),
+                    launch_stack=True,
+                    auto_control=False,
+                    attempt_strategy="staged",
+                )
+                env3d = WindMatrixEnvironment(launch_cfg)
+                launch_case = cases[0]
+                launch_ctx = AttemptContext(
+                    case=launch_case,
+                    campaign_root=root,
+                    attempt_dir=defaults.attempt_dir(root, launch_case.case_id, 2),
+                    attempt_index=2,
+                    target_run_index=1,
+                    start_wall_s=0.0,
+                    start_monotonic_s=0.0,
+                )
+                _fake_sitl = (_FakePopen3D(), _FakeHandle3D())
+                _fake_gazebo = (_FakePopen3D(), _FakeHandle3D())
+                with (
+                    mock.patch.object(wm_runtime, "cleanup_stack", return_value=None),
+                    mock.patch.object(wm_runtime, "launch_sitl", return_value=_fake_sitl),
+                    mock.patch.object(wm_runtime, "launch_gazebo", return_value=_fake_gazebo),
+                    mock.patch.object(wm_runtime, "ensure_process_alive", return_value=None),
+                    mock.patch.object(wm_runtime, "write_static_wind_world", return_value=root / "world.sdf"),
+                    mock.patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.environment.time.sleep", return_value=None),
+                ):
+                    env3d.launch(launch_case, launch_ctx)
+                    env3d.cleanup(launch_case, launch_ctx)
+                assert "sitl" in launch_ctx.process_handles, "sitl proc handle missing after launch"
+                assert "gazebo" in launch_ctx.process_handles, "gazebo proc handle missing after launch"
+
                 imported = sorted(name for name in blocked if name in sys.modules)
                 assert imported == [], imported
                 print(json.dumps({{"case_ids": [case.case_id for case in cases]}}))
@@ -389,6 +436,92 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
             {"case_ids": ["wind_x_00_y_04"]},
             json.loads(result.stdout),
         )
+
+
+class Phase3DEnvironmentOwnershipTests(unittest.TestCase):
+    """Phase 3D: WindMatrixEnvironment.launch/cleanup use owned runtime, not legacy."""
+
+    def test_phase3d_environment_launch_uses_owned_runtime_not_legacy(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import defaults as wm_defaults
+        from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import runtime as wm_runtime
+        from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.config import WindMatrixConfig
+        from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.environment import WindMatrixEnvironment
+        from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.plugin import build_plugin
+        from sim_ard_gaw.campaigns.test_suite.core.models import AttemptContext, TestCase
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+
+            cfg = WindMatrixConfig(
+                campaign_root=root,
+                x_values=(0,),
+                y_values=(4,),
+                launch_stack=True,
+                auto_control=False,
+                attempt_strategy="staged",
+            )
+            plugin = build_plugin(cfg)
+            env = plugin.environment
+
+            case = TestCase(
+                suite_name="wind_matrix",
+                case_id="wind_x_00_y_04",
+                parameters={"wind_x_mps": 0, "wind_y_mps": 4},
+            )
+            ctx = AttemptContext(
+                case=case,
+                campaign_root=root,
+                attempt_dir=wm_defaults.attempt_dir(root, case.case_id, 1),
+                attempt_index=1,
+                target_run_index=1,
+                start_wall_s=0.0,
+                start_monotonic_s=0.0,
+            )
+
+            class _FakePopen:
+                def poll(self) -> None:
+                    return None
+
+            class _FakeHandle:
+                def close(self) -> None:
+                    pass
+
+            _fake_sitl = (_FakePopen(), _FakeHandle())
+            _fake_gazebo = (_FakePopen(), _FakeHandle())
+
+            legacy_blocker = MagicMock(side_effect=AssertionError("legacy used in launch/cleanup"))
+
+            with (
+                patch(
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.legacy.run_matrix_module",
+                    legacy_blocker,
+                ),
+                patch(
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.legacy.run_one_module",
+                    legacy_blocker,
+                ),
+                patch.object(wm_runtime, "cleanup_stack", return_value=None),
+                patch.object(wm_runtime, "launch_sitl", return_value=_fake_sitl),
+                patch.object(wm_runtime, "launch_gazebo", return_value=_fake_gazebo),
+                patch.object(wm_runtime, "ensure_process_alive", return_value=None),
+                patch.object(
+                    wm_runtime,
+                    "write_static_wind_world",
+                    return_value=root / "world.sdf",
+                ),
+                patch(
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.environment.time.sleep",
+                    return_value=None,
+                ),
+            ):
+                env.launch(case, ctx)
+                env.cleanup(case, ctx)
+
+            self.assertIn("sitl", ctx.process_handles)
+            self.assertIn("gazebo", ctx.process_handles)
+            legacy_blocker.assert_not_called()
 
 
 if __name__ == "__main__":
