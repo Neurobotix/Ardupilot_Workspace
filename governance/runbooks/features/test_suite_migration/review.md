@@ -50,6 +50,16 @@ staged `run_config.json` parity. Exact migrated-field schema/value parity and
 manifest-reconciliation strict fixes are evidenced in
 `evidence/reports/features/2026-05-31_test_suite_phase3c_manifest_run_config_parity_fixes.md`.
 
+2026-06-01 Phase 3E implementation: staged `assert_ready`,
+`WindMatrixAutoMissionControl`, and `WindMatrixDisarmMonitor` no longer call
+or inject any `run_one.*` helper. They call plugin-owned `mavlink_control.*`
+only. The Phase 3C import-blocker hard test extended with a Phase 3E block.
+The only remaining staged legacy dependency is `WindMatrixStimulus` runtime
+wind injection (`run_one.inject_wind` / `preloaded_wind_artifact`), owned by
+Phase 3F. `_legacy_run_one_body` / `LegacyDelegateStrategy` are the legacy
+strategy path and are unchanged. Evidence:
+`evidence/reports/features/2026-06-01_test_suite_migration_phase_3e.md`.
+
 2026-06-01 strict-audit correction (H-A, H-B, H-C):
 
 - H-A (manifest reconciliation legacy parity): the plugin
@@ -80,6 +90,29 @@ manifest-reconciliation strict fixes are evidenced in
 - H-C (accept_square_only divergence documentation): see the clarification note
   added to the Phase 3B acceptance table and to `plan.md`.
 
+## Phase 3E acceptance review
+
+Date: 2026-06-01
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| `assert_ready` (staged) calls no `run_one.*` / `run_matrix.*` | PASS | `environment.py` staged path calls `mavlink_control.wait_for_heartbeat`, `mavlink_control.wait_for_vehicle_ready`, and `analysis_helpers.clamp_timeout_to_slot`. The `from . import legacy` import is absent from the `assert_ready` body. |
+| `WindMatrixAutoMissionControl.execute()` calls no `run_one.*` | PASS | `plugin.py` `WindMatrixAutoMissionControl` injects and calls `mavlink_control.*` (upload, verify, arm, settle, set_auto). No lazy `run_one` import. |
+| `WindMatrixDisarmMonitor.run()` calls no `run_one.*` | PASS | `plugin.py` `WindMatrixDisarmMonitor` injects and calls `mavlink_control.monitor_until_disarm`. No lazy `run_one` import. |
+| `mavlink_control.py` reproduces legacy behavior (parity test) | PASS | `test_wind_matrix_mavlink_control`: `mission_item_count` / `mission_item_int` parity on the real mission file; `monitor_until_disarm` parity via scripted fake-master streams for full-mission, square+loiter early stop, invalid_start_reason, and timeout. |
+| Phase 3E in-subprocess import-blocker exercises staged assert_ready + control + monitor with legacy blocked | PASS | `test_test_suite_phase3c_zero_legacy_foundation` Phase 3E block runs `assert_ready`, `WindMatrixAutoMissionControl.execute()`, and `WindMatrixDisarmMonitor.run()` inside the subprocess import-blocker; any `run_one`/`run_matrix` import raises `AssertionError`. |
+| Non-subprocess ownership test verifies adapter construction/wiring | PASS | `Phase3EControlMonitorOwnershipTests` in `test_test_suite_phase3c_zero_legacy_foundation` verifies `WindMatrixAutoMissionControl` and `WindMatrixDisarmMonitor` call only `mavlink_control.*`, not `run_one.*`. |
+| Legacy mode remains default and unchanged | PASS | `WindMatrixConfig().attempt_strategy == "legacy"`; `_legacy_run_one_body` / `LegacyDelegateStrategy` unmodified. |
+| Legacy-mode `assert_ready` is unchanged (no-op early return) | PASS | Legacy branch of `assert_ready` returns early; no `mavlink_control` calls in the legacy branch. |
+| No live SITL/Gazebo run | PASS | All tests run with mocked or fake-master MAVLink message streams. |
+| No Phase 3F/3G/4 work | PASS | Wind injection, BIN/artifacts, analysis, summary, and second-plugin work untouched. |
+| Legacy runner scripts (`run_matrix.py`, `run_one.py`) unmodified | PASS | Only plugin files touched. |
+
+Remaining legacy dependencies after Phase 3E (later-phase blockers):
+
+- `WindMatrixStimulus` runtime wind injection still calls `run_one.inject_wind` / `preloaded_wind_artifact`. **Phase 3F wind-injection substage owns this.**
+- `_legacy_run_one_body` → `run_one.run_one`. **Legacy-mode-only delegate; correct and intended.**
+
 ## Phase 3D acceptance review
 
 Date: 2026-05-31
@@ -97,10 +130,10 @@ Date: 2026-05-31
 | No Phase 3E/3F/3G/4 work | PASS | `assert_ready`, stimulus, control/monitor, analyzer, legacy scripts unchanged. |
 | Legacy runner scripts (`run_matrix.py`, `run_one.py`) unmodified | PASS | Only plugin files touched. |
 
-Remaining legacy dependencies after Phase 3D (later-phase blockers):
+Remaining legacy dependencies after Phase 3D (superseded by Phase 3E):
 
-- `WindMatrixEnvironment.assert_ready()` still calls `legacy.run_one_module()` for heartbeat, vehicle-readiness, slot-timeout. **Phase 3E owns this.**
-- `_LazyLegacyAutoMissionControl` mission upload/arm/mode and `_LazyLegacyDisarmMonitor` still lazily import `run_one` at execute time. **Phase 3E owns this.**
+- `WindMatrixEnvironment.assert_ready()` called `legacy.run_one_module()` for heartbeat, vehicle-readiness, slot-timeout. **Resolved in Phase 3E.**
+- `_LazyLegacyAutoMissionControl` and `_LazyLegacyDisarmMonitor` lazily imported `run_one` at execute time. **Resolved in Phase 3E.**
 - `WindMatrixStimulus` runtime wind injection still calls `run_one.inject_wind` / `preloaded_wind_artifact`. **Phase 3F wind-injection substage owns this.**
 - `_legacy_run_one_body` → `run_one.run_one`. **Legacy-mode-only delegate; correct and intended.**
 
