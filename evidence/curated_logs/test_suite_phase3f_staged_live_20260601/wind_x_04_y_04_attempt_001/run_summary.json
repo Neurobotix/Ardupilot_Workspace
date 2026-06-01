@@ -1,0 +1,123 @@
+{
+  "analysis_position_sources": {
+    "square_loiter_mission_metrics": "sim",
+    "true_path_deviation": "sim"
+  },
+  "artifacts": {
+    "square_loiter_summary": "/home/ahmed/ardupilot_workspace_next/var/runs/test_suite_phase3f_staged_complete_20260601T134207/wind_x_04_y_04/runs/attempt_001/square_loiter_mission_metrics/wind_x_04_y_04__rep_01__attempt_001_square_loiter_summary.json",
+    "true_path_deviation_csv": "/home/ahmed/ardupilot_workspace_next/var/runs/test_suite_phase3f_staged_complete_20260601T134207/wind_x_04_y_04/runs/attempt_001/true_path_deviation/wind_x_04_y_04__rep_01__attempt_001_true_path_deviation.csv",
+    "true_path_deviation_summary": "/home/ahmed/ardupilot_workspace_next/var/runs/test_suite_phase3f_staged_complete_20260601T134207/wind_x_04_y_04/runs/attempt_001/true_path_deviation/wind_x_04_y_04__rep_01__attempt_001_true_path_deviation_summary.json"
+  },
+  "attempt_id": "wind_x_04_y_04__rep_01__attempt_001",
+  "combo_key": "wind_x_04_y_04",
+  "loiter": {
+    "completed_turns_after_capture": 4,
+    "expected_turns": 5.0,
+    "full_window": {
+      "capture_time_s": 45.48,
+      "definition": "loiter start through window end; includes capture/transit",
+      "mean_radial_error_m": 92.47308346082602,
+      "p95_abs_radial_error_m": 482.2882615687995,
+      "rms_radial_error_m": 169.7634020984987
+    },
+    "tracking_after_capture": {
+      "definition": "samples at or after loiter capture threshold",
+      "fitted_center_offset_m": 31.96908032381036,
+      "fitted_radius_m": 133.37519710140924,
+      "mean_radial_error_m": 33.44154058927915,
+      "p95_abs_radial_error_m": 76.26243423429166,
+      "rms_radial_error_m": 41.21195467817095,
+      "samples": 4808
+    },
+    "turns_complete": true,
+    "turns_flown_after_capture": 4.961268838378997,
+    "turns_flown_total": 5.00066109989392,
+    "window": {
+      "end_seq": 24,
+      "end_time_s": 819.177331,
+      "start_seq": 23,
+      "start_time_s": 581.377331,
+      "status": "bounded_by_next_mise"
+    }
+  },
+  "loiter_completed": true,
+  "mission_completed_full": true,
+  "raw_log_path": "/home/ahmed/ardupilot_workspace_next/var/runs/test_suite_phase3f_staged_complete_20260601T134207/wind_x_04_y_04/runs/attempt_001/wind_x_04_y_04__rep_01__attempt_001.BIN",
+  "run_alias": "run_01",
+  "square": {
+    "by_heading": {
+      "eastbound": {
+        "max_true_path_dev_m": 75.64159399429178,
+        "mean_true_path_dev_m": 31.013218778017105,
+        "p95_true_path_dev_m": 72.85860672478584,
+        "rms_true_path_dev_m": 40.60776195199836,
+        "samples": 2683
+      },
+      "northbound": {
+        "max_true_path_dev_m": 219.34490737817936,
+        "mean_true_path_dev_m": 77.21461327551958,
+        "p95_true_path_dev_m": 194.82542937184093,
+        "rms_true_path_dev_m": 97.74624840211395,
+        "samples": 3222
+      },
+      "southbound": {
+        "max_true_path_dev_m": 49.56639327396371,
+        "mean_true_path_dev_m": 14.542402175019262,
+        "p95_true_path_dev_m": 47.069917422758635,
+        "rms_true_path_dev_m": 21.97789328807777,
+        "samples": 3544
+      },
+      "westbound": {
+        "max_true_path_dev_m": 101.54563950106802,
+        "mean_true_path_dev_m": 33.19826246921076,
+        "p95_true_path_dev_m": 97.51587393456288,
+        "rms_true_path_dev_m": 47.959392812508284,
+        "samples": 3798
+      }
+    },
+    "corners": {
+      "NE": {
+        "count": 5,
+        "mean_min_corner_distance_m": 6.202644805933447
+      },
+      "NW": {
+        "count": 5,
+        "mean_min_corner_distance_m": 2.7020231151419436
+      },
+      "SE": {
+        "count": 5,
+        "mean_min_corner_distance_m": 7.5555840065281075
+      },
+      "SW": {
+        "count": 5,
+        "mean_min_corner_distance_m": 1.8846220228358497
+      }
+    },
+    "directional_asymmetry_m": 62.67221110050032,
+    "lap_repeatability": {
+      "count": 5,
+      "mean_rms_true_path_dev_m": 57.43713788016079,
+      "std_rms_true_path_dev_m": 10.851687641698964
+    },
+    "ntun_comparison": {
+      "definition": "square-only supported rows with active_leg_end_seq in 3..22",
+      "full_mission_supported_mean_abs_ntun_xt_m": 36.48293197939614,
+      "mean_abs_ntun_xt_m": 38.41562820853597,
+      "mean_delta_true_minus_abs_ntun_m": 0.05491033766126238
+    },
+    "overall": {
+      "max_true_path_dev_m": 219.34490737817936,
+      "mean_true_path_dev_m": 38.47053854619723,
+      "p95_true_path_dev_m": 130.9914496526495,
+      "p99_true_path_dev_m": 202.3036908718467,
+      "rms_true_path_dev_m": 58.70699352944334,
+      "sample_count": 13247,
+      "segment_count": 20
+    }
+  },
+  "square_completed": true,
+  "status": "success_full",
+  "wind_frame": "Gazebo world-frame ENU: +X=East, +Y=North. ArduPilot Gazebo plugin handles NED<->ENU internally.",
+  "x_wind_mps": 4,
+  "y_wind_mps": 4
+}

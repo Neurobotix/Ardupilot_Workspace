@@ -252,10 +252,17 @@ slot-timeout clamp) is test-suite-owned in
 directory. Evidence:
 `evidence/reports/features/2026-05-31_test_suite_phase3c_followup_fixes.md`.
 
-Open substage (as of 2026-06-01 after Phase 3E): runtime wind injection
-(`run_one.inject_wind` / `preloaded_wind_artifact`) in `WindMatrixStimulus`
-is the only remaining staged legacy dependency. This is the Stage 3F open
-substage.
+Complete (2026-06-01): runtime wind injection (`inject_wind` /
+`preloaded_wind_artifact`, gz-topic echo verification, preloaded SDF artifact
+handling) is now test-suite-owned in `plugins/wind_matrix/wind_injection.py`;
+`WindMatrixStimulus` no longer imports `legacy`. With this the staged attempt
+path is fully zero-legacy (environment, MAVLink control/monitor, and wind
+injection). A first live completed staged run (`success_full`, strict gz echo
+verified) was captured. Evidence:
+`evidence/reports/features/2026-06-01_test_suite_migration_phase_3f.md`. The
+only remaining staged-path use of `run_one` is the legacy-strategy delegate
+(`_legacy_run_one_body`), which is intended. Stage 3G (matched live legacy
+comparison) is the remaining gate before Phase 4.
 
 ### Stage 3G — full zero-legacy staged wind proof
 - Run the zero-legacy staged wind system beside the retained legacy mode.

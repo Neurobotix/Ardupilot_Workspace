@@ -1,0 +1,91 @@
+{
+  "application_phase": "auto-before-arm",
+  "attempt_count": 1,
+  "auto_wind_phase": "before-arm",
+  "command": [
+    "gz",
+    "topic",
+    "-t",
+    "/world/mini_talon_wind_runway/wind/",
+    "-m",
+    "gz.msgs.Wind",
+    "-p",
+    "linear_velocity:{x:4.000,y:4.000,z:0.000}, enable_wind:true"
+  ],
+  "echo_command": [
+    "gz",
+    "topic",
+    "-e",
+    "-t",
+    "/world/mini_talon_wind_runway/wind/",
+    "-n",
+    "1"
+  ],
+  "echo_parsed_wind": {
+    "enable_wind": true,
+    "x": 4.0,
+    "y": 4.0,
+    "z": 0.0
+  },
+  "echo_tolerance_mps": 0.01,
+  "live_wind_info_capture_enabled": true,
+  "live_wind_info_snapshot": {
+    "command": [
+      "gz",
+      "topic",
+      "-e",
+      "-t",
+      "/world/mini_talon_wind_runway/wind_info",
+      "-n",
+      "1"
+    ],
+    "note": "Live Gazebo wind_info snapshot. This can show ramp-in progress and is not treated as a pass/fail check.",
+    "parsed_wind_mps": {
+      "x": 0.10257365020020476,
+      "y": 0.0014610326883442869,
+      "z": 0.0
+    },
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "linear_velocity { x: 0.10257365020020476 y: 0.0014610326883442869 }",
+    "timed_out": false
+  },
+  "payload": "linear_velocity:{x:4.000,y:4.000,z:0.000}, enable_wind:true",
+  "publisher_attempts": [
+    {
+      "attempt_number": 1,
+      "echo_command": [
+        "gz",
+        "topic",
+        "-e",
+        "-t",
+        "/world/mini_talon_wind_runway/wind/",
+        "-n",
+        "1"
+      ],
+      "echo_parsed_wind": {
+        "enable_wind": true,
+        "x": 4.0,
+        "y": 4.0,
+        "z": 0.0
+      },
+      "echo_result": {
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "linear_velocity { x: 4 y: 4 } enable_wind: true",
+        "timed_out": false
+      },
+      "echo_verified": true,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ""
+    }
+  ],
+  "status": "ok",
+  "strict_echo_verification": true,
+  "verification": "gz topic echo matched requested wind payload",
+  "wind_info_topic": "/world/mini_talon_wind_runway/wind_info",
+  "wind_topic": "/world/mini_talon_wind_runway/wind/",
+  "x_wind_mps": 4.0,
+  "y_wind_mps": 4.0
+}

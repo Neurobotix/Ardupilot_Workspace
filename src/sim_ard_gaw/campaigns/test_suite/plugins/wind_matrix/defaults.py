@@ -69,6 +69,12 @@ BIN_FLUSH_DELAY_S = 3.0
 ANALYSIS_HEADROOM_S = 30.0
 WIND_INJECTION_MAX_ATTEMPTS = 8
 WIND_INJECTION_RETRY_S = 1.5
+WIND_ECHO_SETTLE_S = 0.2
+WIND_ECHO_TIMEOUT_S = 5.0
+WIND_ECHO_TOLERANCE_MPS = 0.01
+WIND_INFO_CAPTURE_TIMEOUT_S = 3.0
+CAPTURE_WIND_INFO = os.environ.get("SIM_ARD_GAW_CAPTURE_WIND_INFO", "1") != "0"
+SDF_WIND_TOLERANCE_MPS = 0.001
 AUTO_ARM_TO_AUTO_SETTLE_S = 5.0
 AUTO_WIND_INJECTION_MIN_RELALT_M = 20.0
 AUTO_WIND_INJECTION_ALT_TIMEOUT_S = 180.0
@@ -89,6 +95,9 @@ SUCCESS_STATUSES = {"success_full", "success_square_only"}
 ANALYSIS_NOT_RUN = "not_run"
 ANALYSIS_PARTIAL_RUN_SUMMARY_FAILED = "partial: run_summary_failed"
 STRICT_WIND_ECHO_VERIFY = os.environ.get("SIM_ARD_GAW_STRICT_WIND_ECHO_VERIFY", "1") != "0"
+WIND_FLOAT_RE = re.compile(
+    r"(?P<field>x|y|z):\s*(?P<value>[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)"
+)
 
 
 def preferred_python() -> str:
@@ -168,8 +177,14 @@ def wind_injection_source(
             "with no runtime wind topic refresh"
         )
     if manual_control:
-        return "run_one.py via Gazebo wind topic before user mission control"
-    return f"run_one.py via Gazebo wind topic during {auto_wind_phase}"
+        return (
+            "test_suite staged wind_matrix plugin via Gazebo wind topic "
+            "before user mission control"
+        )
+    return (
+        "test_suite staged wind_matrix plugin via Gazebo wind topic "
+        f"during {auto_wind_phase}"
+    )
 
 
 def combo_order(
@@ -237,6 +252,10 @@ def coerce_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def normalize_manifest_text(value: Any) -> str:
+    return " ".join(str(value).split())
 
 
 def _prepend_path_entry(entry: str, current: str) -> str:

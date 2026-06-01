@@ -616,8 +616,14 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     "run_one",
                     side_effect=AssertionError("staged path called run_one.run_one"),
                 ))
-                _stack.enter_context(patch.object(owned_run_one, "inject_wind", side_effect=_inject_wind))
-                _stack.enter_context(patch.object(owned_run_one, "preloaded_wind_artifact", side_effect=_inject_wind))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.wind_injection.inject_wind",
+                    side_effect=_inject_wind,
+                ))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.wind_injection.preloaded_wind_artifact",
+                    side_effect=_inject_wind,
+                ))
                 _stack.enter_context(patch(
                     "test_suite.plugins.wind_matrix.mavlink_control.wait_for_heartbeat",
                     side_effect=_wait_for_heartbeat,
