@@ -63,6 +63,10 @@
   `evidence/reports/features/2026-05-31_test_suite_migration_phase_3d.md`
 - test_suite migration Phase 3C follow-up review findings audit:
   `governance/audits/2026-05-31_test_suite_phase3c_followup_findings.md`
+- test_suite migration Phase 3C strict high-finding fixes (manifest
+  reconciliation parity + staged run-config exact migrated-field parity)
+  evidence:
+  `evidence/reports/features/2026-05-31_test_suite_phase3c_manifest_run_config_parity_fixes.md`
 - Superseded Phase 8 partial-retirement evidence:
   `evidence/reports/migration/PHASE_8_COMPAT_RETIREMENT_2026-05-22.md`
 - Human migration status: `docs/operations/migration_status.md`

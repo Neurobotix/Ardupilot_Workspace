@@ -99,7 +99,11 @@ mode available as the side-by-side fallback and comparison path.
 
 Added or strengthened coverage for:
 
-- real staged wind lifecycle order without `run_one.run_one(...)`;
+- staged orchestration-shell order without `run_one.run_one(...)`; later
+  2026-05-31 strict-fix evidence adds boundary-mocked real-adapter coverage
+  (`test_real_staged_wind_adapters_run_with_boundary_mocks`); no live staged
+  wind proof; no full zero-legacy staged runtime proof; retained helper
+  dependencies remain explicit blockers;
 - cleanup on success, failure, and interrupt-like paths;
 - terminal error rows on stimulus/control/monitor/analyzer failures;
 - full, partial, failed, error, interrupted, and analysis-failure verdict and

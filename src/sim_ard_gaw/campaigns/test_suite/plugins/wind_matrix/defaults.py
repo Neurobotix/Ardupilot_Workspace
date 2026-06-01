@@ -70,9 +70,12 @@ ANALYSIS_HEADROOM_S = 30.0
 WIND_INJECTION_MAX_ATTEMPTS = 8
 WIND_INJECTION_RETRY_S = 1.5
 AUTO_ARM_TO_AUTO_SETTLE_S = 5.0
+AUTO_WIND_INJECTION_MIN_RELALT_M = 20.0
+AUTO_WIND_INJECTION_ALT_TIMEOUT_S = 180.0
 AUTO_WIND_PHASES = ("after-takeoff", "before-arm")
 DEFAULT_AUTO_WIND_PHASE = "after-takeoff"
 DEFAULT_STAGED_AUTO_WIND_PHASE = "before-arm"
+ENTRY_WAYPOINT_MAX_PASS_DISTANCE_M = 200
 
 ANALYSIS_POSITION_SOURCE = "sim"
 WIND_FRAME_NOTE = (
@@ -291,7 +294,10 @@ def gazebo_plugin_diagnostics(env: dict[str, str] | None = None) -> dict[str, An
     return {
         "policy": "workspace_build_only",
         "gz_sim_system_plugin_path": plugin_path,
-        "known_plugins": known_plugins,
+        "gz_sim_system_plugin_path_entries": [
+            part for part in plugin_path.split(":") if part
+        ],
+        "known_ardupilot_plugin_binaries": known_plugins,
     }
 
 

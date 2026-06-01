@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import shutil
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from sim_ard_gaw.campaigns.mission_contract import validate_square_wind_mission_contract
@@ -155,16 +156,43 @@ class WindMatrixStimulus(StimulusAdapter):
             "sitl_bin_dir": str(bin_search_dir),
             "gazebo_launch_command": defaults.CTE_GAZEBO_COMMAND,
             "gazebo_plugin_runtime": defaults.gazebo_plugin_diagnostics(),
+            "sitl_wipe_eeprom_expected": self.config.wipe_eeprom,
             "param_files_loaded_at_sitl_start": param_stack,
             "param_file_provenance": param_provenance,
             "param_stack_order_note": (
                 "Files are applied in listed order; later files override earlier ones."
+            ),
+            "local_param_override_present": any(
+                Path(path).name == defaults.PLANE_PARAM_LOCAL_OVERRIDE.name
+                for path in param_stack
             ),
             "manual_control": not self.config.auto_control,
             "force_arm": self.config.force_arm,
             "auto_wind_phase": (
                 self.config.auto_wind_phase if self.config.auto_control else None
             ),
-            "attempt_strategy": self.config.attempt_strategy,
+            "auto_arm_to_auto_settle_s": (
+                defaults.AUTO_ARM_TO_AUTO_SETTLE_S
+                if self.config.auto_control else 0.0
+            ),
+            "auto_wind_injection_min_relalt_m": (
+                defaults.AUTO_WIND_INJECTION_MIN_RELALT_M
+                if (
+                    self.config.auto_control
+                    and self.config.auto_wind_phase == "after-takeoff"
+                )
+                else None
+            ),
+            "auto_wind_injection_alt_timeout_s": (
+                defaults.AUTO_WIND_INJECTION_ALT_TIMEOUT_S
+                if (
+                    self.config.auto_control
+                    and self.config.auto_wind_phase == "after-takeoff"
+                )
+                else None
+            ),
+            "entry_waypoint_max_pass_distance_m": (
+                defaults.ENTRY_WAYPOINT_MAX_PASS_DISTANCE_M
+            ),
         })
         shutil.copy2(self.config.mission_file, ctx.attempt_dir / self.config.mission_file.name)

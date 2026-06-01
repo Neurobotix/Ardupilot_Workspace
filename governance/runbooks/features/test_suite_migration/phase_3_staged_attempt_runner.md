@@ -89,7 +89,10 @@ launched stack and then closes retained process handles.
 - New staged rows can include plugin-owned legacy wind fields plus the Phase 2
   generic fields in the same row.
 - `success_square_only` remains generic `partial` and does not count as a
-  strict accepted run unless `accept_square_only=True`.
+  strict accepted run unless `accept_square_only=True` (post-legacy stricter
+  safety policy). Running the new suite/round-robin logic over an old
+  campaign root can therefore retry and renumber runs that legacy would have
+  accepted via square-only success.
 - `failed`, `error`, `interrupted`, and `failed_analysis` do not count as
   accepted.
 - `WindMatrixManifest.generic_view()` remains backward-compatible with historical
@@ -140,7 +143,8 @@ Phase 3B no-SITL proof is recorded in
 `evidence/reports/features/2026-05-29_test_suite_migration_phase_3b.md`.
 It adds:
 
-- `test_real_staged_wind_path_does_not_call_legacy_run_one_body`;
+- `test_staged_orchestration_shell_does_not_call_legacy_run_one_body` and
+  `test_real_staged_wind_adapters_run_with_boundary_mocks`;
 - verdict/acceptance coverage for full, partial, failed, error, interrupted,
   and analysis-failure statuses;
 - CLI default/staged/fail-closed tests;
@@ -182,7 +186,8 @@ no accepted staged attempt. Phase 3B live proof is not accepted.
 
 The complete Phase 3B gate requires:
 
-- stage-order tests for the real staged wind lifecycle;
+- stage-order tests that exercise real staged adapters with boundary mocks,
+  plus the orchestration-shell order test;
 - cleanup tests on success, failure, and interrupt-like paths;
 - verdict and acceptance tests for full, partial, failed, error, interrupted,
   and analysis-failure outcomes;

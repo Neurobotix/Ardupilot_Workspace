@@ -11,6 +11,11 @@ and for migrating the staged-analysis substage of Phase 3F to plugin-owned
 code. This is **not** live zero-legacy staged runtime proof. No SITL/Gazebo
 staged wind case was run. Phase 4 remains blocked until Phase 3G.
 
+Correction (same date): the H-7 wording in this report overclaimed exact staged
+`run_config.json` parity. Exact schema/value parity for the migrated staged
+fields was completed and evidenced later in
+`evidence/reports/features/2026-05-31_test_suite_phase3c_manifest_run_config_parity_fixes.md`.
+
 Feature runbook:
 `governance/runbooks/features/test_suite_migration/plan.md`
 
@@ -30,7 +35,9 @@ This report records remediation for nine follow-up findings:
 - H-4: `defaults.mission_item_count` matches the legacy `mavwp.MAVWPLoader` count;
 - H-5: parity test asserts `run_suite` does not adopt round-robin-only flags;
 - H-6: the staged analyzer is plugin-owned and proven under a legacy-runner import blocker;
-- H-7: staged `run_config.json` field-set matches the legacy runner;
+- H-7: staged `run_config.json` field-set parity was partially addressed here
+  but exact migrated-field schema/value parity is evidenced in the later strict
+  fix report noted above;
 - H-8: f-string code-block test bodies escape literal braces;
 - H-9: analysis-helper mocks patch the namespace the analyzer actually uses.
 

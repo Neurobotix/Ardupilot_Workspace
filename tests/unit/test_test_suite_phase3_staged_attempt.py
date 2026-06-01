@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # pyright: reportMissingImports=false
 
+import contextlib
 import json
 import os
 import subprocess
@@ -39,9 +40,11 @@ from test_suite.core.models import (  # noqa: E402
 from test_suite.core.monitor import CompletionMonitor  # noqa: E402
 from test_suite.core.stimulus import StimulusAdapter  # noqa: E402
 from test_suite.plugins.wind_matrix import legacy  # noqa: E402
+from test_suite.plugins.wind_matrix import defaults  # noqa: E402
 from test_suite.plugins.wind_matrix.manifest import WindMatrixManifest  # noqa: E402
 from test_suite.plugins.wind_matrix.config import WindMatrixConfig  # noqa: E402
 from test_suite.plugins.wind_matrix.analyzers import WindMatrixAnalyzer  # noqa: E402
+from test_suite.plugins.wind_matrix.stimulus import WindMatrixStimulus  # noqa: E402
 from test_suite.plugins.wind_matrix.plugin import build_plugin  # noqa: E402
 from test_suite.plugins.wind_matrix.analyzers import WindMatrixVerdictPolicy  # noqa: E402
 from test_suite.cli import run_case as cli_run_case  # noqa: E402
@@ -394,7 +397,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             self.assertEqual(0, result.returncode)
             self.assertEqual("StagedStrategy", result.stdout.strip())
 
-    def test_real_staged_wind_path_does_not_call_legacy_run_one_body(self) -> None:
+    def test_staged_orchestration_shell_does_not_call_legacy_run_one_body(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             run_one.save_manifest(root, {"campaign_root": str(root), "attempts": []})
@@ -502,6 +505,208 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             saved = WindMatrixManifest(root).load()["attempts"][0]
             self.assertEqual("success_full", saved["status"])
             self.assertEqual("test_suite.generic_manifest.v1", saved["schema_version"])
+
+    def test_real_staged_wind_adapters_run_with_boundary_mocks(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            plugin = build_plugin(
+                WindMatrixConfig(
+                    campaign_root=root,
+                    launch_stack=False,
+                    auto_control=True,
+                    attempt_strategy="staged",
+                )
+            )
+            attempt_dir = defaults.attempt_dir(root, "wind_x_00_y_04", 1)
+            events: list[str] = []
+            owned_run_one = legacy.run_one_module()
+            fake_master = object()
+            source_bin = root / "source.BIN"
+            source_bin.write_bytes(b"bin")
+
+            orig_prepare = plugin.environment.prepare_case
+            orig_launch = plugin.environment.launch
+            orig_ready = plugin.environment.assert_ready
+            orig_cleanup = plugin.environment.cleanup
+
+            def _record_prepare(case: TestCase) -> None:
+                events.append("prepare")
+                return orig_prepare(case)
+
+            def _record_launch(case: TestCase, ctx: AttemptContext) -> None:
+                events.append("launch")
+                return orig_launch(case, ctx)
+
+            def _record_ready(case: TestCase, ctx: AttemptContext) -> None:
+                events.append("assert_ready")
+                return orig_ready(case, ctx)
+
+            def _record_cleanup(case: TestCase, ctx: AttemptContext) -> None:
+                events.append("cleanup")
+                return orig_cleanup(case, ctx)
+
+            def _wait_for_heartbeat(*_args, **_kwargs):
+                events.append("ready")
+                return fake_master
+
+            def _wait_for_vehicle_ready(*_args, **_kwargs):
+                events.append("vehicle_ready")
+                return None
+
+            def _inject_wind(x_mps: float, y_mps: float, **_kwargs):
+                events.append("stimulus.apply")
+                return {
+                    "kind": "wind_matrix",
+                    "wind_mps": {"x": x_mps, "y": y_mps, "z": 0.0},
+                }
+
+            def _upload_mission(*_args, **_kwargs):
+                events.append("control.upload")
+                return ["mission"]
+
+            def _verify_mission(*_args, **_kwargs):
+                events.append("control.verify")
+                return None
+
+            def _arm_vehicle(*_args, **_kwargs):
+                events.append("control.arm")
+                return None
+
+            def _settle_after_arm(*_args, **_kwargs):
+                events.append("control.settle")
+                return None
+
+            def _set_auto_mode(*_args, **_kwargs):
+                events.append("control.auto")
+                return None
+
+            def _monitor_until_disarm(*_args, **_kwargs):
+                events.append("monitor")
+                return {
+                    "mission_completed_full": True,
+                    "square_completed": True,
+                    "loiter_completed": True,
+                    "reached": [1],
+                    "statustext": ["OK"],
+                }
+
+            def _collect_bin_log(*_args, **_kwargs):
+                events.append("analysis.collect_bin")
+                return source_bin
+
+            def _ensure_run_alias_link(*_args, **_kwargs):
+                events.append("analysis.alias")
+                return None
+
+            def _run_analysis(*_args, **_kwargs):
+                events.append("analysis.run")
+                return None
+
+            def _build_run_summary(*_args, **_kwargs):
+                events.append("analysis.summary")
+                return {"summary": "ok"}
+
+            with contextlib.ExitStack() as _stack:
+                _stack.enter_context(patch.object(plugin.environment, "prepare_case", side_effect=_record_prepare))
+                _stack.enter_context(patch.object(plugin.environment, "launch", side_effect=_record_launch))
+                _stack.enter_context(patch.object(plugin.environment, "assert_ready", side_effect=_record_ready))
+                _stack.enter_context(patch.object(plugin.environment, "cleanup", side_effect=_record_cleanup))
+                _stack.enter_context(patch.object(
+                    owned_run_one,
+                    "run_one",
+                    side_effect=AssertionError("staged path called run_one.run_one"),
+                ))
+                _stack.enter_context(patch.object(owned_run_one, "wait_for_heartbeat", side_effect=_wait_for_heartbeat))
+                _stack.enter_context(patch.object(owned_run_one, "wait_for_vehicle_ready", side_effect=_wait_for_vehicle_ready))
+                _stack.enter_context(patch.object(owned_run_one, "inject_wind", side_effect=_inject_wind))
+                _stack.enter_context(patch.object(owned_run_one, "preloaded_wind_artifact", side_effect=_inject_wind))
+                _stack.enter_context(patch.object(owned_run_one, "upload_mission", side_effect=_upload_mission))
+                _stack.enter_context(patch.object(owned_run_one, "verify_mission", side_effect=_verify_mission))
+                _stack.enter_context(patch.object(owned_run_one, "arm_vehicle", side_effect=_arm_vehicle))
+                _stack.enter_context(patch.object(owned_run_one, "settle_after_arm_before_auto", side_effect=_settle_after_arm))
+                _stack.enter_context(patch.object(owned_run_one, "set_auto_mode", side_effect=_set_auto_mode))
+                _stack.enter_context(patch.object(
+                    owned_run_one,
+                    "clamp_timeout_to_slot",
+                    side_effect=lambda timeout, *_args, **_kwargs: timeout,
+                ))
+                _stack.enter_context(patch.object(owned_run_one, "monitor_until_disarm", side_effect=_monitor_until_disarm))
+                _stack.enter_context(patch.object(owned_run_one, "log", side_effect=lambda _msg: None))
+                _stack.enter_context(patch.object(
+                    defaults,
+                    "gazebo_plugin_diagnostics",
+                    return_value={"policy": "mock"},
+                ))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.analyzers.collect_bin_log",
+                    side_effect=_collect_bin_log,
+                ))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.analyzers.ensure_run_alias_link",
+                    side_effect=_ensure_run_alias_link,
+                ))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.analyzers.run_analysis",
+                    side_effect=_run_analysis,
+                ))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.analyzers.build_run_summary",
+                    side_effect=_build_run_summary,
+                ))
+                _stack.enter_context(patch(
+                    "test_suite.plugins.wind_matrix.analyzers.time.sleep",
+                    side_effect=lambda _s: None,
+                ))
+                record = plugin.attempt_runner().run(
+                    case=_case(),
+                    target_run_index=1,
+                    attempt_index=1,
+                    attempt_dir=attempt_dir,
+                )
+
+            self.assertEqual(AttemptStatus.SUCCESS, record.status)
+            self.assertTrue(attempt_dir.exists())
+
+            run_config = json.loads(
+                (attempt_dir / "run_config.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                defaults.attempt_id("wind_x_00_y_04", 1, 1),
+                run_config["attempt_id"],
+            )
+            self.assertTrue((attempt_dir / defaults.MISSION_FILE.name).exists())
+
+            expected_bin = attempt_dir / defaults.named_bin_filename(
+                "wind_x_00_y_04", 1, 1,
+            )
+            saved = WindMatrixManifest(root).load()["attempts"][0]
+            self.assertEqual("success_full", saved["status"])
+            self.assertEqual("done", saved["analysis_status"])
+            self.assertEqual("test_suite.generic_manifest.v1", saved["schema_version"])
+            self.assertEqual(str(expected_bin), saved["raw_log_path"])
+            self.assertEqual(str(attempt_dir), saved["attempt_dir"])
+            self.assertEqual(
+                [
+                    "prepare",
+                    "launch",
+                    "assert_ready",
+                    "ready",
+                    "vehicle_ready",
+                    "stimulus.apply",
+                    "control.upload",
+                    "control.verify",
+                    "control.arm",
+                    "control.settle",
+                    "control.auto",
+                    "monitor",
+                    "analysis.collect_bin",
+                    "analysis.alias",
+                    "analysis.run",
+                    "analysis.summary",
+                    "cleanup",
+                ],
+                events,
+            )
 
     def test_staged_runner_prewrites_running_row_then_updates_same_row(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -937,12 +1142,12 @@ class Phase3StagedAttemptTests(unittest.TestCase):
 
     def test_wind_verdict_and_acceptance_matrix_covers_terminal_outcomes(self) -> None:
         matrix = {
-            "success_full": (VerdictClass.SUCCESS, False, True, 1, 1),
-            "success_square_only": (VerdictClass.PARTIAL, False, True, 0, 1),
-            "failed": (VerdictClass.FAILED_RETRYABLE, True, False, 0, 0),
-            "error": (VerdictClass.FAILED_RETRYABLE, True, False, 0, 0),
-            "interrupted": (VerdictClass.FAILED_RETRYABLE, True, False, 0, 0),
-            "failed_analysis": (VerdictClass.ANALYSIS_FAILED, False, True, 0, 0),
+            "success_full": (VerdictClass.SUCCESS, False, True, 1, 1, "success_full"),
+            "success_square_only": (VerdictClass.PARTIAL, False, True, 0, 1, "success_square_only"),
+            "failed": (VerdictClass.FAILED_RETRYABLE, True, False, 0, 0, "failed"),
+            "error": (VerdictClass.FAILED_RETRYABLE, True, False, 0, 0, "error"),
+            "interrupted": (VerdictClass.FAILED_RETRYABLE, True, False, 0, 0, "interrupted"),
+            "failed_analysis": (VerdictClass.ANALYSIS_FAILED, False, True, 0, 0, "failed_analysis"),
         }
         policy = WindMatrixVerdictPolicy()
         for status, (
@@ -951,6 +1156,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             expected_requires_analysis,
             strict_count,
             lenient_count,
+            expected_reason,
         ) in matrix.items():
             with self.subTest(status=status):
                 result = AnalysisResult(
@@ -976,6 +1182,8 @@ class Phase3StagedAttemptTests(unittest.TestCase):
 
                 with tempfile.TemporaryDirectory() as temp_dir:
                     root = Path(temp_dir)
+                    attempt_dir = defaults.combo_runs_dir(root, "wind_x_00_y_04") / "attempt_001"
+                    attempt_dir.mkdir(parents=True, exist_ok=True)
                     run_one.save_manifest(root, {
                         "campaign_root": str(root),
                         "attempts": [
@@ -986,6 +1194,9 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                                 "combo_key": "wind_x_00_y_04",
                                 "x_wind_mps": 0,
                                 "y_wind_mps": 4,
+                                "target_run_index": 1,
+                                "attempt_index": 1,
+                                "attempt_dir": str(attempt_dir),
                                 "status": status,
                                 "analysis_status": (
                                     "done"
@@ -1005,9 +1216,9 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                         ),
                     )
                     generic = WindMatrixManifest(root).generic_view()["attempts"][0]
-                    self.assertEqual(status, generic["verdict"]["reason"])
+                    self.assertEqual(expected_reason, generic["verdict"]["reason"])
 
-    def test_campaign_summary_respects_square_only_acceptance_policy(self) -> None:
+    def test_campaign_summary_uses_post_legacy_acceptance_policy(self) -> None:
         case = _case()
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1020,11 +1231,19 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                         "combo_key": "wind_x_00_y_04",
                         "x_wind_mps": 0,
                         "y_wind_mps": 4,
+                        "target_run_index": 1,
+                        "attempt_index": 1,
+                        "attempt_dir": str(
+                            defaults.combo_runs_dir(root, "wind_x_00_y_04") / "attempt_001"
+                        ),
                         "status": "success_square_only",
                         "analysis_status": "done",
                     }
                 ],
             })
+            (defaults.combo_runs_dir(root, "wind_x_00_y_04") / "attempt_001").mkdir(
+                parents=True, exist_ok=True
+            )
 
             strict_manifest = WindMatrixManifest(root)
             manifest = strict_manifest.load()
@@ -1108,6 +1327,464 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                         attempt_strategy=args.attempt_strategy,
                     )
                 )
+
+    def _success_row(
+        self,
+        root: Path,
+        *,
+        combo_key: str = "wind_x_00_y_04",
+        attempt_id: str = "wind_x_00_y_04__rep_01__attempt_001",
+        target_run_index: int = 1,
+        attempt_index: int = 1,
+        run_alias: str = "run_01",
+    ) -> dict[str, Any]:
+        attempt_dir = defaults.combo_runs_dir(root, combo_key) / f"attempt_{attempt_index:03d}"
+        attempt_dir.mkdir(parents=True, exist_ok=True)
+        return {
+            "attempt_id": attempt_id,
+            "combo_key": combo_key,
+            "x_wind_mps": 0,
+            "y_wind_mps": 4,
+            "target_run_index": target_run_index,
+            "attempt_index": attempt_index,
+            "status": "success_full",
+            "analysis_status": "done",
+            "attempt_dir": str(attempt_dir),
+            "run_alias": run_alias,
+            "start_time_utc": "2026-05-31T00:00:00Z",
+            "end_time_utc": "2026-05-31T00:01:00Z",
+            "notes": [],
+        }
+
+    def test_defaults_run_alias_matches_legacy_format(self) -> None:
+        self.assertEqual("run_01", defaults.run_alias(1))
+
+    def test_manifest_reconcile_rejects_duplicate_attempt_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row1 = self._success_row(root)
+            row2 = dict(self._success_row(root, attempt_index=2, target_run_index=2))
+            row2["attempt_id"] = row1["attempt_id"]
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row1, row2]})
+
+            with self.assertRaisesRegex(RuntimeError, "Duplicate attempt_id"):
+                WindMatrixManifest(root).reconcile_bookkeeping()
+
+    def test_manifest_reconcile_rejects_duplicate_attempt_index_for_combo(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row1 = self._success_row(root, target_run_index=1, attempt_index=1)
+            row2 = self._success_row(root, target_run_index=2, attempt_index=1)
+            row2["attempt_id"] = "wind_x_00_y_04__rep_02__attempt_001"
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row1, row2]})
+
+            with self.assertRaisesRegex(RuntimeError, "Duplicate attempt_index 1 for combo wind_x_00_y_04"):
+                WindMatrixManifest(root).reconcile_bookkeeping()
+
+    def test_manifest_reconcile_rejects_duplicate_successful_combo_rep(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row1 = self._success_row(root, target_run_index=1, attempt_index=1)
+            row2 = self._success_row(root, target_run_index=1, attempt_index=2)
+            row2["attempt_id"] = "wind_x_00_y_04__rep_01__attempt_002"
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row1, row2]})
+
+            with self.assertRaisesRegex(RuntimeError, "Duplicate successful rep 1 for combo wind_x_00_y_04"):
+                WindMatrixManifest(root).reconcile_bookkeeping()
+
+    def test_manifest_reconcile_rejects_duplicate_successful_run_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row1 = self._success_row(root, combo_key="wind_x_00_y_04", target_run_index=1, attempt_index=1)
+            row2 = self._success_row(root, combo_key="wind_x_00_y_04", target_run_index=2, attempt_index=2)
+            row2["attempt_id"] = "wind_x_00_y_04__rep_02__attempt_002"
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row1, row2]})
+
+            with patch("test_suite.plugins.wind_matrix.manifest.defaults.run_alias", return_value="run_01"):
+                with self.assertRaisesRegex(RuntimeError, "Duplicate run_alias run_01 for combo wind_x_00_y_04"):
+                    WindMatrixManifest(root).reconcile_bookkeeping()
+
+    def test_manifest_reconcile_allows_duplicate_run_alias_across_combos(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row1 = self._success_row(root, combo_key="wind_x_00_y_04", target_run_index=1, attempt_index=1)
+            row2 = self._success_row(root, combo_key="wind_x_04_y_04", target_run_index=1, attempt_index=1)
+            row2["attempt_id"] = "wind_x_04_y_04__rep_01__attempt_001"
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row1, row2]})
+
+            WindMatrixManifest(root).reconcile_bookkeeping()
+            saved = WindMatrixManifest(root).load()["attempts"]
+            aliases = sorted(str(row.get("run_alias")) for row in saved)
+            self.assertEqual(["run_01", "run_01"], aliases)
+
+    def test_manifest_reconcile_allows_duplicate_attempt_index_across_combos(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row1 = self._success_row(root, combo_key="wind_x_00_y_04", target_run_index=1, attempt_index=1)
+            row2 = self._success_row(root, combo_key="wind_x_04_y_04", target_run_index=1, attempt_index=1)
+            row2["attempt_id"] = "wind_x_04_y_04__rep_01__attempt_001"
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row1, row2]})
+
+            WindMatrixManifest(root).reconcile_bookkeeping()
+            saved = WindMatrixManifest(root).load()["attempts"]
+            self.assertEqual([1, 1], [row.get("attempt_index") for row in saved])
+
+    def test_manifest_reconcile_rejects_success_missing_combo_key(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row = self._success_row(root)
+            row["combo_key"] = ""
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row]})
+
+            with self.assertRaisesRegex(RuntimeError, "missing combo_key"):
+                WindMatrixManifest(root).reconcile_bookkeeping()
+
+    def test_manifest_reconcile_rejects_success_invalid_target_run_index(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row = self._success_row(root)
+            row["target_run_index"] = "bad"
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row]})
+
+            with self.assertRaisesRegex(RuntimeError, "invalid target_run_index"):
+                WindMatrixManifest(root).reconcile_bookkeeping()
+
+    def test_manifest_reconcile_success_row_with_missing_attempt_index_does_not_raise(
+        self,
+    ) -> None:
+        # H-A regression: legacy reconciler imposes no attempt_index>=1 requirement on
+        # success rows. Plugin must match that behavior so historical manifests resumed by
+        # run_matrix.py open without error through WindMatrixManifest.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row = self._success_row(root)
+            del row["attempt_index"]
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row]})
+
+            # Plugin path must not raise.
+            WindMatrixManifest(root).reconcile_bookkeeping()
+
+            # The row must be counted as accepted (parity: same case passes legacy).
+            case = TestCase(
+                case_id="wind_x_00_y_04",
+                suite_name="wind_matrix",
+                parameters={"combo_key": "wind_x_00_y_04", "x_wind_mps": 0, "y_wind_mps": 4},
+            )
+            accepted = WindMatrixManifest(root, accept_square_only=True).accepted_count(case)
+            self.assertEqual(1, accepted)
+
+            # Parity anchor: legacy reconciler must also not raise on the same fixture.
+            manifest_dict = run_one.load_manifest(root)
+            legacy_changes = run_one.reconcile_manifest_bookkeeping(root, manifest_dict)
+            self.assertIsInstance(legacy_changes, list)  # no exception raised
+
+    def test_manifest_reconcile_normalizes_success_attempt_dir_before_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row = self._success_row(root)
+            row["attempt_dir"] = ""
+            expected_dir = defaults.combo_runs_dir(root, "wind_x_00_y_04") / "attempt_001"
+            expected_dir.mkdir(parents=True, exist_ok=True)
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row]})
+
+            WindMatrixManifest(root).reconcile_bookkeeping()
+            saved = WindMatrixManifest(root).load()["attempts"][0]
+            self.assertEqual(str(expected_dir), saved["attempt_dir"])
+
+    def test_manifest_reconcile_rejects_success_missing_attempt_dir_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row = self._success_row(root)
+            row["attempt_dir"] = str(root / "missing_attempt_dir")
+            # Legacy behavior normalizes to combo/runs/attempt_### before existence validation.
+            normalized = defaults.combo_runs_dir(root, "wind_x_00_y_04") / "attempt_001"
+            if normalized.exists():
+                normalized.rmdir()
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row]})
+
+            with self.assertRaisesRegex(RuntimeError, "successful attempt_dir is missing"):
+                WindMatrixManifest(root).reconcile_bookkeeping()
+
+    def test_manifest_reconcile_converts_stale_running_row_to_interrupted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row = {
+                "attempt_id": "wind_x_00_y_04__rep_01__attempt_001",
+                "combo_key": "wind_x_00_y_04",
+                "attempt_index": 1,
+                "status": "running",
+                "analysis_status": "pending",
+                "notes": [],
+            }
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row]})
+            WindMatrixManifest(root).reconcile_bookkeeping()
+            saved = WindMatrixManifest(root).load()["attempts"][0]
+
+            self.assertEqual("interrupted", saved["status"])
+            self.assertEqual("not_run", saved["analysis_status"])
+            self.assertNotIn("error", saved)
+            self.assertNotIn("ended_wall_time", saved)
+
+    def test_manifest_reconcile_preserves_terminal_status_and_normalizes_analysis_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row = {
+                "attempt_id": "wind_x_00_y_04__rep_01__attempt_001",
+                "combo_key": "wind_x_00_y_04",
+                "attempt_index": 1,
+                "status": "error",
+                "analysis_status": "pending",
+                "run_alias": "run_99",
+                "notes": [],
+            }
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row]})
+            WindMatrixManifest(root).reconcile_bookkeeping()
+            saved = WindMatrixManifest(root).load()["attempts"][0]
+
+            self.assertEqual("error", saved["status"])
+            self.assertEqual("not_run", saved["analysis_status"])
+            self.assertIsNone(saved["run_alias"])
+
+    def test_manifest_reconcile_clears_run_alias_for_non_success(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row = {
+                "attempt_id": "wind_x_00_y_04__rep_01__attempt_001",
+                "combo_key": "wind_x_00_y_04",
+                "attempt_index": 1,
+                "status": "failed",
+                "analysis_status": "not_run",
+                "run_alias": "run_01",
+                "notes": [],
+            }
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row]})
+            WindMatrixManifest(root).reconcile_bookkeeping()
+            saved = WindMatrixManifest(root).load()["attempts"][0]
+            self.assertIsNone(saved["run_alias"])
+
+    def test_manifest_reconcile_normalizes_non_success_attempt_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row = {
+                "attempt_id": "wind_x_00_y_04__rep_01__attempt_001",
+                "combo_key": "wind_x_00_y_04",
+                "attempt_index": 1,
+                "status": "failed",
+                "analysis_status": "not_run",
+                "attempt_dir": "",
+                "notes": [],
+            }
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row]})
+            WindMatrixManifest(root).reconcile_bookkeeping()
+            saved = WindMatrixManifest(root).load()["attempts"][0]
+            self.assertEqual(
+                str(defaults.combo_runs_dir(root, "wind_x_00_y_04") / "attempt_001"),
+                saved["attempt_dir"],
+            )
+
+    def test_manifest_reconcile_normalizes_success_run_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row = self._success_row(root, run_alias="run_01", target_run_index=1)
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row]})
+            WindMatrixManifest(root).reconcile_bookkeeping()
+            saved = WindMatrixManifest(root).load()["attempts"][0]
+            self.assertEqual("run_01", saved["run_alias"])
+
+    def test_manifest_reconcile_repairs_wrong_success_alias_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            combo_runs = defaults.combo_runs_dir(root, "wind_x_00_y_04")
+            row = self._success_row(root, run_alias="run_01", target_run_index=1)
+            wrong_target = combo_runs / "attempt_999"
+            wrong_target.mkdir(parents=True, exist_ok=True)
+            alias = combo_runs / "run_01"
+            alias.symlink_to(Path(os.path.relpath(str(wrong_target), start=str(combo_runs))))
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row]})
+
+            WindMatrixManifest(root).reconcile_bookkeeping()
+            self.assertTrue(alias.is_symlink())
+            self.assertEqual(
+                (combo_runs / alias.readlink()).resolve(strict=False),
+                Path(row["attempt_dir"]).resolve(strict=False),
+            )
+
+    def test_manifest_reconcile_removes_stale_normalized_old_alias_symlink_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            combo_runs = defaults.combo_runs_dir(root, "wind_x_00_y_04")
+            row = self._success_row(root, run_alias="run_99", target_run_index=1)
+            stale_alias = combo_runs / "run_99"
+            stale_alias.symlink_to(
+                Path(os.path.relpath(str(Path(row["attempt_dir"])), start=str(combo_runs)))
+            )
+            unrelated_root_alias = root / "run_99"
+            unrelated_root_alias.symlink_to(
+                Path(os.path.relpath(str(Path(row["attempt_dir"])), start=str(root)))
+            )
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row]})
+
+            WindMatrixManifest(root).reconcile_bookkeeping()
+            self.assertFalse(stale_alias.exists())
+            self.assertTrue(unrelated_root_alias.exists())
+
+    def test_manifest_reconcile_fails_when_alias_path_is_not_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            row = self._success_row(root, run_alias="run_01", target_run_index=1)
+            alias = defaults.combo_runs_dir(root, "wind_x_00_y_04") / "run_01"
+            alias.write_text("not a symlink", encoding="utf-8")
+            run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row]})
+
+            with self.assertRaisesRegex(RuntimeError, "is not a symlink"):
+                WindMatrixManifest(root).reconcile_bookkeeping()
+
+    def _write_staged_run_config(
+        self,
+        root: Path,
+        *,
+        auto_control: bool,
+        auto_wind_phase: str,
+        wipe_eeprom: bool,
+        include_local_override_name: bool,
+    ) -> dict[str, Any]:
+        mission_file = defaults.MISSION_FILE
+        param_dir = root / "params"
+        param_dir.mkdir(parents=True, exist_ok=True)
+        param_base = param_dir / "base.parm"
+        param_airspeed = param_dir / "airspeed.parm"
+        param_local_name = (
+            defaults.PLANE_PARAM_LOCAL_OVERRIDE.name
+            if include_local_override_name else "non_local_override.parm"
+        )
+        param_local = param_dir / param_local_name
+        for path in (param_base, param_airspeed, param_local):
+            path.write_text("# test\n", encoding="utf-8")
+
+        cfg = WindMatrixConfig(
+            campaign_root=root,
+            mission_file=mission_file,
+            launch_stack=False,
+            auto_control=auto_control,
+            auto_wind_phase=auto_wind_phase,
+            wipe_eeprom=wipe_eeprom,
+            param_file_stack=(param_base, param_airspeed, param_local),
+            attempt_strategy="staged",
+        )
+        stimulus = WindMatrixStimulus(cfg)
+        case = _case()
+        ctx = AttemptContext(
+            case=case,
+            campaign_root=root,
+            attempt_dir=defaults.attempt_dir(root, case.case_id, 1),
+            attempt_index=1,
+            target_run_index=1,
+            start_wall_s=0.0,
+            start_monotonic_s=0.0,
+        )
+        stimulus._ensure_attempt_dir(ctx)
+        stimulus._write_run_config(case, ctx)
+        return json.loads((ctx.attempt_dir / "run_config.json").read_text(encoding="utf-8"))
+
+    def test_staged_run_config_matches_legacy_schema_and_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_config = self._write_staged_run_config(
+                root,
+                auto_control=True,
+                auto_wind_phase="after-takeoff",
+                wipe_eeprom=True,
+                include_local_override_name=True,
+            )
+
+            expected_top_level_keys = {
+                "analysis_position_source",
+                "archived_gazebo_world_file",
+                "attempt_id",
+                "attempt_index",
+                "auto_arm_to_auto_settle_s",
+                "auto_wind_injection_alt_timeout_s",
+                "auto_wind_injection_min_relalt_m",
+                "auto_wind_phase",
+                "bin_collection_method",
+                "entry_waypoint_max_pass_distance_m",
+                "expected_named_bin_file",
+                "experiment_lane",
+                "force_arm",
+                "gazebo_launch_command",
+                "gazebo_plugin_runtime",
+                "gazebo_world_file",
+                "local_param_override_present",
+                "manual_control",
+                "mavlink_addr",
+                "mission_contract",
+                "mission_file",
+                "mission_timeout_s",
+                "param_file_provenance",
+                "param_files_loaded_at_sitl_start",
+                "param_stack_order_note",
+                "preloaded_wind_refresh",
+                "sitl_bin_dir",
+                "sitl_launch_command",
+                "sitl_use_dir",
+                "sitl_wipe_eeprom_expected",
+                "target_run_index",
+                "wind_frame",
+                "wind_info_topic",
+                "wind_injection_source",
+                "wind_topic",
+                "world_default_wind_mps",
+                "world_name",
+                "x_wind_mps",
+                "y_wind_mps",
+            }
+            self.assertEqual(expected_top_level_keys, set(run_config.keys()))
+            self.assertNotIn("attempt_strategy", run_config)
+            self.assertEqual(True, run_config["sitl_wipe_eeprom_expected"])
+            self.assertEqual(True, run_config["local_param_override_present"])
+            self.assertEqual(defaults.AUTO_ARM_TO_AUTO_SETTLE_S, run_config["auto_arm_to_auto_settle_s"])
+            self.assertEqual(
+                defaults.AUTO_WIND_INJECTION_MIN_RELALT_M,
+                run_config["auto_wind_injection_min_relalt_m"],
+            )
+            self.assertEqual(
+                defaults.AUTO_WIND_INJECTION_ALT_TIMEOUT_S,
+                run_config["auto_wind_injection_alt_timeout_s"],
+            )
+            self.assertEqual(
+                defaults.ENTRY_WAYPOINT_MAX_PASS_DISTANCE_M,
+                run_config["entry_waypoint_max_pass_distance_m"],
+            )
+
+            expected_gazebo_runtime_keys = {
+                "policy",
+                "gz_sim_system_plugin_path",
+                "gz_sim_system_plugin_path_entries",
+                "known_ardupilot_plugin_binaries",
+            }
+            self.assertEqual(
+                expected_gazebo_runtime_keys,
+                set(run_config["gazebo_plugin_runtime"].keys()),
+            )
+            self.assertNotIn("known_plugins", run_config["gazebo_plugin_runtime"])
+
+    def test_staged_run_config_manual_control_auto_settle_and_injection_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_config = self._write_staged_run_config(
+                root,
+                auto_control=False,
+                auto_wind_phase="before-arm",
+                wipe_eeprom=False,
+                include_local_override_name=False,
+            )
+
+            self.assertEqual(True, run_config["manual_control"])
+            self.assertEqual(0.0, run_config["auto_arm_to_auto_settle_s"])
+            self.assertIsNone(run_config["auto_wind_injection_min_relalt_m"])
+            self.assertIsNone(run_config["auto_wind_injection_alt_timeout_s"])
+            self.assertEqual(False, run_config["local_param_override_present"])
+            self.assertEqual(False, run_config["sitl_wipe_eeprom_expected"])
 
     def _assert_legacy_compatible_error_row(self, root: Path) -> None:
         saved = WindMatrixManifest(root).load()["attempts"][0]

@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +34,7 @@ from . import defaults
 TERMINAL_NO_ANALYSIS_STATUSES = {"failed", "error", "interrupted"}
 ANALYSIS_NOT_RUN = "not_run"
 STALE_RUNNING_NOTE = "bookkeeping_recovered_stale_running_record"
+SUCCESS_STATUSES = {"success_full", "success_square_only"}
 
 
 class WindMatrixManifest(Manifest):
@@ -383,12 +385,43 @@ def _note_once(record: dict[str, Any], note: str) -> None:
         notes.append(note)
 
 
+def _symlink_points_to(link: Path, target: Path) -> bool:
+    if not link.is_symlink():
+        return False
+    try:
+        current_target = (link.parent / link.readlink()).resolve(strict=False)
+    except OSError:
+        return False
+    return current_target == target.resolve(strict=False)
+
+
+def _ensure_alias_link(link: Path, target: Path) -> None:
+    if not target.exists():
+        raise RuntimeError(f"Run alias target does not exist: {target}")
+
+    if link.is_symlink():
+        if _symlink_points_to(link, target):
+            return
+        link.unlink()
+    elif link.exists():
+        raise RuntimeError(f"Run alias path exists and is not a symlink: {link}")
+
+    rel_target = Path(os.path.relpath(str(target), start=str(link.parent)))
+    link.symlink_to(rel_target)
+
+
 def _reconcile_manifest_bookkeeping(root: Path, manifest: dict[str, Any]) -> list[str]:
     attempts = manifest.setdefault("attempts", [])
     if not isinstance(attempts, list):
         raise RuntimeError("Manifest field 'attempts' must be a list.")
 
     changes: list[str] = []
+    stale_alias_links: list[tuple[Path, Path]] = []
+    seen_attempt_ids: set[str] = set()
+    seen_attempt_indices: set[tuple[str, int]] = set()
+    seen_success_reps: set[tuple[str, int]] = set()
+    seen_success_aliases: set[tuple[str, str]] = set()
+
     for record in attempts:
         if not isinstance(record, dict):
             raise RuntimeError("Manifest attempts must contain JSON objects.")
@@ -404,6 +437,12 @@ def _reconcile_manifest_bookkeeping(root: Path, manifest: dict[str, Any]) -> lis
                 f"{record.get('attempt_id', '<unknown attempt>')}."
             )
 
+        attempt_name = str(record.get("attempt_id", "")).strip()
+        if attempt_name:
+            if attempt_name in seen_attempt_ids:
+                raise RuntimeError(f"Duplicate attempt_id in manifest: {attempt_name}")
+            seen_attempt_ids.add(attempt_name)
+
         combo = str(record.get("combo_key", "")).strip()
         attempt_idx = _coerce_int(record.get("attempt_index"))
         if combo and attempt_idx is not None and attempt_idx >= 1:
@@ -414,29 +453,99 @@ def _reconcile_manifest_bookkeeping(root: Path, manifest: dict[str, Any]) -> lis
             if record.get("attempt_dir") != str(expected_attempt_dir):
                 record["attempt_dir"] = str(expected_attempt_dir)
                 changes.append(
-                    f"{record.get('attempt_id') or combo}: normalized attempt_dir."
+                    f"{attempt_name or combo}: normalized attempt_dir."
                 )
+            attempt_index_key = (combo, attempt_idx)
+            if attempt_index_key in seen_attempt_indices:
+                raise RuntimeError(
+                    f"Duplicate attempt_index {attempt_idx} for combo {combo} in manifest."
+                )
+            seen_attempt_indices.add(attempt_index_key)
 
         status = str(record.get("status", "")).strip()
         analysis_status = str(record.get("analysis_status", "")).strip()
+
         if status == "running":
             record["status"] = "interrupted"
+            status = "interrupted"
             if analysis_status in {"", "pending"}:
                 record["analysis_status"] = ANALYSIS_NOT_RUN
             _note_once(record, STALE_RUNNING_NOTE)
             changes.append(
-                f"{record.get('attempt_id') or combo}: "
-                "recovered stale running record as interrupted."
+                f"{attempt_name or combo}: recovered stale running record as interrupted."
             )
-        elif (
-            status in TERMINAL_NO_ANALYSIS_STATUSES
-            and analysis_status in {"", "pending"}
-        ):
+        elif status in TERMINAL_NO_ANALYSIS_STATUSES and analysis_status in {"", "pending"}:
             record["analysis_status"] = ANALYSIS_NOT_RUN
             changes.append(
-                f"{record.get('attempt_id') or combo}: "
-                f"normalized analysis_status to {ANALYSIS_NOT_RUN}."
+                f"{attempt_name or combo}: normalized analysis_status to {ANALYSIS_NOT_RUN}."
             )
+
+        if status in SUCCESS_STATUSES:
+            if not combo:
+                raise RuntimeError(f"{attempt_name or '<unknown attempt>'}: missing combo_key.")
+
+            target_run_idx = _coerce_int(record.get("target_run_index"))
+            if target_run_idx is None or target_run_idx < 1:
+                raise RuntimeError(
+                    f"{attempt_name or combo}: invalid target_run_index {record.get('target_run_index')!r}."
+                )
+
+            success_rep_key = (combo, target_run_idx)
+            if success_rep_key in seen_success_reps:
+                raise RuntimeError(
+                    f"Duplicate successful rep {target_run_idx} for combo {combo} in manifest."
+                )
+            seen_success_reps.add(success_rep_key)
+
+            expected_alias = defaults.run_alias(target_run_idx)
+            old_alias = str(record.get("run_alias", "")).strip() or None
+            attempt_dir_text = str(record.get("attempt_dir", "")).strip()
+            if old_alias != expected_alias:
+                record["run_alias"] = expected_alias
+                changes.append(
+                    f"{attempt_name or combo}: normalized run_alias to {expected_alias}."
+                )
+                if old_alias and attempt_dir_text:
+                    stale_alias_links.append(
+                        (defaults.combo_runs_dir(root, combo) / old_alias, Path(attempt_dir_text))
+                    )
+
+            run_alias_key = (combo, expected_alias)
+            if run_alias_key in seen_success_aliases:
+                raise RuntimeError(
+                    f"Duplicate run_alias {expected_alias} for combo {combo} in manifest."
+                )
+            seen_success_aliases.add(run_alias_key)
+
+            if not attempt_dir_text:
+                raise RuntimeError(f"{attempt_name or combo}: missing attempt_dir for success.")
+            if not Path(attempt_dir_text).exists():
+                raise RuntimeError(
+                    f"{attempt_name or combo}: successful attempt_dir is missing: {attempt_dir_text}"
+                )
+        elif record.get("run_alias") is not None:
+            record["run_alias"] = None
+            changes.append(
+                f"{attempt_name or combo}: cleared run_alias from non-success record."
+            )
+
+    for record in attempts:
+        status = str(record.get("status", "")).strip()
+        if status not in SUCCESS_STATUSES:
+            continue
+        combo = str(record.get("combo_key", "")).strip()
+        alias = str(record.get("run_alias", "")).strip()
+        attempt_dir_text = str(record.get("attempt_dir", "")).strip()
+        if combo and alias and attempt_dir_text:
+            _ensure_alias_link(
+                defaults.combo_runs_dir(root, combo) / alias,
+                Path(attempt_dir_text),
+            )
+
+    for stale_link, attempt_dir in stale_alias_links:
+        if stale_link.is_symlink() and _symlink_points_to(stale_link, attempt_dir):
+            stale_link.unlink()
+            changes.append(f"Removed stale alias link {stale_link.name}.")
 
     return changes
 

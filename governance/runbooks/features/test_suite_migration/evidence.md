@@ -68,6 +68,10 @@ Raw evidence stays under `evidence/`.
   canonicalizes staged running/terminal attempt directories (H-1), adds the
   `run_suite` flag-parity guard (H-5), and fixes two test defects introduced
   during the in-progress fix work (f-string braces, wrong mock namespace).
+- Strict high-finding fix report (2026-05-31, scoped to manifest reconciliation
+  parity + staged run-config exact migrated-field parity):
+  `evidence/reports/features/2026-05-31_test_suite_phase3c_manifest_run_config_parity_fixes.md`.
+  This narrows/corrects the earlier H-7 overclaim from the follow-up report.
 - Limit:
   live zero-legacy staged runtime is not proven. Runtime/environment,
   MAVLink control/monitor, and runtime wind injection still need Phase 3D-3F

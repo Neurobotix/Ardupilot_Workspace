@@ -194,6 +194,18 @@ Inspected `core/scheduler.py`, `core/suite_runner.py`,
   `success_square_only` when `accept_square_only` is set) becomes
   an accepted success; `failed`, `failed_analysis`, `error`, and
   `interrupted` are not accepted.
+  *(2026-06-01 errata: the sentence above describes the initial Phase 1
+  state before the post-review remediation in this same report. The
+  post-review High finding (see "Post-review remediation" below) added
+  the `accept_square_only` policy argument so that `success_square_only`
+  is excluded by default — a post-legacy stricter safety policy, not
+  retained legacy parity. Legacy `run_one.combo_successes` counts both
+  `success_full` and `success_square_only` unconditionally; the
+  policy-aware implementation intentionally diverges from that. Running
+  the new suite/round-robin logic over an old campaign root may retry or
+  renumber rows that legacy would have accepted as square-only success.
+  In Phase 3C this wind-compatible manifest behavior moved entirely to
+  `plugins/wind_matrix/manifest.py`.)*
 - `AttemptRunner.run` wraps the strategy body in `try/finally` so
   `EnvironmentAdapter.cleanup` always runs even when the body
   raises. `WindMatrixEnvironment.cleanup` always calls
