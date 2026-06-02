@@ -537,6 +537,68 @@ class VerdictPolicyTests(unittest.TestCase):
         self.assertTrue(v.retryable)
 
 
+# --- analyzer run-alias symlink --------------------------------------------
+class AnalyzerRunAliasTests(unittest.TestCase):
+    """An accepted run must create the curated `runs/run_NN -> attempt_MMM`
+    symlink, not just name it in the manifest. (Regression: the symlink creation
+    was missing while the manifest claimed a run_alias.)"""
+
+    def _run_analyzer(self, root: Path, *, target_run_index: int):
+        from test_suite.plugins.sensor_failure.analyzers import SensorFailureAnalyzer
+        cfg = SensorFailureConfig(campaign_root=root)
+        case = _gps_case("gps_disable")
+        attempt_dir = defaults.attempt_dir(root, case.case_id, target_run_index)
+        attempt_dir.mkdir(parents=True, exist_ok=True)
+        ctx = AttemptContext(
+            case=case, campaign_root=root, attempt_dir=attempt_dir,
+            attempt_index=target_run_index, target_run_index=target_run_index,
+            start_wall_s=0.0, start_monotonic_s=0.0,
+        )
+        # A clean, accepted safe_degraded state (enough samples, bounded).
+        ctx.extra["resilience_state"] = {
+            "verdict_mode": "hard_denial", "is_baseline": False,
+            "fault_injected": True, "fault_inject_seq": 6,
+            "confirmed_inject_params": {"SIM_GPS1_ENABLE": 0.0},
+            "mode_at_inject": "AUTO", "mode_after_inject": "AUTO",
+            "mode_changed_after_inject": False, "modes_seen": ["AUTO"],
+            "pre_inject_min_relalt_m": 98.0, "pre_inject_max_relalt_m": 102.0,
+            "pre_inject_max_roll_deg": 25.0, "pre_inject_max_pitch_deg": 10.0,
+            "pre_inject_max_groundspeed_ms": 22.0, "pre_inject_attitude_samples": 12,
+            "post_inject_min_relalt_m": 95.0, "post_inject_max_relalt_m": 101.0,
+            "post_inject_max_roll_deg": 30.0, "post_inject_max_pitch_deg": 12.0,
+            "post_inject_max_groundspeed_ms": 23.0, "post_inject_attitude_samples": 12,
+            "post_inject_max_excursion_m": 120.0, "disarmed": False,
+            "timed_out": False, "observation_duration_s": 90.0, "notes": [],
+        }
+        with mock.patch(
+            "test_suite.plugins.sensor_failure.analyzers.collect_bin_log",
+            return_value=None,
+        ), mock.patch(
+            "test_suite.plugins.sensor_failure.analyzers.time.sleep",
+        ):
+            SensorFailureAnalyzer(cfg).analyze(case, ctx)
+        return case, attempt_dir
+
+    def test_accepted_run_creates_run_alias_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            case, attempt_dir = self._run_analyzer(root, target_run_index=1)
+            alias = defaults.case_runs_dir(root, case.case_id) / defaults.run_alias(1)
+            self.assertTrue(alias.is_symlink(), "run_01 symlink was not created")
+            self.assertEqual(attempt_dir.resolve(), alias.resolve())
+
+    def test_run_alias_is_idempotent_across_attempts(self) -> None:
+        # A second accepted run for the next rep must create its own alias and
+        # not clobber the first.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._run_analyzer(root, target_run_index=1)
+            self._run_analyzer(root, target_run_index=2)
+            runs = defaults.case_runs_dir(root, "gps_disable")
+            self.assertTrue((runs / "run_01").is_symlink())
+            self.assertTrue((runs / "run_02").is_symlink())
+
+
 # --- manifest acceptance ---------------------------------------------------
 class ManifestAcceptanceTests(unittest.TestCase):
     def test_accepted_rows_count_regardless_of_behavior(self) -> None:

@@ -29,6 +29,7 @@ from typing import Any, Sequence
 from ..wind_matrix.analysis_helpers import (
     clamp_timeout_to_slot,
     collect_bin_log,
+    ensure_run_alias_link,
     summarize_exception_text,
 )
 from ...core.analysis import Analyzer
@@ -139,6 +140,13 @@ class SensorFailureAnalyzer(Analyzer):
         run_alias = None
         if accepted:
             run_alias = defaults.run_alias(ctx.target_run_index)
+            # Create the curated `<case>/runs/run_NN -> attempt_MMM` symlink so an
+            # accepted run is reachable by its run alias, not just by attempt id.
+            # (Without this the manifest names a run_alias that has no symlink.)
+            ensure_run_alias_link(
+                defaults.case_runs_dir(self.config.campaign_root, key) / run_alias,
+                ctx.attempt_dir,
+            )
 
         end_time = defaults.utc_now()
         plugin_fields = _plugin_fields(
