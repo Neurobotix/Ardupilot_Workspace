@@ -82,6 +82,15 @@
   reconciliation parity + staged run-config exact migrated-field parity)
   evidence:
   `evidence/reports/features/2026-05-31_test_suite_phase3c_manifest_run_config_parity_fixes.md`
+- CTE wind-envelope platform-briefing result package (production-like 017
+  campaign, corrected 020 source, no live reruns) evidence:
+  `evidence/reports/features/2026-06-02_cte_wind_envelope_result.md`
+- CTE wind-envelope curated analysis package:
+  `evidence/curated_logs/cte_wind_envelope_017_20260602/`
+- Pillar A flight engineering and analysis results rollup:
+  `evidence/reports/features/2026-06-02_pillar_a_flight_results.md`
+- Pillar A curated rollup package:
+  `evidence/curated_logs/pillar_a_flight_results_20260602/`
 - Superseded Phase 8 partial-retirement evidence:
   `evidence/reports/migration/PHASE_8_COMPAT_RETIREMENT_2026-05-22.md`
 - Human migration status: `docs/operations/migration_status.md`

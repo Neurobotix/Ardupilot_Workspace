@@ -1,0 +1,155 @@
+{
+  "date_curated": "2026-06-02",
+  "headline": {
+    "analysis_result": {
+      "accepted_cells": 13,
+      "accepted_runs": 32,
+      "calm_square_rms_m": 7.15,
+      "component_interaction_r2": 0.751,
+      "curated_package": "evidence/curated_logs/cte_wind_envelope_017_20260602/",
+      "ekf_wind_audit_named_bins_accepted": 38,
+      "matrix_cells": 16,
+      "no_accepted_edge_cells": 3,
+      "report": "evidence/reports/features/2026-06-02_cte_wind_envelope_result.md",
+      "result": "CTE wind-envelope",
+      "status": "verified",
+      "worst_accepted_square_rms_m": 17.99
+    },
+    "bench_is_not_flight_lane": true,
+    "flight_lane_map_count": 10,
+    "not_yet_tested_expansion_lane_count": 4,
+    "verified_core_flight_lane_count": 5
+  },
+  "lanes": [
+    {
+      "evidence": "evidence/curated_logs/phase_2_runtime_2026-05-20/plane_evidence.txt",
+      "heartbeat_count": 256,
+      "lane": "Base plane",
+      "max_altitude_m": 0.2,
+      "max_groundspeed_mps": 17.33,
+      "proof": "SITL/Gazebo/MAVLink handshake, GPS, EKF3, armed, physics coupling",
+      "sensor_or_bridge": "none",
+      "status": "verified",
+      "targets": "plane + gazebo-plane",
+      "vehicle": "Mini Talon"
+    },
+    {
+      "evidence": "evidence/curated_logs/phase_2_runtime_2026-05-20/plane-cte_evidence.txt",
+      "heartbeat_count": 126,
+      "lane": "CTE / airspeed",
+      "max_altitude_m": 46.86,
+      "max_groundspeed_mps": 23.06,
+      "proof": "SITL/Gazebo/MAVLink handshake, GPS, EKF3, Armed AUTO, airborne CTE lane",
+      "sensor_or_bridge": "airspeed/wind lane",
+      "status": "verified",
+      "targets": "plane-cte + gazebo-plane-cte",
+      "vehicle": "Mini Talon"
+    },
+    {
+      "evidence": "evidence/curated_logs/phase_2_runtime_2026-05-20/plane-lidar_evidence.txt; evidence/curated_logs/phase_2_runtime_2026-05-20/bridge-plane_console.txt",
+      "heartbeat_count": 199,
+      "lane": "Plane LiDAR",
+      "max_altitude_m": 52.51,
+      "max_groundspeed_mps": 22.37,
+      "proof": "Airborne plane LiDAR lane plus Gazebo /lidar -> bridge -> MAVLink -> ArduPilot AGL readings",
+      "sensor_or_bridge": "bridge-plane AGL 1.83 m -> 35.60 m",
+      "status": "verified",
+      "targets": "plane-lidar + gazebo-plane-lidar + bridge-plane",
+      "vehicle": "Mini Talon"
+    },
+    {
+      "evidence": "evidence/curated_logs/phase_2_runtime_2026-05-20/copter_evidence.txt",
+      "heartbeat_count": 201,
+      "lane": "Copter base",
+      "max_altitude_m": 10.02,
+      "max_groundspeed_mps": 0.04,
+      "proof": "SITL/Gazebo/MAVLink handshake, GPS, EKF3, armed, takeoff 10 reached",
+      "sensor_or_bridge": "none",
+      "status": "verified",
+      "targets": "copter + gazebo-copter",
+      "vehicle": "Iris"
+    },
+    {
+      "evidence": "evidence/curated_logs/phase_2_runtime_2026-05-20/copter-lidar_evidence.txt; evidence/curated_logs/phase_2_runtime_2026-05-20/bridge-copter_console.txt",
+      "heartbeat_count": 793,
+      "lane": "Copter LiDAR",
+      "max_altitude_m": 4.04,
+      "max_groundspeed_mps": 2.46,
+      "proof": "Copter LiDAR handshake and flight; bridge streamed 922 DISTANCE_SENSOR messages; obstacle return not captured",
+      "sensor_or_bridge": "bridge-copter 922 DISTANCE_SENSOR messages",
+      "status": "verified with caveat",
+      "targets": "copter-lidar + gazebo-copter-lidar + bridge-copter",
+      "vehicle": "Iris"
+    },
+    {
+      "evidence": "docs/architecture/simulation_lanes.md",
+      "heartbeat_count": null,
+      "lane": "Staircase",
+      "max_altitude_m": null,
+      "max_groundspeed_mps": null,
+      "proof": "Expansion lane present in lane map; no dated runtime proof yet",
+      "sensor_or_bridge": "LiDAR overpass mission",
+      "status": "not yet tested",
+      "targets": "plane-staircase + gazebo-plane-staircase + bridge-plane",
+      "vehicle": "Mini Talon"
+    },
+    {
+      "evidence": "docs/architecture/simulation_lanes.md",
+      "heartbeat_count": null,
+      "lane": "Integrated airspeed+LiDAR",
+      "max_altitude_m": null,
+      "max_groundspeed_mps": null,
+      "proof": "Expansion lane present in lane map; no dated runtime proof yet",
+      "sensor_or_bridge": "airspeed + LiDAR integrated stack",
+      "status": "not yet tested",
+      "targets": "plane-airspeed-lidar + gazebo-plane-airspeed-lidar + bridge-plane",
+      "vehicle": "Mini Talon"
+    },
+    {
+      "evidence": "docs/architecture/simulation_lanes.md",
+      "heartbeat_count": null,
+      "lane": "Altitude-wind",
+      "max_altitude_m": null,
+      "max_groundspeed_mps": null,
+      "proof": "Expansion lane present in lane map; no dated runtime proof yet",
+      "sensor_or_bridge": "runtime wind-function proof lane",
+      "status": "not yet tested",
+      "targets": "plane-altitude-wind + gazebo-plane-altitude-wind + wind-publisher-altitude",
+      "vehicle": "Mini Talon"
+    },
+    {
+      "evidence": "docs/architecture/simulation_lanes.md",
+      "heartbeat_count": null,
+      "lane": "Rebuild",
+      "max_altitude_m": null,
+      "max_groundspeed_mps": null,
+      "proof": "Expansion lane present in lane map; no dated runtime proof yet",
+      "sensor_or_bridge": "incremental wind/airspeed investigation",
+      "status": "not yet tested",
+      "targets": "plane-rebuild + gazebo-plane-rebuild",
+      "vehicle": "Mini Talon"
+    },
+    {
+      "evidence": "docs/architecture/simulation_lanes.md",
+      "heartbeat_count": null,
+      "lane": "Bench",
+      "max_altitude_m": null,
+      "max_groundspeed_mps": null,
+      "proof": "Bench worlds are isolation harnesses, not flight-ready operating worlds",
+      "sensor_or_bridge": "manual sensor experiment harness",
+      "status": "not a flight lane",
+      "targets": "gazebo-plane-bench and related",
+      "vehicle": "Mini Talon"
+    }
+  ],
+  "live_runs_performed": false,
+  "old_workspace_modified": false,
+  "scope": "Pillar A flight engineering and analysis results rollup",
+  "source_reports": [
+    "evidence/reports/migration/PHASE_2_RUNTIME_PARITY_2026-05-20.md",
+    "evidence/reports/features/2026-06-02_cte_wind_envelope_result.md",
+    "docs/architecture/simulation_lanes.md",
+    "docs/vehicles/status.md",
+    "docs/operations/launch_targets.md"
+  ]
+}
