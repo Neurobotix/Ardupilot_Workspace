@@ -36,6 +36,9 @@
   `evidence/reports/migration/PHASE_8_COMPAT_RETIREMENT_2026-05-24.md`
 - test_suite migration feature runbook:
   `governance/runbooks/features/test_suite_migration/`
+- Airspeed failure behavior feature runbook (planned second-plugin candidate;
+  no accepted runtime evidence yet):
+  `governance/runbooks/features/airspeed_failure_behavior/`
 - test_suite migration Phase 1 (wrapper parity) evidence:
   `evidence/reports/features/TEST_SUITE_MIGRATION_PHASE_1_2026-05-24.md`
 - test_suite migration Phase 2 (generic manifest) evidence:
