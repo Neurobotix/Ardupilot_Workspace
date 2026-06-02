@@ -19,6 +19,18 @@ from ..core.suite_runner import SuiteRunner, SuiteRunSettings
 from ..plugins.wind_matrix import defaults
 
 
+def _peek_plugin(argv: list[str] | None = None) -> str:
+    """Pre-scan argv for --plugin so non-wind plugins can route to their own CLI
+    without polluting the wind_matrix flag surface (Phase 1 parity contract)."""
+    items = sys.argv[1:] if argv is None else argv
+    for i, tok in enumerate(items):
+        if tok == "--plugin" and i + 1 < len(items):
+            return items[i + 1]
+        if tok.startswith("--plugin="):
+            return tok.split("=", 1)[1]
+    return "wind_matrix"
+
+
 def _parse_wind_values(text: str) -> list[int]:
     out: list[int] = []
     for chunk in text.split(","):
@@ -88,9 +100,23 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    # Plugin selection (Phase 4): route non-wind plugins to their own CLI so the
+    # wind_matrix flag surface stays exactly {--plugin, --attempt-strategy} over
+    # legacy (the Phase 1 parity contract). The wind path below is unchanged.
+    plugin_name = _peek_plugin()
+    if plugin_name == "sensor_failure":
+        from .run_sensor_failure import main as run_sensor_failure_main
+        run_sensor_failure_main()
+        return
+    if plugin_name != "wind_matrix":
+        sys.exit(
+            f"Unknown --plugin {plugin_name!r}. Known plugins: "
+            "wind_matrix, sensor_failure."
+        )
+
     args = _parse_args()
     if args.plugin != "wind_matrix":
-        sys.exit(f"Phase-1 supports only wind_matrix; got {args.plugin}")
+        sys.exit(f"run_suite wind path supports only wind_matrix; got {args.plugin}")
 
     from ..plugins.wind_matrix import build_plugin
     from ..plugins.wind_matrix.config import WindMatrixConfig
