@@ -5,7 +5,13 @@ Active waypoint missions live directly in this directory.
 ## Active Missions
 
 - `airspeed_validation_mission.waypoints`
-  Purpose: reciprocal-leg airspeed validation in wind.
+  Purpose: reciprocal-leg airspeed INTEGRATION validation in wind (legacy; not
+  the fault-injection lane).
+- `airspeed_failure_behavior_mission.waypoints`
+  Purpose: airspeed fault-injection behavior lane. 100 m cruise, 800 m reciprocal
+  East/West measurement legs, fault injected on entering seq 4, ends in RTL (no
+  landing sequence). See
+  `governance/runbooks/features/airspeed_failure_behavior/`.
 - `lidar_staircase_mission.waypoints`
   Purpose: LiDAR overpass mission for the staircase world.
 - `runway_autoland_gentle_approach_v8.waypoints`

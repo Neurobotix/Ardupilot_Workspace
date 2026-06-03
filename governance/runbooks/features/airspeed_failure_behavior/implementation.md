@@ -24,9 +24,13 @@ Planned modules:
 | `stimulus.py` | Airspeed fault parameter payloads and mission-sequence injection trigger. |
 | `control.py` | Mission upload/start orchestration hooks owned by the plugin. |
 | `monitor.py` | Attempt observation, timeout handling, sequence tracking, and artifact writing. |
-| `analyzers.py` | Artifact parsing, observation-quality checks, and behavior classification. |
+| `analyzers.py` | Airspeed-specific artifact parsing, observation-quality checks, and behavior classification. |
 | `manifest.py` | Attempt summaries and accepted-observation counting. |
 | `plugin.py` | Plugin factory and adapter wiring. |
+
+The airspeed plugin must not rely on existing CTE/square analyzers as its
+primary scorer. CTE/path-quality outputs may be attached only as optional
+supporting analysis when an attempt flies enough route geometry.
 
 Expose a plugin manifest from:
 
@@ -63,6 +67,9 @@ python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_airspeed_failure --dry-run -
 ```
 
 No-SITL construction must not require importing the legacy wind runner.
+The dedicated airspeed CLI may own its own argument surface for Phase 1. Broad
+de-winding of the existing generic `run_case.py` and `run_suite.py` CLIs is not
+required unless implementation chooses to route live runs through them.
 
 ## Runtime And Evidence Roots
 
@@ -93,28 +100,67 @@ Use:
 
 | Item | Value |
 | --- | --- |
-| Mission | `assets/missions/airspeed_validation_mission.waypoints` |
+| Mission | `assets/missions/airspeed_failure_behavior_mission.waypoints` |
 | SITL | `plane-cte` |
 | Gazebo | `gazebo-plane-cte` |
 | Base params | `config/vehicles/plane_base.parm` |
 | Airspeed overlay | `config/overlays/plane_airspeed.parm` |
 
-## Default Cases
+Mission (resolved 2026-06-03): the lane uses the new purpose-built
+`airspeed_failure_behavior_mission.waypoints` (100 m cruise, 800 m reciprocal
+East/West measurement legs, inject on entering seq 4, ends in RTL with no landing
+sequence). The legacy `airspeed_validation_mission.waypoints` is the old
+integration mission and is NOT used. See the Mission Design ADR in
+`design_adrs.md`.
 
-The v1 plugin must generate these cases:
+Overlay boundary (resolved 2026-06-03): `config/overlays/plane_airspeed.parm` is
+the conservative production-like default (`AIRSPEED_CRUISE 14`, `AIRSPEED_MIN
+10`, `AIRSPEED_MAX 22`). The aggressive high-wind CTE tuning is preserved
+separately in `config/overlays/plane_airspeed_cte_high_wind_aggressive.parm` and
+is not part of the default stack. The mission's `15 m/s` command is inside the
+`14/22` envelope, so the default stack is appropriate. Record the effective stack
+and hashes in `run_config.json` for every attempt. If a future case needs a
+different envelope, name a dedicated shared overlay under `config/` explicitly
+instead of re-aggressing the default.
+
+## Cases
+
+Fixed (non-ratio) cases the plugin must generate:
 
 ```text
-healthy_reference
-noise_5
-noise_10
-ratio_1_3
-ratio_0_7
-pitot_500pa
-fail_primary
-sign_reversed
+healthy_reference          # assert source defaults
+noise_5                    # SIM_ARSPD_RND=5
+noise_10                   # SIM_ARSPD_RND=10
+pitot_500pa                # SIM_ARSPD_FAILP=500 (NOT SIM_ARSPD_PITOT alone)
+fail_primary               # SIM_ARSPD_FAIL=1 (forced ~1 m/s; single case)
+sign_reversed              # SIM_ARSPD_SIGN=1
 ```
 
+Ratio cases are a parameterized **signed-percentage airspeed-bias sweep**, not a
+fixed pair. The generator takes a list of `bias_percent` values and emits
+`ratio_bias_pNN` (reads high) / `ratio_bias_mNN` (reads low) cases, computing
+`SIM_ARSPD_RATIO = ARSPD_RATIO / k^2` (`k = 1 + bias_percent/100`) from the
+measured vehicle `ARSPD_RATIO`. End goal: `+10..+100%` and `-10..~-50/-70%`. v1
+thin slice: `±10/30/50`. The generator must clamp/refuse `bias_percent` beyond a
+configured low-side floor (~−70%; below that the flight is just "stuck near
+zero", which is the `fail_primary`/`sign_reversed` regime). See the Case Payloads
+And Ratio Sweep ADR in `design_adrs.md`.
+
 Case generation must reject unknown case IDs before launch.
+
+Each generated case must include:
+
+- exact (or recipe-computed) `SIM_ARSPD_*` injection payload;
+- exact reset/default payload (SOURCE DEFAULTS, not zeros);
+- units and semantic notes for each parameter;
+- expected readback rule and tolerance;
+- trigger point metadata (entering seq 4);
+- acceptance thresholds or expected observation-quality requirements.
+
+Locked semantics the generator must encode (do not infer from names):
+`SIM_ARSPD_FAIL` is a forced m/s value (`fail_primary`=1), `SIM_ARSPD_OFS` is a
+no-op on `TYPE 100`, `SIM_ARSPD_PITOT` needs `FAILP!=0`, and ratio bias is the
+`ARSPD_RATIO/k^2` recipe computed from the measured vehicle ratio.
 
 ## Parameter Schema
 
@@ -138,19 +184,51 @@ SIM_ARSPD_SIGN
 
 The implementation must validate the parameter payload before launch and must
 record readback success or failure after injection.
+Before live campaign use, add a runtime schema/probe path that verifies these
+parameter names against the SITL build under test. A missing or renamed
+parameter blocks live evidence.
 
 ## Injection Rule
 
 For every live attempt:
 
-1. Publish the fixed reference wind before mission start.
-2. Start the mission with the default airspeed validation mission.
-3. Detect mission sequence `4`.
+1. Publish the fixed reference wind (`x=-5, y=0, z=0` m/s, Gazebo ENU) before
+   mission start and write `reference_wind.json` with requested vector, frame,
+   topic, readback/echo, tolerance, and success or failure. Strict echo is a hard
+   gate.
+2. Start the mission with `airspeed_failure_behavior_mission.waypoints`.
+3. Detect the locked injection trigger: **entering seq 4** — the first
+   `MISSION_CURRENT` message with `seq == 4` after confirmed front-half progress
+   (seq 1..3, AUTO, armed), first-edge latched. A missed/late trigger is a
+   `pre_injection_failure`, never a late injection. See the Injection Trigger ADR
+   in `design_adrs.md`.
 4. Inject the selected airspeed fault by setting the relevant `SIM_ARSPD_*`
    parameters.
 5. Read back every injected parameter.
 6. Write `airspeed_injection.json` with requested values, readback values,
-   timestamps, mission sequence, and readback status.
+   timestamps, trigger event, mission sequence, readback status, and reset
+   payload.
+7. Reset injected parameters before or after each attempt and preserve reset
+   status in artifacts or cleanup logs.
+
+## Required Analysis Artifacts
+
+The plugin analyzer must produce airspeed-specific outputs under the attempt
+directory. Required outputs are:
+
+| Artifact | Purpose |
+| --- | --- |
+| `airspeed_behavior_summary.json` | Behavior class, observation-quality class, acceptance decision, and reason. |
+| `airspeed_signal_metrics.json` or `.csv` | Pre/post injection airspeed, groundspeed, airspeed-minus-groundspeed, and fault-visible deltas. |
+| `mission_progress.json` | Injection seq, max seq reached, completion (planned seq-9 RTL reached + stabilized), AUTO->RTL transition seq (planned vs fault-triggered), timeout, and loss-of-progress markers. |
+| `mode_timeline.json` or `.csv` | Mode changes and relevant status text after injection. |
+| `altitude_speed_envelope.json` | Post-injection altitude and speed envelope, threshold crossings, altitude loss, and excursions. |
+| `tecs_response.json` | Throttle, pitch, and speed/height-control summaries when log fields are available. |
+
+The analyzer must mark an attempt `analysis_incomplete` when required artifacts
+or required log fields are missing. Optional TECS outputs may be omitted only
+when the summary records that the source fields were unavailable and the
+remaining artifacts still support behavior classification.
 
 ## Behavior Classification
 
@@ -171,14 +249,27 @@ The manifest must count accepted behavior observations. A degraded or failed
 flight can count when the injection occurred and the artifacts are sufficient
 to classify behavior.
 
+Observation-quality logic must be separate from behavior class. A bad flight is
+accepted as an observation only when injection succeeded, enough post-injection
+flight was observed, and required artifacts exist. Failed launch, failed
+readback, pre-injection failure, and incomplete analysis do not count as
+accepted behavior observations.
+
 ## Required No-SITL Tests
 
-- Case generation for all eight cases.
+- Case generation for the fixed cases and the ratio-sweep recipe (including the
+  v1 thin slice and the low-side clamp/refusal guard).
 - Invalid case rejection.
 - `SIM_ARSPD_*` parameter schema validation.
-- Injection trigger metadata at mission sequence `4`.
+- Runtime parameter-probe path for the required `SIM_ARSPD_*` names.
+- Exact case payload and reset payload serialization.
+- Injection trigger metadata for entering seq `4` (first `MISSION_CURRENT`
+  `seq==4` edge after front-half progress).
 - Parameter readback success and failure handling.
+- Fixed-wind artifact schema.
+- Airspeed analysis artifact schema.
 - Behavior-class classification.
+- Observation-quality classification and accepted-observation gating.
 - Manifest accepted-count logic counts valid observations, not only good
   flights.
 - Plugin construction with legacy wind-runner imports blocked.
@@ -190,6 +281,8 @@ to classify behavior.
 - One `healthy_reference` smoke run.
 - One `fail_primary` smoke run.
 - Review of smoke artifacts before the full v1 matrix.
+- A dated smoke-review note or `review.md` update with raw run roots, artifact
+  checklist, and Phase 3 gate decision.
 - Full v1 matrix only after smoke evidence is reviewed.
 
 ## Workspace Checks

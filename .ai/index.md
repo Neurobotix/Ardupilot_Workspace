@@ -113,6 +113,15 @@
   `governance/decisions/ADR-0003-phase5-campaign-safety-contract.md`
 - Clean-run and workspace-plugin decision:
   `governance/decisions/ADR-0004-clean-run-and-workspace-plugin-policy.md`
+- Airspeed failure behavior design decisions (accepted 2026-06-03; full reasoning
+  in `governance/runbooks/features/airspeed_failure_behavior/design_adrs.md` and
+  `design_research.md`):
+  `governance/decisions/ADR-0006-airspeed-failure-mission-design.md`,
+  `ADR-0007-airspeed-failure-case-payloads-and-ratio-sweep.md`,
+  `ADR-0008-airspeed-failure-reset-protocol.md`,
+  `ADR-0009-airspeed-failure-injection-trigger.md`,
+  `ADR-0010-airspeed-failure-reference-wind.md`,
+  `ADR-0011-airspeed-failure-behavior-classification.md`
 - Phase 5 Gazebo plugin fallback incident:
   `governance/audits/2026-05-21_phase5_gazebo_plugin_fallback_incident.md`
 - Phase 6 evidence/operations runbook:
