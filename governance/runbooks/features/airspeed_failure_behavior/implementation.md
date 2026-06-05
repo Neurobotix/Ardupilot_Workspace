@@ -2,8 +2,12 @@
 
 ## Implementation Status
 
-This feature is planned and not implemented. This file defines the target
-implementation shape for the airspeed failure behavior plugin.
+Phase 1 no-SITL foundation is implemented as of 2026-06-03. The plugin package,
+dry-run CLI, registry entry, case generator, parameter schema validation,
+artifact schemas, classifier helpers, manifest accepted-observation counting,
+and no-SITL tests exist. Live SITL/Gazebo launch, MAVLink parameter injection,
+wind publication/echo, log parsing, and calibrated thresholds remain Phase 2+
+work and are not claimed here.
 
 ## Code Homes
 
@@ -19,7 +23,7 @@ Planned modules:
 | --- | --- |
 | `config.py` | Typed plugin config, path defaults, case selection, runtime-root naming. |
 | `defaults.py` | Default mission, stack, params, case matrix, injection sequence, and acceptance defaults. |
-| `case_generator.py` | Eight v1 case definitions and invalid-case rejection. |
+| `case_generator.py` | Fixed case definitions plus the ratio-sweep thin slice and invalid-case rejection. |
 | `environment.py` | Plane/Gazebo launch configuration and fixed reference wind setup. |
 | `stimulus.py` | Airspeed fault parameter payloads and mission-sequence injection trigger. |
 | `control.py` | Mission upload/start orchestration hooks owned by the plugin. |

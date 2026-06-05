@@ -1,13 +1,13 @@
 # Airspeed Failure Behavior Review
 
-Status: planned / not implemented.
+Status: Phase 1 no-SITL foundation implemented; no live SITL/Gazebo evidence yet.
 
 ## Acceptance Gates
 
 | Phase | Acceptance gate | Current status |
 | --- | --- | --- |
 | Phase 0 | Candidate is airspeed; parameter list is sourced from `011_Sensor_Failure_Injection`; mission and lane stack are named; exact case payload semantics, ratio-sweep design, reset rules, injection trigger, fixed reference wind, mission design, and behavior-class vocabulary are locked. | Design locked 2026-06-03 (`design_research.md`, `design_adrs.md`, new mission); ratio numeric values + thresholds pending Phase 2 measurement. |
-| Phase 1 | Plugin constructs with no SITL; cases generate correctly; registry resolves plugin; CLI dry-run/list-cases works; runtime parameter-probe path exists; airspeed analysis artifact schema is tested; no legacy wind runner import is needed for plugin construction. | Not implemented. |
+| Phase 1 | Plugin constructs with no SITL; cases generate correctly; registry resolves plugin; CLI dry-run/list-cases works; runtime parameter-probe path exists; airspeed analysis artifact schema is tested; no legacy wind runner import is needed for plugin construction. | Implemented 2026-06-03 as a no-SITL foundation. Builder-reported targeted test pass is pending strict review evidence; do not treat Phase 1 as accepted while `make doctor` or review findings are open. The parameter-probe path is Phase-1 schema/name validation only; live SITL probing remains Phase 2. |
 | Phase 2 | One `healthy_reference` run and one `fail_primary` run execute under `var/runs/`; injection and reset are confirmed by parameter readback; fixed wind is recorded; required airspeed analysis artifacts exist; a dated smoke-review decision unlocks or blocks Phase 3; no curated feature evidence claim is made yet. | Not implemented. |
 | Phase 3 | Full v1 matrix runs with three accepted observations per case; campaign summary exists; behavior classes and observation-quality classes are assigned; failures are described as behavior outcomes where observation is valid. | Not implemented. |
 | Phase 4 | Curated package exists under `evidence/curated_logs/`; evidence report exists under `evidence/reports/features/`; evidence catalog is updated; presentation uses bounded wording. | Not implemented. |

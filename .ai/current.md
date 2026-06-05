@@ -19,7 +19,16 @@ campaign test-suite implementation ownership into organized
 and script paths. Evidence:
 `evidence/reports/migration/PHASE_8_COMPAT_RETIREMENT_2026-05-24.md`.
 
-Active feature work: the `test_suite` migration completed its Phase 3 sequence
+Active feature work: the airspeed failure behavior lane has a Phase 1 no-SITL
+plugin foundation as of 2026-06-03: plugin package, dry-run CLI, registry key,
+case generator, parameter schema validation, artifact schemas, classifier
+helpers, manifest accepted-observation counting, and no-SITL tests. It has no
+live SITL/Gazebo smoke evidence yet; Phase 2 must still prove `healthy_reference`
+and `fail_primary`, live parameter readback/reset, fixed-wind echo, artifact
+creation, and calibration before any campaign or behavior claim. See
+`governance/runbooks/features/airspeed_failure_behavior/`.
+
+Additional active feature work: the `test_suite` migration completed its Phase 3 sequence
 (3A–3G) on 2026-06-01. The staged `wind_matrix` plugin is fully zero-legacy
 (environment, MAVLink control/monitor, and wind injection all plugin-owned) and
 was live-proven against the retained legacy tool run directly; the Phase 3G gate
