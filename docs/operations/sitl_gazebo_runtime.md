@@ -74,7 +74,10 @@ Shared tuned parameters live in tracked config files:
 
 - Copter frame and navigation defaults: `config/vehicles/copter_params.parm`
 - Mini Talon base airframe defaults: `config/vehicles/plane_base.parm`
-- Gazebo airspeed and high-wind overlay: `config/overlays/plane_airspeed.parm`
+- Default Gazebo airspeed overlay (conservative 14/10/22):
+  `config/overlays/plane_airspeed.parm`
+- Aggressive high-wind CTE stress overlay (28/18/38; non-default, name
+  explicitly): `config/overlays/plane_airspeed_cte_high_wind_aggressive.parm`
 - LiDAR overlay: `config/overlays/plane_lidar.parm`
 - Campaign full stacks: `config/campaigns/*/plane_full.parm`
 
