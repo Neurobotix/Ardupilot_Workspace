@@ -34,6 +34,8 @@
   `governance/runbooks/migration/phase_8_compatibility_retirement.md`
 - Phase 8 compatibility-retirement evidence:
   `evidence/reports/migration/PHASE_8_COMPAT_RETIREMENT_2026-05-24.md`
+- Unified test-suite interactive CLI: `src/sim_ard_gaw/campaigns/test_suite/cli/run.py`
+  and `src/sim_ard_gaw/campaigns/test_suite/cli/interactive.py`
 - test_suite migration feature runbook:
   `governance/runbooks/features/test_suite_migration/`
 - Airspeed failure behavior feature runbook (planned second-plugin candidate;

@@ -19,6 +19,14 @@ campaign test-suite implementation ownership into organized
 and script paths. Evidence:
 `evidence/reports/migration/PHASE_8_COMPAT_RETIREMENT_2026-05-24.md`.
 
+A unified interactive CLI entry point (`sim-test`) was added on 2026-06-07 via
+`src/sim_ard_gaw/campaigns/test_suite/cli/run.py` and
+`src/sim_ard_gaw/campaigns/test_suite/cli/interactive.py`. It covers both
+`wind_matrix` (single case / sequential suite / round-robin) and
+`airspeed_failure` (sequential suite). No existing CLI modules were modified.
+`questionary` is now a declared dependency in `requirements.txt`. Activate with
+`env/bin/pip install -e .` then `sim-test`.
+
 Active feature work: the airspeed failure behavior lane has a Phase 1 no-SITL
 plugin foundation as of 2026-06-03: plugin package, dry-run CLI, registry key,
 case generator, parameter schema validation, artifact schemas, classifier
