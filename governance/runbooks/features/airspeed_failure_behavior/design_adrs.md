@@ -176,7 +176,6 @@ bias sweep**. One bias value per flight; never two in one flight.
 | `noise_10` | Higher Pa noise tolerated | `SIM_ARSPD_RND=10` | larger noise band | Pa | mild | High payload / Med effect |
 | `pitot_500pa` | Trapped/blocked pitot fixed pressure | `SIM_ARSPD_FAILP=500` (`PITOT=0`) | airspeed driven by impact-pressure formula vs baro | Pa | moderate | Med payload / Low effect-size |
 | `fail_primary` | Primary sensor forced low | `SIM_ARSPD_FAIL=1` | reported airspeed forced to ~1 m/s (stuck low) | m/s (forced value) | severe | High |
-| `sign_reversed` | Reversed pitot/static plumbing | `SIM_ARSPD_SIGN=1` | diff-pressure sign flips -> airspeed collapses to ~0 | enum 0/1 | severe | High |
 
 `fail_primary` is locked at `SIM_ARSPD_FAIL=1`, a single case, no variations in
 v1 (operator decision). It is documented as a **forced value** (airspeed reads
@@ -221,8 +220,8 @@ low  bias:  -10, -20, -30, -40, -50  [, -60, -70 if still flyable]  (%)
 ```
 
 Low-side reach is physically capped: "-100%" = reads zero = that is
-`fail_primary`/`sign_reversed`, not a ratio case. The case generator MUST refuse
-or clamp `bias_percent` beyond a configured low-side floor (default floor:
+the forced-low regime, not a ratio case. The case generator MUST refuse or clamp
+`bias_percent` beyond a configured low-side floor (default floor:
 `-70%`; expect realistic data only to ~-50%). This guard is documented, not
 silent.
 
@@ -246,7 +245,6 @@ healthy_reference
 noise_5, noise_10
 pitot_500pa
 fail_primary
-sign_reversed
 ratio_bias_p10, ratio_bias_p30, ratio_bias_p50   (thin high slice)
 ratio_bias_m10, ratio_bias_m30, ratio_bias_m50   (thin low slice)
 ```
@@ -305,7 +303,7 @@ Restore **source defaults**, not zeros (see Reset Protocol ADR):
    compute and store the per-case `SIM_ARSPD_RATIO` values.
 2. Probe-confirm `OFS`-only is a no-op on `TYPE 100`.
 3. Quantify `FAILP=500` realized airspeed vs baro at 100 m AGL.
-4. Quantify `FAIL=1` (~1 m/s) and `SIGN=1` (collapse to ~0).
+4. Quantify `FAIL=1` (~1 m/s).
 5. Confirm `RND=5/10` realized airspeed σ; reclassify severity from data.
 6. Confirm the low-side ratio floor: how negative can `bias_percent` go before
    the flight is just "stuck near zero"? Set the generator clamp from data.
@@ -618,7 +616,7 @@ discriminator is the maximum mission `seq` reached at the AUTO->RTL transition.
 - `ALT_LOSS_MAX_M = 30` m below the 100 m injection altitude as the
   loss-of-control altitude floor. *Provisional;* 30 m is ~30% of the 100 m cruise
   altitude — "clearly not holding altitude," not a safety claim. Revise from
-  `healthy_reference` + `fail_primary`/`sign_reversed` smoke.
+  `healthy_reference` + `fail_primary` smoke.
 
 **Calibrated from data (do NOT fix upfront):**
 
@@ -659,7 +657,7 @@ classify behavior).
 - `"nominal_completion: ARSP within healthy band (mean 14.9, σ 0.4); alt held 100±3 m; planned RTL reached after seq 8"`
 - `"degraded_completion: ratio_bias_p50 ARSP bias +48%; planned RTL reached; throttle saturated 22% of East leg"`
 - `"autopilot_contained: AUTO->RTL 4.1 s after fail_primary injection at seq 4 (max seq 4, before measurement legs done); altitude bounded"`
-- `"loss_of_control_or_timeout: altitude fell 41 m below injection altitude within 19 s of sign_reversed injection"`
+- `"loss_of_control_or_timeout: altitude fell 41 m below injection altitude within 19 s of forced-low injection"`
 - `"pre_injection_failure: seq4 current edge never observed (max seq 3); no injection"`
 - `"analysis_incomplete: ARSP field absent from BIN; cannot compute airspeed metrics"`
 
@@ -692,8 +690,7 @@ above; CTE metric discipline in
 1. Calibrate all healthy-reference bands from smoke (airspeed, `ARSP-GPS`,
    altitude, throttle, time-to-RTL).
 2. Set `MIN_POST_INJECTION_S` from the measured East-leg duration + TECS settling.
-3. Set `ALT_LOSS_MAX_M` from observed `fail_primary`/`sign_reversed` altitude
-   behavior at 100 m.
+3. Set `ALT_LOSS_MAX_M` from observed `fail_primary` altitude behavior at 100 m.
 4. Confirm `TECS`/`CTUN` field availability in the SITL BIN.
 5. Confirm the planned-RTL vs fault-RTL discriminator (max-seq-at-RTL) is clean
    on the smoke build.

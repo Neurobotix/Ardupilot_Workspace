@@ -88,9 +88,9 @@ airspeed_pin_voltage[i] = PASCAL_TO_VOLTS(airspeed_raw);   // <-- only TYPE=2 an
    SITL backend (TYPE=100) reads — is computed *before* the offset is applied.
    The default lane uses `ARSPD_TYPE 100`. So an `OFS`-based bias case would be
    silently non-observable on the default stack. The runbook's required
-   parameter list still includes `SIM_ARSPD_OFS`, but none of the eight named v1
-   cases actually use it; this is consistent, and we should keep `OFS` out of
-   the active case payloads for the default stack and document why.
+   parameter list still includes `SIM_ARSPD_OFS`, but fixed fault cases do not use
+   it as an active fault mechanism. Keep `OFS` out of active failure payloads
+   for the default stack and document why.
    *Must-verify in Phase 2:* confirm via a deliberate `OFS`-only probe that the
    reported airspeed does not move on `TYPE 100`.
 
@@ -136,14 +136,11 @@ airspeed_pin_voltage[i] = PASCAL_TO_VOLTS(airspeed_raw);   // <-- only TYPE=2 an
    high/low airspeed factor (e.g. 1.3x and 0.77x) and lock them from measured
    data, not from the raw `0.7/1.3` literals.
 
-4. **`SIM_ARSPD_SIGN` flips the differential pressure sign.** Reported airspeed
-   uses `sqrt(MAX(pressure,0)*ratio)` (or `fabsf` in the abs branch), so a
-   negative pressure typically clamps the computed airspeed to ~0. The
-   observable effect is a stuck-near-zero airspeed, similar in *direction* to
-   `fail_primary` but via a different mechanism. Expect "airspeed collapses to
-   ~0." Whether the EKF/TECS reaction differs from `fail_primary` is an
-   empirical question for the campaign, which is exactly the kind of behavior
-   contrast this lane exists to characterize.
+4. **`SIM_ARSPD_SIGN` flips the differential pressure sign, but it is not a v1
+   active case.** Under the default vehicle `ARSPD_TUBE_ORDR=2`/AUTO stack,
+   vehicle-side conversion uses absolute pressure, so a negative simulated
+   pressure is not a sustained stuck-low/collapse fault. It remains in the
+   schema only for source-default readback/reset coverage.
 
 5. **`SIM_ARSPD_FAILP` and `SIM_ARSPD_PITOT` act together through one branch.**
    The failure-pressure branch fires when `fail_pressure != 0`, and inside it
@@ -178,7 +175,6 @@ Fixed (non-ratio) cases:
 | `noise_10` | `SIM_ARSPD_RND=10` Pa | mild |
 | `pitot_500pa` | `SIM_ARSPD_FAILP=500` (NOT `PITOT` alone) | moderate; magnitude vs baro TBD |
 | `fail_primary` | `SIM_ARSPD_FAIL=1` -> forced ~1 m/s (locked, single case) | severe (stuck low) |
-| `sign_reversed` | `SIM_ARSPD_SIGN=1` -> pressure sign flip | severe (collapse to ~0) |
 
 Ratio cases are NOT a 2-case high/low pair. They are the end goal of a **signed
 percentage reported-airspeed bias sweep** (see "Ratio is a sweep" below and the

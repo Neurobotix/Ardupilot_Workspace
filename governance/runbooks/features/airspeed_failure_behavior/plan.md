@@ -87,7 +87,6 @@ Fixed (non-ratio) cases:
 | `noise_10` | `SIM_ARSPD_RND=10` (Pa) |
 | `pitot_500pa` | `SIM_ARSPD_FAILP=500` (Pa); NOT `SIM_ARSPD_PITOT` alone |
 | `fail_primary` | `SIM_ARSPD_FAIL=1` (forced ~1 m/s stuck-low; single case, no variations) |
-| `sign_reversed` | `SIM_ARSPD_SIGN=1` (pressure sign flip -> airspeed ~0) |
 
 Ratio cases are a **signed-percentage reported-airspeed bias sweep**, not a
 2-case pair. End goal: `+10..+100%` (reads high) and `-10..~-50/-70%` (reads
@@ -103,6 +102,9 @@ Key locked semantics (do NOT infer from case names during implementation):
 - `SIM_ARSPD_FAIL` is a forced airspeed VALUE in m/s, not a boolean enable.
   `fail_primary` requests `1`.
 - `SIM_ARSPD_OFS` has NO effect on `ARSPD_TYPE 100`; it is not used by any case.
+- `SIM_ARSPD_SIGN` is not an active case under the default
+  `ARSPD_TUBE_ORDR=2`/AUTO stack because vehicle conversion uses absolute
+  pressure; keep it only in source-default readback/reset handling.
 - `SIM_ARSPD_RATIO` biases airspeed only via mismatch with the vehicle
   `ARSPD_RATIO` (source default 2); ratio-case numbers are computed from the
   measured vehicle ratio in Phase 2, not hard-coded.

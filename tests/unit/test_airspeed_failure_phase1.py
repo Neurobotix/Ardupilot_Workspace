@@ -96,9 +96,8 @@ class AirspeedFailurePhase1Tests(unittest.TestCase):
                 "noise_10",
                 "pitot_500pa",
                 "fail_primary",
-                "sign_reversed",
             ],
-            [case.case_id for case in cases[:7]],
+            [case.case_id for case in cases[:6]],
         )
         payloads = {case.case_id: case.parameters["injection_payload"] for case in cases}
         self.assertEqual({}, payloads["healthy_reference"])
@@ -107,7 +106,6 @@ class AirspeedFailurePhase1Tests(unittest.TestCase):
         self.assertEqual({"SIM_ARSPD_RND": 10.0}, payloads["noise_10"])
         self.assertEqual({"SIM_ARSPD_FAILP": 500.0}, payloads["pitot_500pa"])
         self.assertEqual({"SIM_ARSPD_FAIL": 1.0}, payloads["fail_primary"])
-        self.assertEqual({"SIM_ARSPD_SIGN": 1.0}, payloads["sign_reversed"])
 
     def test_ratio_recipe_names_order_and_computation(self) -> None:
         cfg = AirspeedFailureConfig(
@@ -115,7 +113,7 @@ class AirspeedFailurePhase1Tests(unittest.TestCase):
             vehicle_arspd_ratio=3.2,
             vehicle_arspd_ratio_verified=True,
         )
-        ratio_cases = _cases(cfg)[7:]
+        ratio_cases = _cases(cfg)[6:]
         self.assertEqual(
             [
                 "ratio_bias_p10",
@@ -138,7 +136,7 @@ class AirspeedFailurePhase1Tests(unittest.TestCase):
             self.assertEqual(bias, case.parameters["ratio_recipe"]["bias_percent"])
 
     def test_ratio_calibration_required_by_default_and_floor_guard(self) -> None:
-        ratio_case = _cases()[7]
+        ratio_case = _cases()[6]
         self.assertTrue(ratio_case.parameters["calibration_required"])
         self.assertEqual(2.0, ratio_case.parameters["ratio_recipe"]["vehicle_arspd_ratio"])
         with self.assertRaisesRegex(ValueError, "low-side floor"):

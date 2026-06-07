@@ -45,7 +45,6 @@ noise_5
 noise_10
 pitot_500pa
 fail_primary
-sign_reversed
 ratio_bias_p10
 ratio_bias_p30
 ratio_bias_p50

@@ -165,7 +165,6 @@ noise_5                    # SIM_ARSPD_RND=5
 noise_10                   # SIM_ARSPD_RND=10
 pitot_500pa                # SIM_ARSPD_FAILP=500 (NOT SIM_ARSPD_PITOT alone)
 fail_primary               # SIM_ARSPD_FAIL=1 (forced ~1 m/s; single case)
-sign_reversed              # SIM_ARSPD_SIGN=1
 ```
 
 Ratio cases are a parameterized **signed-percentage airspeed-bias sweep**, not a
@@ -177,7 +176,8 @@ attempts must recompute `SIM_ARSPD_RATIO = ARSPD_RATIO / k^2`
 after clean SITL boot and before injection. End goal: `+10..+100%` and
 `-10..~-50/-70%`. v1 thin slice: `±10/30/50`. The generator must clamp/refuse
 `bias_percent` beyond a configured low-side floor (~−70%; below that the flight
-is just "stuck near zero", which is the `fail_primary`/`sign_reversed` regime).
+is just "stuck near zero", which belongs to the forced-low regime rather
+than a ratio-bias case).
 See the Case Payloads And Ratio Sweep ADR in `design_adrs.md`.
 
 Case generation must reject unknown case IDs before launch.

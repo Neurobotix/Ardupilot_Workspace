@@ -49,7 +49,9 @@ Phase 4 remains blocked until curated evidence is promoted and reviewed. See
 Follow-up review fixes on 2026-06-06 aligned current docs with the accepted
 measurement-smoke root and made live ratio-bias attempts recompute
 `SIM_ARSPD_RATIO` from the measured MAVLink `ARSPD_RATIO` readback before
-injection.
+injection. A 2026-06-07 blocker review removed the former sign-flip case from the v1
+case set because default `ARSPD_TUBE_ORDR=2`/AUTO uses absolute pressure, so
+that payload is not a sustained collapse fault on this stack.
 
 Additional active feature work: the `test_suite` migration completed its Phase 3 sequence
 (3A–3G) on 2026-06-01. The staged `wind_matrix` plugin is fully zero-legacy

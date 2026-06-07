@@ -98,7 +98,11 @@ PARAMETER_METADATA = {
     },
     "SIM_ARSPD_SIGN": {
         "units": "enum 0/1",
-        "semantics": "Differential-pressure sign flip.",
+        "semantics": (
+            "Differential-pressure sign flip. Kept in the schema so live runs "
+            "can assert/reset the source default; not an active v1 case because "
+            "the default vehicle tube order AUTO uses absolute pressure."
+        ),
         "readback_tolerance": 0.0,
     },
     "SIM_ARSPD_RATIO": {
@@ -118,7 +122,6 @@ FIXED_CASE_PAYLOADS = {
     "noise_10": {"SIM_ARSPD_RND": 10.0},
     "pitot_500pa": {"SIM_ARSPD_FAILP": 500.0},
     "fail_primary": {"SIM_ARSPD_FAIL": 1.0},
-    "sign_reversed": {"SIM_ARSPD_SIGN": 1.0},
 }
 FIXED_CASE_ORDER = tuple(FIXED_CASE_PAYLOADS.keys())
 V1_RATIO_BIAS_PERCENTS = (10, 30, 50, -10, -30, -50)

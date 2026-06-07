@@ -100,7 +100,6 @@ and 3), first-edge latched, never re-fired. A missed or late trigger is a
 | `noise_10` | `SIM_ARSPD_RND=10` (Pa) | mild |
 | `pitot_500pa` | `SIM_ARSPD_FAILP=500` (Pa) | severe signal corruption; Phase 2 measured one degraded completion |
 | `fail_primary` | `SIM_ARSPD_FAIL=1.0` (forced ~1 m/s stuck-low) | severe |
-| `sign_reversed` | `SIM_ARSPD_SIGN=1` (pressure sign flip → collapse to ~0) | severe |
 
 ### Ratio Bias Sweep
 
@@ -140,11 +139,20 @@ directly. The case names can be misleading without them.
 
 - **`SIM_ARSPD_FAIL` is not a boolean enable.** It is a forced airspeed value
   in m/s. `FAIL=1` forces ~1 m/s (stuck-low), not "failure on/off." Setting
-  `FAIL=0` disables it (source default).
+  `FAIL=0` disables it (source default). The upstream source annotation still
+  labels `FAIL` as `0:Disabled, 1:Enabled`; this lane treats that annotation as
+  misleading and follows the runtime math.
 - **`SIM_ARSPD_OFS` has no effect on `ARSPD_TYPE 100`.** The offset is added
   only to the analog voltage path. `state.airspeed_raw_pressure[i]` — the value
   the SITL backend reads for TYPE 100 — is computed before the offset. No active
   case uses `OFS`; it is included in the parameter schema only as a name-probe.
+  The upstream source labels the units as m/s, but the runtime adds the value in
+  the pressure/analog path.
+- **`SIM_ARSPD_SIGN` is not an active case in this lane.** It flips the
+  simulated differential-pressure sign, but the default vehicle
+  `ARSPD_TUBE_ORDR=2`/AUTO conversion uses absolute pressure. Under this stack
+  it is not a sustained stuck-low/collapse fault. It remains in the schema only
+  so live attempts can assert and reset the source default.
 - **`SIM_ARSPD_PITOT` only acts when `SIM_ARSPD_FAILP != 0`.** Setting
   `PITOT=500` alone with `FAILP=0` is a silent no-op. The `pitot_500pa` case
   sets `FAILP=500`.
