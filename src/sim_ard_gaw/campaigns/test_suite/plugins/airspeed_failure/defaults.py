@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -13,12 +14,19 @@ WORKSPACE_ROOT = Path(os.environ.get("ARDUPILOT_WORKSPACE", SRC_ROOT.parent)).re
 ASSETS_ROOT = WORKSPACE_ROOT / "assets"
 CONFIG_ROOT = WORKSPACE_ROOT / "config"
 VAR_ROOT = WORKSPACE_ROOT / "var"
+ARDUPILOT_ROOT = WORKSPACE_ROOT / "src" / "ardupilot"
+RUNTIME_ROOT = WORKSPACE_ROOT / "src" / "sim_ard_gaw"
+LAUNCH_SCRIPT = RUNTIME_ROOT / "launch" / "launch.sh"
+VENV_PYTHON = WORKSPACE_ROOT / "env" / "bin" / "python3"
+WORKSPACE_GAZEBO_PLUGIN_DIR = WORKSPACE_ROOT / "build" / "ardupilot_gazebo"
+WORKSPACE_GAZEBO_PLUGIN_FILE = WORKSPACE_GAZEBO_PLUGIN_DIR / "libArduPilotPlugin.so"
 
 SUITE_NAME = "airspeed_failure"
 SCENARIO_NAME = "airspeed_failure_behavior"
 LANE_NAME = "Airspeed Failure Behavior"
 CAMPAIGN_ROOT_PREFIX = "airspeed_failure_behavior"
 DEFAULT_CAMPAIGN_ROOT_PARENT = VAR_ROOT / "runs"
+DEFAULT_SITL_USE_DIR_PARENT = VAR_ROOT / "runs" / "sitl" / CAMPAIGN_ROOT_PREFIX
 
 MISSION_FILE = ASSETS_ROOT / "missions" / "airspeed_failure_behavior_mission.waypoints"
 SITL_TARGET = "plane-cte"
@@ -105,6 +113,7 @@ PARAMETER_METADATA = {
 
 FIXED_CASE_PAYLOADS = {
     "healthy_reference": {},
+    "ofs_noop_probe": {"SIM_ARSPD_OFS": 2500.0},
     "noise_5": {"SIM_ARSPD_RND": 5.0},
     "noise_10": {"SIM_ARSPD_RND": 10.0},
     "pitot_500pa": {"SIM_ARSPD_FAILP": 500.0},
@@ -119,7 +128,31 @@ DEFAULT_LOW_SIDE_FLOOR_PERCENT = -70
 
 MIN_POST_INJECTION_S = 20.0
 ALT_LOSS_MAX_M = 30.0
+FAULT_AIRSPEED_DEVIATION_MPS = 5.0
+NOMINAL_WIND_SIGN_TOLERANCE_MPS = 1.25
 PLANNED_RTL_MIN_SEQ = 8
+RTL_STABILIZE_S = 10.0
+LOW_ALTITUDE_ABORT_M = 15.0
+STACK_SETTLE_S = 3.0
+CLEANUP_TIMEOUT_S = 30.0
+HEARTBEAT_TIMEOUT_S = 30.0
+READY_HEARTBEATS_REQUIRED = 2
+FORCE_ARM_MAGIC = 21196.0
+AUTO_ARM_TO_AUTO_SETTLE_S = 5.0
+VERIFY_MISSION_ITEM_TIMEOUT_S = 5.0
+BIN_FLUSH_DELAY_S = 3.0
+ANALYSIS_HEADROOM_S = 10.0
+
+TELEMETRY_MESSAGE_TYPES = (
+    "HEARTBEAT",
+    "MISSION_CURRENT",
+    "MISSION_ITEM_REACHED",
+    "STATUSTEXT",
+    "VFR_HUD",
+    "GLOBAL_POSITION_INT",
+    "ATTITUDE",
+    "NAV_CONTROLLER_OUTPUT",
+)
 
 REQUIRED_ATTEMPT_ARTIFACTS = (
     "reference_wind.json",
@@ -145,9 +178,84 @@ def default_campaign_root() -> Path:
     return DEFAULT_CAMPAIGN_ROOT_PARENT / f"{CAMPAIGN_ROOT_PREFIX}_{timestamp_token()}"
 
 
+def default_sitl_use_dir(campaign_root: Path, case_id: str, attempt_index: int) -> Path:
+    return campaign_root / "_sitl_state" / case_id / f"attempt_{attempt_index:03d}"
+
+
 def write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def read_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def preferred_python() -> str:
+    return str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
+
+
+def log(msg: str) -> None:
+    ts = datetime.now().strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}", flush=True)
+
+
+def file_sha256(path: Path) -> str | None:
+    if not path.exists() or not path.is_file():
+        return None
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _prepend_path_entry(entry: str, current: str) -> str:
+    parts = [part for part in current.split(":") if part and part != entry]
+    return ":".join([entry, *parts])
+
+
+def runtime_env() -> dict[str, str]:
+    env = os.environ.copy()
+    if not WORKSPACE_GAZEBO_PLUGIN_FILE.exists():
+        raise RuntimeError(
+            "Workspace Gazebo plugin build is required and missing: "
+            f"{WORKSPACE_GAZEBO_PLUGIN_FILE}. Installed plugin fallback is forbidden."
+        )
+
+    resource_paths = [
+        ASSETS_ROOT / "models",
+        ASSETS_ROOT / "worlds",
+        WORKSPACE_ROOT / "src" / "SITL_Models" / "Gazebo" / "models",
+        WORKSPACE_ROOT / "src" / "SITL_Models" / "Gazebo" / "worlds",
+        WORKSPACE_ROOT / "src" / "ardupilot_gazebo" / "models",
+        WORKSPACE_ROOT / "src" / "ardupilot_gazebo" / "worlds",
+        Path("/usr/local/share/ardupilot_gazebo/models"),
+        Path("/usr/local/share/ardupilot_gazebo/worlds"),
+    ]
+    resource_path = env.get("GZ_SIM_RESOURCE_PATH", "")
+    for path in resource_paths:
+        resource_path = _prepend_path_entry(str(path), resource_path)
+    env["GZ_SIM_RESOURCE_PATH"] = resource_path
+    env["GZ_SIM_SYSTEM_PLUGIN_PATH"] = str(WORKSPACE_GAZEBO_PLUGIN_DIR)
+
+    path_parts = [part for part in env.get("PATH", "").split(":") if part]
+    for extra in (str(ARDUPILOT_ROOT / "Tools" / "autotest"), str(VENV_PYTHON.parent)):
+        if extra not in path_parts:
+            path_parts.insert(0, extra)
+    env["PATH"] = ":".join(path_parts)
+
+    python_parts = [
+        str(WORKSPACE_ROOT / "src"),
+        str(WORKSPACE_ROOT / "src" / "sim_ard_gaw" / "compat_scripts"),
+    ]
+    for part in env.get("PYTHONPATH", "").split(":"):
+        if part and part not in python_parts:
+            python_parts.append(part)
+    env["PYTHONPATH"] = ":".join(python_parts)
+    return env
 
 
 def case_attempt_id(case_id: str, target_run_index: int, attempt_index: int) -> str:

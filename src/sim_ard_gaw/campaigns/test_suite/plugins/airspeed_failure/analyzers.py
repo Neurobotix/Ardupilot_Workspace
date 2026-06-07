@@ -99,8 +99,18 @@ def classify_observation(observation: dict[str, Any]) -> dict[str, Any]:
 
     altitude_loss = float(observation.get("altitude_loss_m", 0.0) or 0.0)
     if altitude_loss > defaults.ALT_LOSS_MAX_M or observation.get("degraded_metrics"):
-        return _result("degraded_completion", "valid_degraded_completion", True)
-    return _result("nominal_completion", "valid_nominal_completion", True)
+        return _result(
+            "degraded_completion",
+            "valid_degraded_completion",
+            True,
+            reason=_measured_reason("valid_degraded_completion", observation),
+        )
+    return _result(
+        "nominal_completion",
+        "valid_nominal_completion",
+        True,
+        reason=_measured_reason("valid_nominal_completion", observation),
+    )
 
 
 def _window_met(observation: dict[str, Any]) -> bool:
@@ -113,13 +123,36 @@ def _result(
     behavior_class: str,
     observation_quality_class: str,
     accepted_observation: bool,
+    *,
+    reason: str | None = None,
 ) -> dict[str, Any]:
     return {
         "behavior_class": behavior_class,
         "observation_quality_class": observation_quality_class,
         "accepted_observation": accepted_observation,
-        "reason": observation_quality_class,
+        "reason": reason or observation_quality_class,
     }
+
+
+def _measured_reason(prefix: str, observation: dict[str, Any]) -> str:
+    metrics = observation.get("signal_metrics") if isinstance(observation, dict) else None
+    post = metrics.get("post_injection", {}) if isinstance(metrics, dict) else {}
+    airspeed = post.get("airspeed_mps", {}) if isinstance(post, dict) else {}
+    groundspeed = post.get("groundspeed_mps", {}) if isinstance(post, dict) else {}
+    values = {
+        "post_arsp_mean_mps": airspeed.get("mean"),
+        "post_gps_mean_mps": groundspeed.get("mean"),
+        "altitude_loss_m": observation.get("altitude_loss_m"),
+        "auto_to_rtl_seq": observation.get("auto_to_rtl_transition_seq"),
+        "max_seq": observation.get("max_seq_reached"),
+    }
+    parts = []
+    for key, value in values.items():
+        if isinstance(value, float):
+            parts.append(f"{key}={value:.2f}")
+        elif value is not None:
+            parts.append(f"{key}={value}")
+    return f"{prefix}: " + ", ".join(parts) if parts else prefix
 
 
 @dataclass

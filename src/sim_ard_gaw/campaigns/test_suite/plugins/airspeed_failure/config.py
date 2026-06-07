@@ -20,7 +20,13 @@ class AirspeedFailureConfig:
     param_file_stack: Sequence[Path] | None = None
     mavlink_addr: str = "udpin:0.0.0.0:14551"
     launch_stack: bool = False
+    force_arm: bool = True
+    rebuild: bool = False
+    wipe_eeprom: bool = True
+    stack_settle_s: float = defaults.STACK_SETTLE_S
+    isolated_sitl_state: bool = True
     mission_timeout_s: float = 900.0
+    heartbeat_timeout_s: float = defaults.HEARTBEAT_TIMEOUT_S
     ready_timeout_s: float = 60.0
     upload_timeout_s: float = 60.0
     arm_timeout_s: float = 60.0
@@ -33,6 +39,8 @@ class AirspeedFailureConfig:
             raise ValueError("vehicle_arspd_ratio must be > 0")
         if self.low_side_floor_percent <= -100:
             raise ValueError("low_side_floor_percent must be greater than -100")
+        if self.stack_settle_s < 0:
+            raise ValueError("stack_settle_s must be >= 0")
         for bias_percent in self.ratio_bias_percents:
             validate_bias_percent(bias_percent, self.low_side_floor_percent)
 

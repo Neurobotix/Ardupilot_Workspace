@@ -128,5 +128,33 @@ def readback_rules(payload: dict[str, float]) -> dict[str, dict[str, float]]:
     }
 
 
+def resolve_ratio_case_with_vehicle_ratio(
+    case: TestCase,
+    vehicle_arspd_ratio: float,
+) -> None:
+    """Rewrite a ratio-bias case payload from the live vehicle ARSPD_RATIO."""
+    recipe = case.parameters.get("ratio_recipe")
+    if recipe is None:
+        return
+    if vehicle_arspd_ratio <= 0:
+        raise ValueError("Live ARSPD_RATIO must be > 0 for ratio-bias cases")
+
+    bias_percent = int(recipe["bias_percent"])
+    k = 1.0 + (bias_percent / 100.0)
+    payload = {"SIM_ARSPD_RATIO": vehicle_arspd_ratio / (k * k)}
+    live_recipe = dict(recipe)
+    live_recipe.update(
+        {
+            "vehicle_arspd_ratio": vehicle_arspd_ratio,
+            "vehicle_arspd_ratio_verified": True,
+            "vehicle_arspd_ratio_source": "MAVLink PARAM_VALUE after clean SITL boot",
+        }
+    )
+    case.parameters["injection_payload"] = payload
+    case.parameters["readback_rules"] = readback_rules(payload)
+    case.parameters["ratio_recipe"] = live_recipe
+    case.parameters["calibration_required"] = False
+
+
 def list_case_ids(config: AirspeedFailureConfig) -> list[str]:
     return [case.case_id for case in AirspeedFailureCaseGenerator(config).iter_cases()]
