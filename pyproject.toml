@@ -7,3 +7,6 @@ requires-python = ">=3.10"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "src/sim_ard_gaw/compat_scripts"]
+
+[project.scripts]
+sim-test = "sim_ard_gaw.campaigns.test_suite.cli.run:main"

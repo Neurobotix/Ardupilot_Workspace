@@ -1,4 +1,5 @@
 pymavlink
+questionary
 MAVProxy
 pexpect
 empy==3.3.4
