@@ -33,13 +33,17 @@ from sim_ard_gaw.campaigns.test_suite.plugins.airspeed_failure.analyzers import 
 from sim_ard_gaw.campaigns.test_suite.plugins.airspeed_failure.case_generator import (  # noqa: E402
     AirspeedFailureCaseGenerator,
     ratio_case_id,
+    resolve_ratio_case_with_vehicle_ratio,
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.airspeed_failure.config import (  # noqa: E402
     AirspeedFailureConfig,
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.airspeed_failure.environment import (  # noqa: E402
+    baseline_matches_source_defaults,
     build_reference_wind_artifact,
+    parse_wind_echo,
     reference_wind_artifact_schema,
+    wind_echo_matches,
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.airspeed_failure.manifest import (  # noqa: E402
     AirspeedFailureManifest,
@@ -87,16 +91,18 @@ class AirspeedFailurePhase1Tests(unittest.TestCase):
         self.assertEqual(
             [
                 "healthy_reference",
+                "ofs_noop_probe",
                 "noise_5",
                 "noise_10",
                 "pitot_500pa",
                 "fail_primary",
                 "sign_reversed",
             ],
-            [case.case_id for case in cases[:6]],
+            [case.case_id for case in cases[:7]],
         )
         payloads = {case.case_id: case.parameters["injection_payload"] for case in cases}
         self.assertEqual({}, payloads["healthy_reference"])
+        self.assertEqual({"SIM_ARSPD_OFS": 2500.0}, payloads["ofs_noop_probe"])
         self.assertEqual({"SIM_ARSPD_RND": 5.0}, payloads["noise_5"])
         self.assertEqual({"SIM_ARSPD_RND": 10.0}, payloads["noise_10"])
         self.assertEqual({"SIM_ARSPD_FAILP": 500.0}, payloads["pitot_500pa"])
@@ -109,7 +115,7 @@ class AirspeedFailurePhase1Tests(unittest.TestCase):
             vehicle_arspd_ratio=3.2,
             vehicle_arspd_ratio_verified=True,
         )
-        ratio_cases = _cases(cfg)[6:]
+        ratio_cases = _cases(cfg)[7:]
         self.assertEqual(
             [
                 "ratio_bias_p10",
@@ -132,13 +138,37 @@ class AirspeedFailurePhase1Tests(unittest.TestCase):
             self.assertEqual(bias, case.parameters["ratio_recipe"]["bias_percent"])
 
     def test_ratio_calibration_required_by_default_and_floor_guard(self) -> None:
-        ratio_case = _cases()[6]
+        ratio_case = _cases()[7]
         self.assertTrue(ratio_case.parameters["calibration_required"])
         self.assertEqual(2.0, ratio_case.parameters["ratio_recipe"]["vehicle_arspd_ratio"])
         with self.assertRaisesRegex(ValueError, "low-side floor"):
             AirspeedFailureConfig(ratio_bias_percents=(-80,))
         with self.assertRaisesRegex(ValueError, "non-zero"):
             AirspeedFailureConfig(ratio_bias_percents=(0,))
+
+    def test_live_ratio_case_is_resolved_from_measured_vehicle_ratio(self) -> None:
+        ratio_case = AirspeedFailureCaseGenerator(AirspeedFailureConfig()).get_case(
+            "ratio_bias_p10"
+        )
+        resolve_ratio_case_with_vehicle_ratio(ratio_case, 3.2)
+        expected = 3.2 / (1.1 * 1.1)
+        self.assertAlmostEqual(
+            expected,
+            ratio_case.parameters["injection_payload"]["SIM_ARSPD_RATIO"],
+        )
+        self.assertAlmostEqual(
+            expected,
+            ratio_case.parameters["readback_rules"]["SIM_ARSPD_RATIO"]["expected"],
+        )
+        self.assertFalse(ratio_case.parameters["calibration_required"])
+        self.assertEqual(3.2, ratio_case.parameters["ratio_recipe"]["vehicle_arspd_ratio"])
+        self.assertTrue(
+            ratio_case.parameters["ratio_recipe"]["vehicle_arspd_ratio_verified"]
+        )
+        self.assertEqual(
+            "MAVLink PARAM_VALUE after clean SITL boot",
+            ratio_case.parameters["ratio_recipe"]["vehicle_arspd_ratio_source"],
+        )
 
     def test_invalid_case_id_rejected_before_launch(self) -> None:
         generator = AirspeedFailureCaseGenerator(AirspeedFailureConfig())
@@ -170,10 +200,15 @@ class AirspeedFailurePhase1Tests(unittest.TestCase):
         )
         active_payload_names = {
             name
-            for case in cases.values()
+            for case_id, case in cases.items()
+            if case_id != "ofs_noop_probe"
             for name in case.parameters["injection_payload"]
         }
         self.assertNotIn("SIM_ARSPD_OFS", active_payload_names)
+        self.assertEqual(
+            {"SIM_ARSPD_OFS": 2500.0},
+            cases["ofs_noop_probe"].parameters["injection_payload"],
+        )
         self.assertNotEqual(
             {"SIM_ARSPD_PITOT": 500.0},
             cases["pitot_500pa"].parameters["injection_payload"],
@@ -223,6 +258,24 @@ class AirspeedFailurePhase1Tests(unittest.TestCase):
         self.assertIn("altitude_speed_envelope.json", schemas)
         self.assertTrue(schemas["tecs_response.json"]["optional"])
 
+    def test_phase2_wind_echo_and_baseline_gates(self) -> None:
+        echo = """
+        linear_velocity {
+          x: -5
+          y: 0
+          z: 0
+        }
+        enable_wind: true
+        """
+        parsed = parse_wind_echo(echo)
+        self.assertEqual({"x": -5.0, "y": 0.0, "z": 0.0, "enable_wind": True}, parsed)
+        self.assertTrue(wind_echo_matches(parsed))
+        self.assertFalse(wind_echo_matches({"x": 5.0, "y": 0.0, "z": 0.0, "enable_wind": True}))
+        self.assertTrue(baseline_matches_source_defaults(EXPECTED_SOURCE_DEFAULTS))
+        bad_baseline = dict(EXPECTED_SOURCE_DEFAULTS)
+        bad_baseline["SIM_ARSPD_RND"] = 0.0
+        self.assertFalse(baseline_matches_source_defaults(bad_baseline))
+
     def test_default_campaign_root_is_timestamped_under_var_runs(self) -> None:
         cfg = AirspeedFailureConfig()
         self.assertEqual(defaults.DEFAULT_CAMPAIGN_ROOT_PARENT, cfg.campaign_root.parent)
@@ -247,6 +300,10 @@ class AirspeedFailurePhase1Tests(unittest.TestCase):
         self.assertEqual(
             "degraded_completion",
             classify_observation({**base, "altitude_loss_m": 31})["behavior_class"],
+        )
+        self.assertEqual(
+            "degraded_completion",
+            classify_observation({**base, "degraded_metrics": True})["behavior_class"],
         )
         self.assertEqual(
             "autopilot_contained",
@@ -453,6 +510,24 @@ class AirspeedFailurePhase1Tests(unittest.TestCase):
         self.assertNotEqual(0, proc.returncode)
         self.assertIn("Unknown airspeed_failure case id", proc.stderr)
 
+    def test_cli_live_smoke_requires_explicit_confirmation(self) -> None:
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(SRC)
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "sim_ard_gaw.campaigns.test_suite.cli.run_airspeed_failure",
+                "--live-smoke",
+            ],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(0, proc.returncode)
+        self.assertIn("live Phase 2 runs require --confirm-live-phase2", proc.stderr)
+
     def test_no_legacy_runner_tokens_in_airspeed_plugin_sources(self) -> None:
         plugin_dir = SRC / "sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure"
         forbidden = ("run_one", "run_matrix", "run_matrix_round_robin")
@@ -461,6 +536,13 @@ class AirspeedFailurePhase1Tests(unittest.TestCase):
             for token in forbidden:
                 with self.subTest(path=path.name, token=token):
                     self.assertNotIn(token, text)
+
+    def test_phase2_live_stubs_are_removed(self) -> None:
+        plugin_dir = SRC / "sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure"
+        for path in ("environment.py", "control.py", "monitor.py"):
+            text = (plugin_dir / path).read_text(encoding="utf-8")
+            with self.subTest(path=path):
+                self.assertNotIn("NotImplementedError", text)
 
 
 if __name__ == "__main__":
