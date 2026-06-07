@@ -2,12 +2,20 @@
 
 ## Implementation Status
 
-Phase 1 no-SITL foundation is implemented as of 2026-06-03. The plugin package,
+Phase 1 no-SITL foundation is accepted as of 2026-06-05. The plugin package,
 dry-run CLI, registry entry, case generator, parameter schema validation,
 artifact schemas, classifier helpers, manifest accepted-observation counting,
-and no-SITL tests exist. Live SITL/Gazebo launch, MAVLink parameter injection,
-wind publication/echo, log parsing, and calibrated thresholds remain Phase 2+
-work and are not claimed here.
+and no-SITL tests exist.
+
+Phase 2 live measurement smoke is accepted as of 2026-06-06 from raw root
+`var/runs/airspeed_failure_behavior_20260606T164050810132Z/`. The implementation
+owns its SITL/Gazebo process launch, workspace-built Gazebo plugin gate, MAVLink
+readiness, mission upload and download verification, pre-mission fixed-wind
+publish plus strict echo, boot-baseline parameter capture, seq-4 injection,
+injected-parameter readback, reset-to-boot-baseline, raw attempt artifact
+writing, behavior classification, wind-sign backfill, provisional healthy bands,
+and the Phase 2 `OFS` no-op / `FAILP=500` measurement probes. No curated feature
+evidence or Phase 4 behavior claim is made by this implementation status.
 
 ## Code Homes
 
@@ -69,6 +77,26 @@ python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_airspeed_failure --list-case
 python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_airspeed_failure --dry-run --case healthy_reference
 python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_airspeed_failure --dry-run --case fail_primary
 ```
+
+The Phase 2 guarded live smoke entrypoint is:
+
+```bash
+python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_airspeed_failure --live-smoke --confirm-live-phase2
+```
+
+It runs exactly `healthy_reference` and `fail_primary` under `var/runs/` and
+does not promote output to curated evidence. The confirmation flag is required
+so Phase 2 cannot launch SITL/Gazebo accidentally from a discovery command.
+
+The accepted Phase 2 measurement-smoke entrypoint is:
+
+```bash
+python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_airspeed_failure --live-measurement-probes --confirm-live-phase2
+```
+
+It runs `healthy_reference`, `ofs_noop_probe`, `pitot_500pa`, and
+`fail_primary` under `var/runs/` and does not promote output to curated
+evidence.
 
 No-SITL construction must not require importing the legacy wind runner.
 The dedicated airspeed CLI may own its own argument surface for Phase 1. Broad
@@ -142,13 +170,15 @@ sign_reversed              # SIM_ARSPD_SIGN=1
 
 Ratio cases are a parameterized **signed-percentage airspeed-bias sweep**, not a
 fixed pair. The generator takes a list of `bias_percent` values and emits
-`ratio_bias_pNN` (reads high) / `ratio_bias_mNN` (reads low) cases, computing
-`SIM_ARSPD_RATIO = ARSPD_RATIO / k^2` (`k = 1 + bias_percent/100`) from the
-measured vehicle `ARSPD_RATIO`. End goal: `+10..+100%` and `-10..~-50/-70%`. v1
-thin slice: `±10/30/50`. The generator must clamp/refuse `bias_percent` beyond a
-configured low-side floor (~−70%; below that the flight is just "stuck near
-zero", which is the `fail_primary`/`sign_reversed` regime). See the Case Payloads
-And Ratio Sweep ADR in `design_adrs.md`.
+`ratio_bias_pNN` (reads high) / `ratio_bias_mNN` (reads low) cases. Dry-run
+values use the configured `vehicle_arspd_ratio` as a planning recipe. Live
+attempts must recompute `SIM_ARSPD_RATIO = ARSPD_RATIO / k^2`
+(`k = 1 + bias_percent/100`) from the measured MAVLink `ARSPD_RATIO` readback
+after clean SITL boot and before injection. End goal: `+10..+100%` and
+`-10..~-50/-70%`. v1 thin slice: `±10/30/50`. The generator must clamp/refuse
+`bias_percent` beyond a configured low-side floor (~−70%; below that the flight
+is just "stuck near zero", which is the `fail_primary`/`sign_reversed` regime).
+See the Case Payloads And Ratio Sweep ADR in `design_adrs.md`.
 
 Case generation must reject unknown case IDs before launch.
 
@@ -188,9 +218,11 @@ SIM_ARSPD_SIGN
 
 The implementation must validate the parameter payload before launch and must
 record readback success or failure after injection.
-Before live campaign use, add a runtime schema/probe path that verifies these
-parameter names against the SITL build under test. A missing or renamed
-parameter blocks live evidence.
+Before live campaign use, verify these parameter names against the SITL build
+under test. The Phase 2 live path reads all required names from the clean booted
+vehicle before wind/mission/injection and fails closed on missing, renamed, or
+source-default-mismatched values. A missing or renamed parameter blocks live
+evidence.
 
 ## Injection Rule
 
@@ -233,6 +265,12 @@ The analyzer must mark an attempt `analysis_incomplete` when required artifacts
 or required log fields are missing. Optional TECS outputs may be omitted only
 when the summary records that the source fields were unavailable and the
 remaining artifacts still support behavior classification.
+
+Phase 2 live smoke writes TECS response from MAVLink `VFR_HUD` throttle,
+`ATTITUDE` pitch, and speed/height samples. BIN `TECS`/`CTUN` field parsing is
+not required for smoke acceptance unless the dated smoke review decides the
+MAVLink fields are insufficient for classification; in that case the smoke
+review must block Phase 3 or require a rerun with expanded log extraction.
 
 ## Behavior Classification
 
@@ -283,8 +321,10 @@ accepted behavior observations.
 ## Required Live Gates
 
 - One `healthy_reference` smoke run.
+- One `ofs_noop_probe` measurement run.
+- One `pitot_500pa` measurement run.
 - One `fail_primary` smoke run.
-- Review of smoke artifacts before the full v1 matrix.
+- Review of measurement-smoke artifacts before the full v1 matrix.
 - A dated smoke-review note or `review.md` update with raw run roots, artifact
   checklist, and Phase 3 gate decision.
 - Full v1 matrix only after smoke evidence is reviewed.
