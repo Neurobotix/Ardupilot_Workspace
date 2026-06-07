@@ -14,6 +14,9 @@ Active waypoint missions live directly in this directory.
   `governance/runbooks/features/airspeed_failure_behavior/`.
 - `lidar_staircase_mission.waypoints`
   Purpose: LiDAR overpass mission for the staircase world.
+- `quad_star_showcase_mission.waypoints`
+  Purpose: Iris quadcopter showcase mission that traces a five-point star and
+  returns to launch.
 - `runway_autoland_gentle_approach_v8.waypoints`
   Purpose: retained runway autoland mission from the landing-tuning cycle.
 - `square_500m_five_laps_loiter5_land.waypoints`

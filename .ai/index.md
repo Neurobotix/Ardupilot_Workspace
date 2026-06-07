@@ -38,8 +38,8 @@
   and `src/sim_ard_gaw/campaigns/test_suite/cli/interactive.py`
 - test_suite migration feature runbook:
   `governance/runbooks/features/test_suite_migration/`
-- Airspeed failure behavior feature runbook (planned second-plugin candidate;
-  no accepted runtime evidence yet):
+- Airspeed failure behavior feature runbook (second `test_suite` plugin lane;
+  Phase 2 raw measurement smoke accepted 2026-06-06; no curated feature evidence yet):
   `governance/runbooks/features/airspeed_failure_behavior/`
 - test_suite migration Phase 1 (wrapper parity) evidence:
   `evidence/reports/features/TEST_SUITE_MIGRATION_PHASE_1_2026-05-24.md`
@@ -103,7 +103,9 @@
 - Quick start: `docs/onboarding/quick_start.md`
 - Troubleshooting guide: `docs/operations/troubleshooting.md`
 - Simulation lanes and flight modes: `docs/architecture/simulation_lanes.md`
+- Airspeed failure behavior lane (behavior characterization; Phase 2 measurement smoke accepted 2026-06-06; Phase 3 not yet run): `docs/architecture/airspeed_failure_lane.md`
 - Launch target status: `docs/operations/launch_targets.md`
+- Airspeed failure behavior — verified no-SITL commands, stack, output paths, live-run gate: `docs/operations/airspeed_failure_runbook.md`
 - SITL/Gazebo runtime notes: `docs/operations/sitl_gazebo_runtime.md`
 - Vehicle status: `docs/vehicles/status.md`
 - Wind matrix campaign status: `docs/campaigns/wind_matrix.md`

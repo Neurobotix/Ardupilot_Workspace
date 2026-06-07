@@ -28,13 +28,28 @@ A unified interactive CLI entry point (`sim-test`) was added on 2026-06-07 via
 `env/bin/pip install -e .` then `sim-test`.
 
 Active feature work: the airspeed failure behavior lane has a Phase 1 no-SITL
-plugin foundation as of 2026-06-03: plugin package, dry-run CLI, registry key,
-case generator, parameter schema validation, artifact schemas, classifier
-helpers, manifest accepted-observation counting, and no-SITL tests. It has no
-live SITL/Gazebo smoke evidence yet; Phase 2 must still prove `healthy_reference`
-and `fail_primary`, live parameter readback/reset, fixed-wind echo, artifact
-creation, and calibration before any campaign or behavior claim. See
+plugin foundation accepted after strict review on 2026-06-05: plugin package,
+dry-run CLI, registry key, case generator, parameter schema validation,
+artifact schemas, classifier helpers, manifest accepted-observation counting,
+and no-SITL tests. The 2026-06-05 review fixed the sourced-workspace Python
+module path for the documented CLI and found no remaining blocker, critical, or
+high Phase 1 findings. Phase 2 live measurement smoke was accepted on
+2026-06-06 from raw root
+`var/runs/airspeed_failure_behavior_20260606T164050810132Z/`: the guarded run
+verified fixed-wind echo, `SIM_ARSPD_*` boot defaults, vehicle
+`ARSPD_RATIO/USE/TYPE`, seq-4 injection timing, injection/reset readback,
+required artifacts, planned RTL discrimination, `OFS` no-op behavior,
+`FAILP=500` effect size, and behavior summaries
+(`healthy_reference=nominal_completion`, `ofs_noop_probe=nominal_completion`,
+`pitot_500pa=degraded_completion`, `fail_primary=degraded_completion`). No
+curated feature evidence exists yet; Phase 3 full matrix is unblocked, while
+Phase 4 remains blocked until curated evidence is promoted and reviewed. See
 `governance/runbooks/features/airspeed_failure_behavior/`.
+
+Follow-up review fixes on 2026-06-06 aligned current docs with the accepted
+measurement-smoke root and made live ratio-bias attempts recompute
+`SIM_ARSPD_RATIO` from the measured MAVLink `ARSPD_RATIO` readback before
+injection.
 
 Additional active feature work: the `test_suite` migration completed its Phase 3 sequence
 (3A–3G) on 2026-06-01. The staged `wind_matrix` plugin is fully zero-legacy
