@@ -19,8 +19,9 @@ class AirspeedFailureMissionControl(ControlStrategy):
     def execute(self, case: TestCase, ctx: AttemptContext) -> None:
         if not self.config.launch_stack:
             return None
+        mission_file = case.mission_file or self.config.mission_file
         return MavlinkAutoMissionControl(
-            mission_file=self.config.mission_file,
+            mission_file=mission_file,
             upload_timeout_s=self.config.upload_timeout_s,
             arm_timeout_s=self.config.arm_timeout_s,
             mode_timeout_s=self.config.mode_timeout_s,

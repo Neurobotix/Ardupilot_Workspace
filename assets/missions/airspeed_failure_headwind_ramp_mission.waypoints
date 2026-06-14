@@ -1,0 +1,49 @@
+QGC WPL 110
+# ============================================================================
+# AIRSPEED FAILURE HEADWIND STEPPED RAMP MISSION v1
+# Purpose:
+#   Positive reported-airspeed bias stepped ramp for the airspeed_failure
+#   behavior lane. This is a separate experiment from both the fixed-bias
+#   reciprocal sweep and the baseline-reset pulse ladder. It keeps the aircraft
+#   on one long Eastbound headwind leg while the monitor raises the reported
+#   airspeed bias upward in one flight. The standard case ends at +100%; the
+#   extended boundary-probe case continues through +200%.
+#
+# Design:
+#   - Cruise altitude 100 m AGL. The experiment is allowed to find stall/loss
+#     thresholds; altitude is not raised to mask degradation.
+#   - Fixed reference wind remains Gazebo ENU x=-5, y=0, z=0 m/s, so an
+#     Eastbound leg is continuous headwind exposure.
+#   - Longer takeoff/climb runway and farther settle point avoid the pre-fault
+#     overshoot/turnback seen when the aircraft was asked to climb and settle
+#     too close to home.
+#   - Measurement starts on entering seq 4, after reaching the seq 3 settle
+#     point 2000 m East of home.
+#   - WP3 -> WP4 is 23000 m long. The monitor finishes the run after the final
+#     case-specific final observe window, resets the params, and does not wait
+#     for RTL.
+#   - There is intentionally no RTL waypoint in this mission.
+#
+# Commanded cruise: DO_CHANGE_SPEED = 15 m/s.
+# Injection schedule lives in the airspeed_failure plugin:
+#   baseline 60 s, then +10, +20, ... to the case-specific final bias, one
+#   60 s window each.
+#   There is no reset between ramp levels; this is accumulating drift evidence.
+# ============================================================================
+
+# Home
+0	1	0	16	0	0	0	0	-35.3632620	149.1652370	584.00	1
+
+# WP1: TAKEOFF East, climb to 100 m AGL over a longer runway.
+1	0	3	22	15.0	0	0	0	-35.3632620	149.1784556	100.00	1
+
+# WP2: Command target airspeed = 15 m/s
+# MAV_CMD_DO_CHANGE_SPEED (178): param1=0 (airspeed), param2=15
+2	0	0	178	0	15.0	0	0	0	0	0	1
+
+# WP3: Eastbound settle point, 2000 m East of home.
+3	0	3	16	0	0	0	0	-35.3632620	149.1872680	100.00	1
+
+# WP4: Long Eastbound HEADWIND line holder, 25000 m East of home.
+# STEPPED RAMP START: baseline confirmation begins on ENTERING seq 4.
+4	0	3	16	0	0	0	0	-35.3632620	149.4406245	100.00	1

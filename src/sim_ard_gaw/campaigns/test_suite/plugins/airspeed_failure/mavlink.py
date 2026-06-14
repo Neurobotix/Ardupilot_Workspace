@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pymavlink import mavutil, mavwp  # type: ignore[reportMissingImports]
 
@@ -12,7 +12,7 @@ from . import defaults
 
 def wait_for_heartbeat(mavlink_addr: str, timeout: float) -> mavutil.mavfile:
     defaults.log(f"Listening for heartbeat on {mavlink_addr} (timeout {timeout:.0f}s)")
-    master = mavutil.mavlink_connection(mavlink_addr)
+    master: Any = mavutil.mavlink_connection(mavlink_addr)
     hb = master.wait_heartbeat(timeout=timeout)
     if hb is None:
         raise TimeoutError(f"No heartbeat received within {timeout:.0f}s.")
@@ -20,7 +20,7 @@ def wait_for_heartbeat(mavlink_addr: str, timeout: float) -> mavutil.mavfile:
         f"Heartbeat received sysid={master.target_system} "
         f"mode={mavutil.mode_string_v10(hb)}"
     )
-    return master
+    return cast(mavutil.mavfile, master)
 
 
 def request_live_streams(master: mavutil.mavfile, rate_hz: int = 5) -> None:
@@ -128,7 +128,7 @@ def mission_item_int(
     wp: Any,
     target_system: int,
     target_component: int,
-) -> mavutil.mavlink.MAVLink_mission_item_int_message:
+) -> Any:
     if wp.get_type() == "MISSION_ITEM_INT":
         wp.target_system = target_system
         wp.target_component = target_component

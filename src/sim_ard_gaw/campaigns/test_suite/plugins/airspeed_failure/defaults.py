@@ -29,6 +29,12 @@ DEFAULT_CAMPAIGN_ROOT_PARENT = VAR_ROOT / "runs"
 DEFAULT_SITL_USE_DIR_PARENT = VAR_ROOT / "runs" / "sitl" / CAMPAIGN_ROOT_PREFIX
 
 MISSION_FILE = ASSETS_ROOT / "missions" / "airspeed_failure_behavior_mission.waypoints"
+RAMP_MISSION_FILE = (
+    ASSETS_ROOT / "missions" / "airspeed_failure_headwind_ramp_mission.waypoints"
+)
+PULSE_LADDER_MISSION_FILE = (
+    ASSETS_ROOT / "missions" / "airspeed_failure_headwind_pulse_ladder_mission.waypoints"
+)
 SITL_TARGET = "plane-cte"
 GAZEBO_TARGET = "gazebo-plane-cte"
 SITL_LAUNCH_COMMAND = "scripts/ops/launch.sh plane-cte"
@@ -128,6 +134,28 @@ V1_RATIO_BIAS_PERCENTS = (10, 30, 50, -10, -30, -50)
 FULL_RATIO_BIAS_PERCENTS = tuple(range(10, 101, 10)) + tuple(range(-10, -51, -10))
 DEFAULT_VEHICLE_ARSPD_RATIO = 2.0
 DEFAULT_LOW_SIDE_FLOOR_PERCENT = -70
+RAMP_CASE_ID = "ratio_bias_ramp_p10_to_p100_headwind"
+RAMP_BIAS_PERCENTS = tuple(range(10, 101, 10))
+EXTENDED_RAMP_CASE_ID = "ratio_bias_ramp_p10_to_p200_headwind"
+EXTENDED_RAMP_BIAS_PERCENTS = tuple(range(10, 201, 10))
+RAMP_INITIAL_BASELINE_SETTLE_S = 60.0
+RAMP_STEP_OBSERVE_S = 60.0
+RAMP_SETTLE_NOTE = (
+    "Stepped ramp uses one 60 s baseline window, then increasing positive "
+    "reported-airspeed bias windows with no reset between fault levels. This "
+    "is accumulating drift evidence, not independent dose-response evidence."
+)
+PULSE_LADDER_CASE_ID = "ratio_bias_pulse_p10_to_p130_headwind"
+PULSE_LADDER_BIAS_PERCENTS = tuple(range(10, 131, 10))
+PULSE_LADDER_INITIAL_BASELINE_SETTLE_S = 60.0
+PULSE_LADDER_BASELINE_SETTLE_S = 60.0
+PULSE_LADDER_FAULT_OBSERVE_S = 60.0
+PULSE_LADDER_SETTLE_NOTE = (
+    "Each window is 60 s: roughly 12 TECS_TIME_CONST values at the configured "
+    "5 s time constant. The sequence starts with a 60 s baseline window, then "
+    "alternates fault observe and baseline reset/settle windows before the "
+    "next higher positive reported-airspeed bias."
+)
 
 MIN_POST_INJECTION_S = 20.0
 ALT_LOSS_MAX_M = 30.0
@@ -155,6 +183,7 @@ TELEMETRY_MESSAGE_TYPES = (
     "GLOBAL_POSITION_INT",
     "ATTITUDE",
     "NAV_CONTROLLER_OUTPUT",
+    "SERVO_OUTPUT_RAW",
 )
 
 REQUIRED_ATTEMPT_ARTIFACTS = (

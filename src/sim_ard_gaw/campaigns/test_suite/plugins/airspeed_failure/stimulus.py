@@ -25,13 +25,27 @@ class AirspeedFailureStimulus(StimulusAdapter):
 
 
 def build_injection_artifact(case: TestCase) -> dict[str, Any]:
+    ramp_recipe = case.parameters.get("ramp_recipe")
+    pulse_ladder_recipe = case.parameters.get("pulse_ladder_recipe")
+    if ramp_recipe is not None:
+        schedule_kind = "ramp"
+    elif pulse_ladder_recipe is not None:
+        schedule_kind = "pulse_ladder"
+    elif case.parameters.get("injection_schedule"):
+        schedule_kind = "bias_schedule"
+    else:
+        schedule_kind = None
     return {
         "case_id": case.case_id,
         "requested_payload": dict(case.parameters["injection_payload"]),
+        "injection_schedule": list(case.parameters.get("injection_schedule", [])),
+        "bias_schedule_kind": schedule_kind,
         "reset_payload": dict(case.parameters["reset_payload"]),
         "trigger": dict(case.parameters["trigger"]),
         "readback_rules": dict(case.parameters["readback_rules"]),
         "ratio_recipe": case.parameters.get("ratio_recipe"),
+        "ramp_recipe": ramp_recipe,
+        "pulse_ladder_recipe": pulse_ladder_recipe,
         "calibration_required": bool(case.parameters.get("calibration_required")),
         "readback_status_shape": {
             "injection": "pending_phase2",

@@ -12,6 +12,18 @@ Active waypoint missions live directly in this directory.
   East/West measurement legs, fault injected on entering seq 4, ends in RTL (no
   landing sequence). See
   `governance/runbooks/features/airspeed_failure_behavior/`.
+- `airspeed_failure_headwind_ramp_mission.waypoints`
+  Purpose: positive reported-airspeed stepped-ramp variant for the airspeed
+  fault-injection behavior lane. 100 m cruise, longer Eastbound climb/settle
+  runway, one 23000 m continuous headwind line holder, ramp schedule starts on
+  entering seq 4, and the monitor finishes after the case-specific final ramp
+  observation (`+100%` standard or `+200%` extended) with no RTL waypoint.
+- `airspeed_failure_headwind_pulse_ladder_mission.waypoints`
+  Purpose: positive reported-airspeed pulse-ladder variant for the airspeed
+  fault-injection behavior lane. 100 m cruise, longer Eastbound climb/settle
+  runway, one 23000 m continuous headwind line holder, pulse schedule starts
+  on entering seq 4, and the monitor finishes after the final observation with
+  no RTL waypoint.
 - `lidar_staircase_mission.waypoints`
   Purpose: LiDAR overpass mission for the staircase world.
 - `quad_star_showcase_mission.waypoints`

@@ -27,7 +27,7 @@ BEHAVIOR_CLASSES = (
 )
 
 
-def artifact_schema() -> dict[str, dict[str, object]]:
+def artifact_schema() -> dict[str, dict[str, Any]]:
     return {
         "airspeed_behavior_summary.json": {
             "required_fields": [
@@ -43,7 +43,32 @@ def artifact_schema() -> dict[str, dict[str, object]]:
                 "post_injection",
                 "airspeed_minus_groundspeed",
                 "fault_visible_deltas",
+                "bias_schedule",
+                "ramp",
+                "pulse_ladder",
             ],
+        },
+        "airspeed_bias_ramp.json": {
+            "required_fields": [
+                "recipe",
+                "schedule",
+                "events",
+                "completion",
+                "readback",
+                "phase_metrics",
+            ],
+            "case_specific": True,
+        },
+        "airspeed_bias_pulse_ladder.json": {
+            "required_fields": [
+                "recipe",
+                "schedule",
+                "events",
+                "completion",
+                "readback",
+                "phase_metrics",
+            ],
+            "case_specific": True,
         },
         "mission_progress.json": {
             "required_fields": [
@@ -90,8 +115,17 @@ def classify_observation(observation: dict[str, Any]) -> dict[str, Any]:
     if observation.get("loss_of_control") or observation.get("timeout"):
         return _result("loss_of_control_or_timeout", "valid_bad_behavior", True)
 
+    if observation.get("bias_schedule_required") and not observation.get(
+        "bias_schedule_complete"
+    ):
+        schedule_kind = str(observation.get("bias_schedule_kind") or "bias_schedule")
+        return _result("analysis_incomplete", f"{schedule_kind}_incomplete", False)
+
     auto_to_rtl_seq = observation.get("auto_to_rtl_transition_seq")
-    if auto_to_rtl_seq is not None and int(auto_to_rtl_seq) < defaults.PLANNED_RTL_MIN_SEQ:
+    planned_rtl_min_seq = int(
+        observation.get("planned_rtl_min_seq", defaults.PLANNED_RTL_MIN_SEQ)
+    )
+    if auto_to_rtl_seq is not None and int(auto_to_rtl_seq) < planned_rtl_min_seq:
         return _result("autopilot_contained", "fault_triggered_early_rtl", True)
 
     if not observation.get("mission_complete", False):

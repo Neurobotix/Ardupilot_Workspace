@@ -75,6 +75,7 @@ class _LiveAttemptMonitor:
             "throttle_pct": None,
             "pitch_deg": None,
             "wp_dist_m": None,
+            "servo_outputs": None,
         }
         self.front_half_seen = False
         self.max_seq_reached: int | None = None
@@ -88,6 +89,15 @@ class _LiveAttemptMonitor:
         self.injected_readback: dict[str, float] = {}
         self.injection_readback_compare: dict[str, Any] = {"ok": False, "mismatches": []}
         self.injected_readback_ok = False
+        self.injection_schedule = [
+            dict(step)
+            for step in self.case.parameters.get("injection_schedule", [])
+        ]
+        self.injection_events: list[dict[str, Any]] = []
+        self.next_schedule_index = 0
+        self.current_schedule_phase: dict[str, Any] | None = None
+        self.schedule_kind = self._schedule_kind()
+        self.schedule_complete_s = self._schedule_complete_elapsed_s()
         self.reset_status: dict[str, Any] = {"status": "not_attempted"}
         self.auto_to_rtl_transition_seq: int | None = None
         self.auto_to_rtl_transition_time_utc: str | None = None
@@ -161,6 +171,7 @@ class _LiveAttemptMonitor:
             if msg is None:
                 continue
             self._handle_message(msg)
+            self._maybe_apply_due_schedule_steps()
             if self._should_stop():
                 return
         self.timeout = True
@@ -273,6 +284,15 @@ class _LiveAttemptMonitor:
         if mt == "NAV_CONTROLLER_OUTPUT":
             self.current["wp_dist_m"] = _clean_float(getattr(msg, "wp_dist", None))
             self._append_sample("NAV_CONTROLLER_OUTPUT")
+            return
+
+        if mt == "SERVO_OUTPUT_RAW":
+            self.current["servo_outputs"] = {
+                f"servo{idx}_raw": _clean_float(getattr(msg, f"servo{idx}_raw", None))
+                for idx in range(1, 17)
+                if hasattr(msg, f"servo{idx}_raw")
+            }
+            self._append_sample("SERVO_OUTPUT_RAW")
 
     def _maybe_inject_at_seq4(self, now: float) -> None:
         if not self.front_half_seen:
@@ -281,10 +301,6 @@ class _LiveAttemptMonitor:
         if self.current.get("mode") != "AUTO" or not self.current.get("armed"):
             self.stop_reason = "seq4_not_armed_auto"
             return
-        payload = {
-            name: float(value)
-            for name, value in self.case.parameters.get("injection_payload", {}).items()
-        }
         self.trigger_event = {
             "timestamp_utc": defaults.utc_now(),
             "t_s": now - self.started_wall,
@@ -293,6 +309,135 @@ class _LiveAttemptMonitor:
             "armed": self.current.get("armed"),
             "relative_alt_m": self.current.get("rel_alt_m"),
             "front_half_seen": self.front_half_seen,
+        }
+        if self.injection_schedule:
+            self.injection_triggered = True
+            self.injection_monotonic = now
+            self._apply_schedule_step(now, self.injection_schedule[0])
+            self.next_schedule_index = 1
+            artifact = self._injection_artifact(
+                payload=self.injection_payload,
+                set_readback=self.injection_set_readback,
+                all_readback=self.injected_readback,
+                readback_compare=self.injection_readback_compare,
+            )
+            path = self.ctx.attempt_dir / "airspeed_injection.json"
+            defaults.write_json(path, artifact)
+            self.ctx.artifacts["airspeed_injection"] = path
+            defaults.log(
+                f"Airspeed {self.schedule_kind} started at seq 4 for {self.case.case_id}."
+            )
+            return
+
+        payload = {
+            name: float(value)
+            for name, value in self.case.parameters.get("injection_payload", {}).items()
+        }
+        event = self._set_fault_payload(now, payload, step=None)
+        self.injection_events.append(event)
+        self.current_schedule_phase = None
+        self.injection_payload = payload
+        self.injection_set_readback = event["set_readback"]
+        self.injection_readback_compare = event["readback_compare"]
+        self.injected_readback = event["readback_values"]
+        self.injected_readback_ok = bool(event["readback_ok"])
+        self.injection_triggered = True
+        self.injection_monotonic = now
+        artifact = self._injection_artifact(
+            payload=payload,
+            set_readback=self.injection_set_readback,
+            all_readback=self.injected_readback,
+            readback_compare=self.injection_readback_compare,
+        )
+        path = self.ctx.attempt_dir / "airspeed_injection.json"
+        defaults.write_json(path, artifact)
+        self.ctx.artifacts["airspeed_injection"] = path
+        defaults.log(f"Airspeed injection trigger latched at seq 4 for {self.case.case_id}.")
+
+    def _maybe_apply_due_schedule_steps(self) -> None:
+        if not self.injection_triggered or self.injection_monotonic is None:
+            return
+        if not self.injection_schedule:
+            return
+        if self.next_schedule_index >= len(self.injection_schedule):
+            return
+        elapsed = time.time() - self.injection_monotonic
+        while self.next_schedule_index < len(self.injection_schedule):
+            step = self.injection_schedule[self.next_schedule_index]
+            due_s = float(step.get("elapsed_since_trigger_s", 0.0))
+            if elapsed < due_s:
+                break
+            self._apply_schedule_step(time.time(), step)
+            self.next_schedule_index += 1
+
+    def _apply_schedule_step(self, now: float, step: dict[str, Any]) -> None:
+        payload = self._payload_for_schedule_step(step)
+        event = self._set_fault_payload(now, payload, step=step)
+        self.injection_events.append(event)
+        self.current_schedule_phase = {
+            "event_index": int(step["event_index"]),
+            "cycle_index": int(step["cycle_index"]),
+            "phase": str(step["phase"]),
+            "bias_percent": int(step["bias_percent"]),
+            "elapsed_since_trigger_s": float(step["elapsed_since_trigger_s"]),
+            "observe_s": float(step.get("observe_s", 0.0)),
+        }
+        self.injection_payload = payload
+        self.injection_set_readback = event["set_readback"]
+        self.injection_readback_compare = {
+            "ok": all(bool(row.get("readback_ok")) for row in self.injection_events),
+            "mismatches": [
+                mismatch
+                for row in self.injection_events
+                for mismatch in row.get("readback_compare", {}).get("mismatches", [])
+            ],
+        }
+        self.injected_readback = event["readback_values"]
+        self.injected_readback_ok = bool(self.injection_readback_compare["ok"])
+        phase = str(step.get("phase"))
+        bias = int(step.get("bias_percent", 0))
+        cycle = int(step.get("cycle_index", 0))
+        phase_label = f"{phase} cycle={cycle} bias={bias:+d}%"
+        defaults.log(
+            f"Airspeed {self.schedule_kind} event "
+            f"{step['event_index']}/{len(self.injection_schedule)} {phase_label} applied."
+        )
+
+    def _payload_for_schedule_step(self, step: dict[str, Any]) -> dict[str, float]:
+        if step.get("phase") == "baseline_settle":
+            baseline = self.ctx.extra.get("sim_arspd_boot_baseline")
+            if isinstance(baseline, dict):
+                return {
+                    name: float(baseline[name])
+                    for name in defaults.REQUIRED_SIM_ARSPD_PARAMS
+                    if name in baseline
+                }
+        return {
+            name: float(value)
+            for name, value in dict(step.get("payload", {})).items()
+        }
+
+    def _set_fault_payload(
+        self,
+        now: float,
+        payload: dict[str, float],
+        *,
+        step: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        event = {
+            "timestamp_utc": defaults.utc_now(),
+            "t_s": now - self.started_wall,
+            "post_first_injection_s": (
+                now - self.injection_monotonic
+                if self.injection_monotonic is not None
+                else 0.0
+            ),
+            "seq": self.current.get("seq"),
+            "mode": self.current.get("mode"),
+            "armed": self.current.get("armed"),
+            "relative_alt_m": self.current.get("rel_alt_m"),
+            "step": dict(step) if step is not None else None,
+            "requested_payload": payload,
         }
         set_readback: dict[str, float] = {}
         if payload:
@@ -303,23 +448,15 @@ class _LiveAttemptMonitor:
             timeout=5.0,
         )
         compare = compare_readback(payload, all_readback)
-        self.injection_payload = payload
-        self.injection_set_readback = set_readback
-        self.injection_readback_compare = compare
-        self.injected_readback = all_readback
-        self.injected_readback_ok = bool(compare["ok"])
-        self.injection_triggered = True
-        self.injection_monotonic = now
-        artifact = self._injection_artifact(
-            payload=payload,
-            set_readback=set_readback,
-            all_readback=all_readback,
-            readback_compare=compare,
+        event.update(
+            {
+                "set_readback": set_readback,
+                "readback_values": all_readback,
+                "readback_compare": compare,
+                "readback_ok": bool(compare["ok"]),
+            }
         )
-        path = self.ctx.attempt_dir / "airspeed_injection.json"
-        defaults.write_json(path, artifact)
-        self.ctx.artifacts["airspeed_injection"] = path
-        defaults.log(f"Airspeed injection trigger latched at seq 4 for {self.case.case_id}.")
+        return event
 
     def _reset_fault_params(self) -> None:
         if not self.config.launch_stack:
@@ -355,12 +492,21 @@ class _LiveAttemptMonitor:
                 self.terminal_state_reached = True
                 self.stop_reason = "low_altitude_abort"
                 return True
+        if self._bias_schedule_complete():
+            self.terminal_state_reached = True
+            self.stop_reason = f"{self.schedule_kind}_complete"
+            return True
         if (
-            self.auto_to_rtl_transition_seq is not None
-            and self.auto_to_rtl_transition_seq >= defaults.PLANNED_RTL_MIN_SEQ
+            not self.injection_schedule
+            and self.auto_to_rtl_transition_seq is not None
+            and self.auto_to_rtl_transition_seq >= self._planned_rtl_min_seq()
         ):
             transition_t = _parse_transition_t(self.mode_timeline)
-            if transition_t is not None and time.time() - self.started_wall - transition_t >= defaults.RTL_STABILIZE_S:
+            if (
+                transition_t is not None
+                and time.time() - self.started_wall - transition_t
+                >= defaults.RTL_STABILIZE_S
+            ):
                 self.terminal_state_reached = True
                 self.stop_reason = "planned_rtl_stabilized"
                 return True
@@ -382,9 +528,30 @@ class _LiveAttemptMonitor:
             "throttle_pct": self.current.get("throttle_pct"),
             "pitch_deg": self.current.get("pitch_deg"),
             "wp_dist_m": self.current.get("wp_dist_m"),
+            "servo_outputs": self.current.get("servo_outputs"),
             "post_injection_s": (
                 now - self.injection_monotonic
                 if self.injection_monotonic is not None
+                else None
+            ),
+            "active_schedule_event_index": (
+                self.current_schedule_phase.get("event_index")
+                if isinstance(self.current_schedule_phase, dict)
+                else None
+            ),
+            "active_cycle_index": (
+                self.current_schedule_phase.get("cycle_index")
+                if isinstance(self.current_schedule_phase, dict)
+                else None
+            ),
+            "active_phase": (
+                self.current_schedule_phase.get("phase")
+                if isinstance(self.current_schedule_phase, dict)
+                else None
+            ),
+            "active_bias_percent": (
+                self.current_schedule_phase.get("bias_percent")
+                if isinstance(self.current_schedule_phase, dict)
                 else None
             ),
         }
@@ -407,6 +574,11 @@ class _LiveAttemptMonitor:
         defaults.write_json(artifacts["airspeed_signal_metrics"], self._signal_metrics())
         defaults.write_json(artifacts["altitude_speed_envelope"], self._altitude_speed_envelope())
         defaults.write_json(artifacts["tecs_response"], self._tecs_response())
+        if self.injection_schedule:
+            name = self._schedule_artifact_name()
+            schedule_path = self.ctx.attempt_dir / name
+            defaults.write_json(schedule_path, self._schedule_artifact())
+            self.ctx.artifacts[name.removesuffix(".json")] = schedule_path
         self._backfill_reference_wind_from_metrics()
         if not self.injection_triggered:
             payload = self.case.parameters.get("injection_payload", {})
@@ -427,9 +599,13 @@ class _LiveAttemptMonitor:
             baseline_path = self.ctx.attempt_dir / "reference_baseline.json"
             defaults.write_json(baseline_path, self._reference_baseline())
             self.ctx.artifacts["reference_baseline"] = baseline_path
+        required_names = self.case.parameters.get("acceptance_requirements", {}).get(
+            "required_artifacts",
+            list(defaults.REQUIRED_ATTEMPT_ARTIFACTS),
+        )
         required_paths = [
-            self.ctx.attempt_dir / name
-            for name in defaults.REQUIRED_ATTEMPT_ARTIFACTS
+            self.ctx.attempt_dir / str(name)
+            for name in required_names
             if name != "airspeed_behavior_summary.json"
         ]
         return all(path.exists() for path in required_paths)
@@ -450,8 +626,22 @@ class _LiveAttemptMonitor:
             "required_artifacts_present": False,
             "loss_of_control": self.loss_of_control,
             "timeout": self.timeout,
+            "bias_schedule_required": bool(self.injection_schedule),
+            "bias_schedule_complete": self._bias_schedule_complete(),
+            "bias_schedule_kind": self.schedule_kind,
+            "ramp_required": self.schedule_kind == "ramp",
+            "ramp_complete": (
+                self._bias_schedule_complete() if self.schedule_kind == "ramp" else False
+            ),
+            "pulse_ladder_required": self.schedule_kind == "pulse_ladder",
+            "pulse_ladder_complete": (
+                self._bias_schedule_complete()
+                if self.schedule_kind == "pulse_ladder"
+                else False
+            ),
             "auto_to_rtl_transition_seq": self.auto_to_rtl_transition_seq,
             "max_seq_reached": self.max_seq_reached,
+            "planned_rtl_min_seq": self._planned_rtl_min_seq(),
             "mission_complete": self._mission_complete(),
             "altitude_loss_m": envelope.get("altitude_loss_m"),
             "signal_metrics": signal_metrics,
@@ -460,11 +650,58 @@ class _LiveAttemptMonitor:
         }
 
     def _mission_complete(self) -> bool:
+        if self.injection_schedule:
+            return self._bias_schedule_complete() and self.terminal_state_reached
         return bool(
             self.auto_to_rtl_transition_seq is not None
-            and self.auto_to_rtl_transition_seq >= defaults.PLANNED_RTL_MIN_SEQ
+            and self.auto_to_rtl_transition_seq >= self._planned_rtl_min_seq()
             and self.terminal_state_reached
         )
+
+    def _planned_rtl_min_seq(self) -> int:
+        try:
+            return int(
+                self.case.parameters.get(
+                    "planned_rtl_min_seq",
+                    defaults.PLANNED_RTL_MIN_SEQ,
+                )
+            )
+        except (TypeError, ValueError):
+            return defaults.PLANNED_RTL_MIN_SEQ
+
+    def _schedule_kind(self) -> str:
+        if self.case.parameters.get("ramp_recipe") is not None:
+            return "ramp"
+        if self.case.parameters.get("pulse_ladder_recipe") is not None:
+            return "pulse_ladder"
+        return "bias_schedule" if self.injection_schedule else "single_fault"
+
+    def _schedule_artifact_name(self) -> str:
+        if self.schedule_kind == "ramp":
+            return "airspeed_bias_ramp.json"
+        if self.schedule_kind == "pulse_ladder":
+            return "airspeed_bias_pulse_ladder.json"
+        return "airspeed_bias_schedule.json"
+
+    def _schedule_complete_elapsed_s(self) -> float | None:
+        values = [
+            _clean_float(step.get("schedule_complete_s"))
+            for step in self.injection_schedule
+        ]
+        values = [value for value in values if value is not None]
+        return max(values) if values else None
+
+    def _bias_schedule_complete(self) -> bool:
+        if not self.injection_schedule or self.injection_monotonic is None:
+            return False
+        if len(self.injection_events) < len(self.injection_schedule):
+            return False
+        if self.schedule_complete_s is None:
+            return False
+        return (time.time() - self.injection_monotonic) >= self.schedule_complete_s
+
+    def _pulse_ladder_complete(self) -> bool:
+        return self.schedule_kind == "pulse_ladder" and self._bias_schedule_complete()
 
     def _degraded_metrics(self) -> bool:
         envelope = self._altitude_speed_envelope()
@@ -496,10 +733,19 @@ class _LiveAttemptMonitor:
             "injection_seq": defaults.INJECTION_TRIGGER["seq"],
             "injection_triggered": self.injection_triggered,
             "trigger_event": self.trigger_event,
+            "injection_events": self.injection_events,
+            "bias_schedule_kind": self.schedule_kind,
+            "bias_schedule_complete": self._bias_schedule_complete(),
+            "bias_schedule_complete_s": self.schedule_complete_s,
+            "ramp_complete": (
+                self._bias_schedule_complete() if self.schedule_kind == "ramp" else False
+            ),
+            "pulse_ladder_complete": self._pulse_ladder_complete(),
             "max_seq_reached": self.max_seq_reached,
             "reached": list(self.reached),
             "mission_complete": self._mission_complete(),
             "auto_to_rtl_transition_seq": self.auto_to_rtl_transition_seq,
+            "planned_rtl_min_seq": self._planned_rtl_min_seq(),
             "auto_to_rtl_transition_time_utc": self.auto_to_rtl_transition_time_utc,
             "planned_rtl": self._mission_complete(),
             "timeout": self.timeout,
@@ -555,6 +801,11 @@ class _LiveAttemptMonitor:
                 ),
             },
             "samples_count": len(self.samples),
+            "bias_schedule": _schedule_metrics(post),
+            "ramp": _schedule_metrics(post) if self.schedule_kind == "ramp" else None,
+            "pulse_ladder": (
+                _schedule_metrics(post) if self.schedule_kind == "pulse_ladder" else None
+            ),
         }
 
     def _altitude_speed_envelope(self) -> dict[str, Any]:
@@ -612,6 +863,12 @@ class _LiveAttemptMonitor:
                 "airspeed_mps": _sample_vector_stats(_values(post, "airspeed_mps")),
                 "relative_alt_m": _sample_vector_stats(_values(post, "relative_alt_m")),
             },
+            "bias_schedule": _schedule_metrics(post),
+            "ramp": _schedule_metrics(post) if self.schedule_kind == "ramp" else None,
+            "pulse_ladder": (
+                _schedule_metrics(post) if self.schedule_kind == "pulse_ladder" else None
+            ),
+            "servo_output_raw": _servo_stats(post),
         }
 
     def _reference_baseline(self) -> dict[str, Any]:
@@ -694,7 +951,42 @@ class _LiveAttemptMonitor:
             "boot_baseline": self.ctx.extra.get("sim_arspd_boot_baseline"),
             "vehicle_airspeed_params": self.ctx.extra.get("vehicle_airspeed_params"),
             "ratio_recipe": self.case.parameters.get("ratio_recipe"),
+            "ramp_recipe": self.case.parameters.get("ramp_recipe"),
+            "pulse_ladder_recipe": self.case.parameters.get("pulse_ladder_recipe"),
+            "bias_schedule_kind": self.schedule_kind,
+            "injection_schedule": self.case.parameters.get("injection_schedule", []),
+            "injection_events": self.injection_events,
+            "schedule_complete": self._bias_schedule_complete()
+            if self.injection_schedule
+            else len(self.injection_events) > 0,
             "calibration_required": bool(self.case.parameters.get("calibration_required")),
+            "reset_status": self.reset_status,
+        }
+
+    def _schedule_artifact(self) -> dict[str, Any]:
+        return {
+            "case_id": self.case.case_id,
+            "created_at_utc": defaults.utc_now(),
+            "schedule_kind": self.schedule_kind,
+            "recipe": self.case.parameters.get("ramp_recipe")
+            or self.case.parameters.get("pulse_ladder_recipe"),
+            "schedule": self.case.parameters.get("injection_schedule", []),
+            "events": self.injection_events,
+            "completion": {
+                "required": bool(self.injection_schedule),
+                "complete": self._bias_schedule_complete(),
+                "schedule_complete_s": self.schedule_complete_s,
+                "events_applied": len(self.injection_events),
+                "events_expected": len(self.injection_schedule),
+                "stop_reason": self.stop_reason,
+            },
+            "readback": {
+                "all_events_ok": self.injected_readback_ok,
+                "mismatches": self.injection_readback_compare.get("mismatches", []),
+            },
+            "phase_metrics": _schedule_metrics(
+                [s for s in self.samples if s.get("post_injection_s") is not None]
+            ),
             "reset_status": self.reset_status,
         }
 
@@ -794,6 +1086,60 @@ def _sample_stats(samples: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "relative_alt_m": _sample_vector_stats(_values(samples, "relative_alt_m")),
         "throttle_pct": _sample_vector_stats(_values(samples, "throttle_pct")),
+    }
+
+
+def _schedule_metrics(samples: list[dict[str, Any]]) -> dict[str, Any]:
+    by_phase: dict[tuple[int, str], list[dict[str, Any]]] = {}
+    for sample in samples:
+        cycle = sample.get("active_cycle_index")
+        phase = sample.get("active_phase")
+        if isinstance(cycle, int) and isinstance(phase, str):
+            by_phase.setdefault((cycle, phase), []).append(sample)
+    cycles = sorted({cycle for cycle, _phase in by_phase})
+    return {
+        "available": bool(by_phase),
+        "cycles": [
+            {
+                "cycle_index": cycle,
+                "baseline": _phase_summary(by_phase.get((cycle, "baseline_settle"), [])),
+                "fault": _phase_summary(by_phase.get((cycle, "fault_observe"), [])),
+            }
+            for cycle in cycles
+        ],
+    }
+
+
+def _phase_summary(samples: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "bias_percent": _first_int(samples, "active_bias_percent"),
+        "sample_stats": _sample_stats(samples),
+        "pitch_deg": _sample_vector_stats(_values(samples, "pitch_deg")),
+        "servo_output_raw": _servo_stats(samples),
+    }
+
+
+def _first_int(samples: list[dict[str, Any]], key: str) -> int | None:
+    for sample in samples:
+        value = sample.get(key)
+        if isinstance(value, int):
+            return value
+    return None
+
+
+def _servo_stats(samples: list[dict[str, Any]]) -> dict[str, Any]:
+    channel_values: dict[str, list[float]] = {}
+    for sample in samples:
+        outputs = sample.get("servo_outputs")
+        if not isinstance(outputs, dict):
+            continue
+        for name, value in outputs.items():
+            clean = _clean_float(value)
+            if clean is not None:
+                channel_values.setdefault(str(name), []).append(clean)
+    return {
+        name: _sample_vector_stats(values)
+        for name, values in sorted(channel_values.items())
     }
 
 

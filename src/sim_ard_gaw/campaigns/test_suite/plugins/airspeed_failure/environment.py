@@ -359,7 +359,7 @@ def build_run_config(
         "target_run_index": target_run_index,
         "campaign_root": str(config.campaign_root),
         "attempt_dir": str(defaults.attempt_dir(config.campaign_root, case.case_id, attempt_index)),
-        "mission_file": str(config.mission_file),
+        "mission_file": str(case.mission_file or config.mission_file),
         "mavlink_addr": config.mavlink_addr,
         "launch_stack": config.launch_stack,
         "fresh_sitl_process_per_attempt": True,
