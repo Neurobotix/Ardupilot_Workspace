@@ -15,11 +15,19 @@ Current status:
 - Phase 1 (no-SITL plugin foundation): accepted 2026-06-05.
 - Phase 2 (live measurement smoke): accepted 2026-06-06; raw root
   `var/runs/airspeed_failure_behavior_20260606T164050810132Z/`.
-- Phase 3 (full v1 matrix): unlocked by Phase 2; not yet run.
-- Phase 4 (evidence curation): not yet implemented.
+- Phase 3/4A (ratio/ramp/pulse characterization): accepted 2026-06-14 for a
+  bounded scope. The accepted evidence is the signed ratio sweep
+  +10..+100/−10..−50 (2026-06-08/09), headwind pulse ladder +10..+130, and
+  stepped ramps +100/+200 (2026-06-10), curated under
+  `evidence/curated_logs/airspeed_failure_behavior_2026-06-11/` and accepted by
+  `evidence/reports/features/2026-06-14_airspeed_failure_ratio_ramp_pulse_acceptance.md`.
+- Phase 4B (fixed-case repetition matrix / full-lane acceptance): open.
+  Fixed-case repetitions for `healthy_reference`, `ofs_noop_probe`, `noise_5`,
+  `noise_10`, `pitot_500pa`, and `fail_primary` remain unclosed.
 
-No curated feature evidence exists. Do not treat Phase 2 smoke as an accepted
-behavior result; it is four-case raw measurement output only.
+The 2026-06-14 acceptance is a bounded behavior-characterization claim, not a
+safety claim and not full fixed-case lane acceptance. Do not treat Phase 2 smoke
+as a complete behavior result; it is four-case raw measurement output only.
 
 ## Default Stack
 
@@ -118,6 +126,61 @@ the clean SITL boot; Phase 2 confirmed `ARSPD_RATIO=2.0`). Naming:
 The **v1 thin slice** (`±10/30/50`) proves the chain. The full sweep is the
 documented end goal; extending it is a longer input list, no code change.
 
+### Headwind Stepped Ramp
+
+`ratio_bias_ramp_p10_to_p100_headwind` is a separate within-flight stepped-ramp
+case, not a replacement for the one-bias-per-flight sweep. The extended
+boundary-probe variant is `ratio_bias_ramp_p10_to_p200_headwind`. Both use
+`assets/missions/airspeed_failure_headwind_ramp_mission.waypoints`: 100 m AGL,
+a longer Eastbound climb/settle runway, and one continuous headwind line holder.
+The mission has no RTL waypoint; the monitor ends each run after the final
+scheduled observation and resets the simulated airspeed parameters.
+
+The schedule starts on entering seq 4 with a 60 s verified baseline window. It
+then raises reported-airspeed bias by +10% per level, with 60 s per level,
+using the same `SIM_ARSPD_RATIO = ARSPD_RATIO / k²` recipe recomputed from the
+measured vehicle `ARSPD_RATIO` in live runs. The standard ramp ends at +100.
+The extended ramp continues through +200 to probe the failure/stall boundary
+after the +100 run showed a stable degraded equilibrium. There is no reset
+between levels.
+
+Interpretation boundary: this is accumulated degradation in one flight. It is
+useful for seeing how altitude, TECS, elevator/servo outputs, airspeed sensor
+use, and loss/stall behavior evolve as the false airspeed gets progressively
+worse under continuous headwind. It is not an independent dose-response
+replacement for the one-bias-per-flight sweep.
+
+Completion discriminator: the reciprocal mission still requires planned RTL
+after the East/West legs (`seq >= 8` at AUTO→RTL). The stepped-ramp mission is
+monitor-complete at `ramp_complete`; it does not use RTL as the success
+condition.
+
+### Headwind Pulse Ladder
+
+`ratio_bias_pulse_p10_to_p130_headwind` is a separate within-flight
+pulse-ladder case, not a replacement for the one-bias-per-flight sweep. It uses
+`assets/missions/airspeed_failure_headwind_pulse_ladder_mission.waypoints`:
+100 m AGL, a longer Eastbound climb/settle runway, and one continuous headwind
+line holder. The mission has no RTL waypoint; the monitor ends the run after
+the final scheduled observation and resets the simulated airspeed parameters.
+
+The schedule starts on entering seq 4 with a verified baseline window. It then
+alternates +10, reset, +20, reset, ... +130, with 60 s per window, using the
+same `SIM_ARSPD_RATIO = ARSPD_RATIO / k²` recipe recomputed from the measured
+vehicle `ARSPD_RATIO` in live runs. Baseline phases read back the boot
+`SIM_ARSPD_*` baseline before the next fault phase begins.
+
+Interpretation boundary: each fault window is separated by a baseline reset and
+settle period, but later windows still share one flight history, airframe
+energy state, and controller integrator history. Treat this as threshold and
+transient evidence, not as independent dose-response samples. A crash, stall,
+low-altitude abort, timeout, or failsafe after valid readback is valid behavior
+for this case. A clean stop is accepted only after the final +130% observe
+window completes.
+
+Completion discriminator: the pulse-ladder mission is monitor-complete at
+`pulse_ladder_complete`; it does not use RTL as the success condition.
+
 | Case | Bias | Effect |
 | --- | --- | --- |
 | `ratio_bias_p10` | +10% | Reads ~10% high |
@@ -201,11 +264,19 @@ Each live attempt must produce:
 
 Raw runtime output: `var/runs/airspeed_failure_behavior_<timestamp>/`
 
-Curated evidence (Phase 4 only, after acceptance):
-`evidence/curated_logs/airspeed_failure_behavior_<date>/`
+Curated interim evidence:
+`evidence/curated_logs/airspeed_failure_behavior_2026-06-11/`
 
-Dated evidence report (Phase 4 only):
-`evidence/reports/features/<date>_airspeed_failure_behavior.md`
+Interim evidence report:
+`evidence/reports/features/2026-06-11_airspeed_failure_behavior_interim_analysis.md`
+
+Bounded Phase 4A acceptance report:
+`evidence/reports/features/2026-06-14_airspeed_failure_ratio_ramp_pulse_acceptance.md`
+
+Future full-lane or fixed-case Phase 4B packages should use
+`evidence/curated_logs/airspeed_failure_behavior_<date>/` and
+`evidence/reports/features/<date>_airspeed_failure_behavior.md` only when dated
+evidence supports that wider acceptance.
 
 ## Accepted Decisions
 

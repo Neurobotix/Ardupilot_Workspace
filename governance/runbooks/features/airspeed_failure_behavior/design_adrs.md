@@ -235,6 +235,86 @@ ratio_bias_m10, ratio_bias_m20, ... ratio_bias_m50    (reads low)
 `pNN` = +NN% reported-airspeed bias, `mNN` = -NN%. The name encodes the
 *airspeed effect*, never the raw `SIM_ARSPD_RATIO` value.
 
+### B2. Positive-bias headwind stepped ramp
+
+Add a separate within-flight stepped-ramp case:
+
+```text
+ratio_bias_ramp_p10_to_p100_headwind
+ratio_bias_ramp_p10_to_p200_headwind
+```
+
+This case is **not** a replacement for the independent one-bias-per-flight
+sweep. It answers a different question: how do altitude, TECS, elevator/servo
+outputs, airspeed sensor use, and loss/stall behavior evolve as reported
+airspeed is progressively raised during one continuous headwind exposure?
+
+Mission:
+
+```text
+assets/missions/airspeed_failure_headwind_ramp_mission.waypoints
+```
+
+The mission climbs to 100 m AGL, gives the aircraft a longer Eastbound
+takeoff/settle runway, then flies one long Eastbound headwind line holder. The
+monitor starts on entering seq 4. It verifies baseline, waits 60 s, applies
++10% reported-airspeed bias for 60 s, then steps directly to the next +10%
+level with 60 s per level and **no reset between levels**. The standard ramp
+ends at +100. The extended ramp continues through +200 to probe the
+failure/stall boundary after the +100 run showed a stable degraded equilibrium.
+Scheduled fault payloads use `SIM_ARSPD_RATIO = ARSPD_RATIO / k^2`, recomputed
+from the measured vehicle `ARSPD_RATIO` in live runs.
+
+Interpretation rule: this is accumulated degradation evidence from one flight.
+It deliberately preserves airframe energy state, TECS integrator history, and
+any altitude already lost between levels. Therefore it is not independent
+dose-response evidence. Stall, crash, low-altitude abort, timeout, or failsafe
+after valid readback is valid behavior for this case. A clean finish before the
+case-specific final observe window is analysis-incomplete.
+
+The completion discriminator is mission-specific: the original reciprocal
+mission still requires planned RTL at `seq >= 8`, while this headwind-only
+stepped ramp has no RTL waypoint and finishes when the monitor records
+`ramp_complete`.
+
+### B3. Positive-bias headwind pulse ladder
+
+Add a separate within-flight pulse-ladder case:
+
+```text
+ratio_bias_pulse_p10_to_p130_headwind
+```
+
+This case is **not** a replacement for the independent one-bias-per-flight
+sweep. It answers a different question: where does behavior begin to degrade
+when reported airspeed is pulsed high during one continuous headwind exposure?
+
+Mission:
+
+```text
+assets/missions/airspeed_failure_headwind_pulse_ladder_mission.waypoints
+```
+
+The mission climbs to 100 m AGL, gives the aircraft a longer Eastbound
+takeoff/settle runway, then flies one long Eastbound headwind line holder. The
+monitor starts on entering seq 4. It verifies baseline, waits 60 s, applies
++10% reported-airspeed bias for 60 s, resets to baseline and verifies readback
+for 60 s, then repeats for +20 ... +130 using the same
+`SIM_ARSPD_RATIO = ARSPD_RATIO / k^2` recipe recomputed from the measured
+vehicle `ARSPD_RATIO` in live runs.
+
+Interpretation rule: baseline resets reduce compounding, but later windows
+still share one flight history, TECS integrator history, airframe energy state,
+and any altitude already lost. Therefore this is threshold/transient evidence,
+not independent dose-response evidence. Stall, crash, low-altitude abort,
+timeout, or failsafe after valid readback is valid behavior for this case. A
+clean finish before the final +130% observe window is analysis-incomplete.
+
+The completion discriminator is mission-specific: the original reciprocal
+mission still requires planned RTL at `seq >= 8`, while this headwind-only
+pulse ladder has no RTL waypoint and finishes when the monitor records
+`pulse_ladder_complete`.
+
 ### C. v1 thin slice (prove the feature, not the science)
 
 v1 exists to prove the generator + injection + analysis chain works, with a

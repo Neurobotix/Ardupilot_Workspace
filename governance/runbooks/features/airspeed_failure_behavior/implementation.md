@@ -14,8 +14,9 @@ readiness, mission upload and download verification, pre-mission fixed-wind
 publish plus strict echo, boot-baseline parameter capture, seq-4 injection,
 injected-parameter readback, reset-to-boot-baseline, raw attempt artifact
 writing, behavior classification, wind-sign backfill, provisional healthy bands,
-and the Phase 2 `OFS` no-op / `FAILP=500` measurement probes. No curated feature
-evidence or Phase 4 behavior claim is made by this implementation status.
+and the Phase 2 `OFS` no-op / `FAILP=500` measurement probes. Phase 4A
+ratio/ramp/pulse characterization is accepted from later curated evidence;
+fixed-case Phase 4B remains open.
 
 ## Code Homes
 
@@ -179,6 +180,34 @@ after clean SITL boot and before injection. End goal: `+10..+100%` and
 is just "stuck near zero", which belongs to the forced-low regime rather
 than a ratio-bias case).
 See the Case Payloads And Ratio Sweep ADR in `design_adrs.md`.
+
+The generator also emits `ratio_bias_ramp_p10_to_p100_headwind` and
+`ratio_bias_ramp_p10_to_p200_headwind`, positive reported-airspeed stepped-ramp
+cases. These cases are intentionally separate from the one-bias-per-flight
+sweep: they use
+`assets/missions/airspeed_failure_headwind_ramp_mission.waypoints` and start
+after entering seq 4 on a single long Eastbound headwind leg. The monitor
+verifies baseline, waits 60 s, applies +10 for 60 s, then steps directly to the
+next +10% level with no reset between levels. The standard ramp ends at +100;
+the extended boundary probe ends at +200. Live attempts recompute every
+scheduled `SIM_ARSPD_RATIO` fault payload from the measured MAVLink
+`ARSPD_RATIO`. This is accumulating drift evidence in one flight, not
+independent dose-response evidence. A valid bad outcome before completing the
+ramp counts; a clean finish before the case-specific final observe window is
+analysis-incomplete.
+
+The generator also emits `ratio_bias_pulse_p10_to_p130_headwind`, a positive
+reported-airspeed pulse-ladder case. This case is intentionally separate from
+both the stepped ramp and the one-bias-per-flight sweep: it uses
+`assets/missions/airspeed_failure_headwind_pulse_ladder_mission.waypoints` and
+starts after entering seq 4 on a single long Eastbound headwind leg. The monitor
+verifies baseline, waits 60 s, applies +10 for 60 s, resets and verifies
+baseline for 60 s, then repeats through +130. Live attempts recompute every
+scheduled `SIM_ARSPD_RATIO` fault payload from the measured MAVLink
+`ARSPD_RATIO`, while baseline phases read back the boot `SIM_ARSPD_*` baseline.
+Later windows are not independent dose-response points because they share one
+flight history. A valid bad outcome before completing the ladder counts; a clean
+finish before the final +130 observe window is analysis-incomplete.
 
 Case generation must reject unknown case IDs before launch.
 

@@ -1,8 +1,12 @@
 # Airspeed Failure Behavior Evidence Pointers
 
-No accepted airspeed failure behavior evidence yet.
+Phase 2 live measurement smoke is accepted from raw runtime output. The
+operator-directed 2026-06-11 curated package is accepted for bounded Phase 4A
+ratio/ramp/pulse characterization by the 2026-06-14 acceptance report.
+Fixed-case repetitions remain open as Phase 4B, and full-lane acceptance is not
+closed.
 
-## Future Raw Run Roots
+## Raw Run Roots
 
 Raw runtime output must use:
 
@@ -10,32 +14,75 @@ Raw runtime output must use:
 var/runs/airspeed_failure_behavior_*
 ```
 
-## Future Curated Package
+Accepted Phase 2 measurement-smoke raw root:
 
-After acceptance, curated proof should use:
+```text
+var/runs/airspeed_failure_behavior_20260606T164050810132Z/
+```
+
+Phase 4A 2026-06-11 analysis raw roots are listed in:
+
+```text
+evidence/curated_logs/airspeed_failure_behavior_2026-06-11/raw_data_index.md
+```
+
+## Curated Packages
+
+Curated proof should use:
 
 ```text
 evidence/curated_logs/airspeed_failure_behavior_<date>/
 ```
 
-The curated package should include selected summaries/manifests only, not raw
-runtime trees. Expected selected artifacts include campaign summary, manifest
-snapshot, run-config or provenance summaries, and representative bounded
-attempt artifacts needed to support the report.
+Existing Phase 4A package:
 
-## Future Evidence Report
+```text
+evidence/curated_logs/airspeed_failure_behavior_2026-06-11/
+```
 
-After acceptance, the dated evidence report should use:
+It includes selected summaries/manifests only, not raw runtime trees, and
+supports bounded ratio/ramp/pulse characterization rather than fixed-case or
+full-lane acceptance.
+
+## Evidence Reports
+
+Dated evidence reports should use:
 
 ```text
 evidence/reports/features/<date>_airspeed_failure_behavior.md
 ```
 
-The report must include the exact commands, date/time and timezone, raw run
-roots, effective parameter stack and hashes, fixed wind vector/frame/readback,
-case payloads, accepted-observation counts, behavior-class counts,
-observation-quality counts, limitations, and old-workspace modification
-statement.
+Existing interim report:
+
+```text
+evidence/reports/features/2026-06-11_airspeed_failure_behavior_interim_analysis.md
+```
+
+Bounded Phase 4A acceptance report:
+
+```text
+evidence/reports/features/2026-06-14_airspeed_failure_ratio_ramp_pulse_acceptance.md
+```
+
+A final fixed-case/full-lane Phase 4B report, if created later, must include the exact commands,
+date/time and timezone, raw run roots, effective parameter stack and hashes,
+fixed wind vector/frame/readback, case payloads, accepted-observation counts,
+behavior-class counts, observation-quality counts, limitations, and
+old-workspace modification statement.
+
+## Remaining Closure Requirements
+
+Under the current Phase 3 contract, the lane still needs three accepted
+observations per fixed case or a documented governance-consistent revision of
+that contract. Current fixed-case evidence is limited to one accepted Phase 2
+measurement-smoke observation each for `healthy_reference`, `ofs_noop_probe`,
+`pitot_500pa`, and `fail_primary`; `noise_5` and `noise_10` have no accepted
+live observations in the curated/current evidence set.
+
+The 2026-06-11 package covers 47 accepted observations from signed ratio-bias
+sweep, headwind pulse ladder, and headwind stepped ramps. The 2026-06-14
+acceptance report closes that bounded scope as Phase 4A. It does not close
+fixed-case repetition coverage.
 
 ## Required Attempt Artifacts
 
@@ -57,7 +104,7 @@ It is not the primary evidence for this lane.
 ## Supporting Existing Evidence
 
 These files support the candidate decision and implementation design. They are
-not accepted evidence for the airspeed failure behavior plugin itself.
+not accepted behavior results for Phase 3 or Phase 4 by themselves.
 
 - Airspeed chain follow-up:
   `evidence/curated_logs/007_Plane_Airspeed_FollowUp/TEST_RESULT_2026-04-02.md`

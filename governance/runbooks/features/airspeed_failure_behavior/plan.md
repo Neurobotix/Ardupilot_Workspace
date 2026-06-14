@@ -125,7 +125,8 @@ payload, reset payload, units, and expected readback rule.
   injection trigger, reference wind, reset protocol, mission design, and the
   behavior-class vocabulary. (Done 2026-06-03: see `design_research.md` and
   `design_adrs.md`.)
-- Record that no accepted airspeed-failure behavior evidence exists yet.
+- Record the Phase 0 baseline that no accepted airspeed-failure behavior
+  evidence existed before implementation and live measurement.
 
 ### Phase 1 - No-SITL Plugin Foundation
 
@@ -172,6 +173,10 @@ payload, reset payload, units, and expected readback rule.
   `evidence/reports/features/<date>_airspeed_failure_behavior.md`.
 - Update the evidence catalog.
 - Add only bounded presentation wording backed by the curated evidence.
+
+2026-06-14 split: the ratio-bias sweep, headwind pulse-ladder, and headwind
+stepped-ramp characterization closes as bounded Phase 4A. The fixed-case
+repetition matrix remains Phase 4B and must not be implied by Phase 4A wording.
 
 ## Default Stack
 

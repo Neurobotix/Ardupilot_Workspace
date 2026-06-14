@@ -41,10 +41,35 @@ verified fixed-wind echo, `SIM_ARSPD_*` boot defaults, vehicle
 required artifacts, planned RTL discrimination, `OFS` no-op behavior,
 `FAILP=500` effect size, and behavior summaries
 (`healthy_reference=nominal_completion`, `ofs_noop_probe=nominal_completion`,
-`pitot_500pa=degraded_completion`, `fail_primary=degraded_completion`). No
-curated feature evidence exists yet; Phase 3 full matrix is unblocked, while
-Phase 4 remains blocked until curated evidence is promoted and reviewed. See
+`pitot_500pa=degraded_completion`, `fail_primary=degraded_completion`).
+On 2026-06-11 an operator-directed analysis was reviewed, curated, and reported
+from 47 accepted observations (signed ratio-bias sweep +10..+100/−10..−50 on
+2026-06-08/09, pulse ladder +10..+130 and stepped ramps +100/+200 on
+2026-06-10): report
+`evidence/reports/features/2026-06-11_airspeed_failure_behavior_interim_analysis.md`,
+curated package `evidence/curated_logs/airspeed_failure_behavior_2026-06-11/`.
+On 2026-06-14 the same package was accepted for **bounded Phase 4A**
+ratio/ramp/pulse characterization by
+`evidence/reports/features/2026-06-14_airspeed_failure_ratio_ramp_pulse_acceptance.md`.
+Headline: abrupt bias pulses ≥+60% trip `ARSPD_WIND_GATE=5` and disable the
+sensor; the same biases reached by slow +10% steps stay accepted while the
+aircraft settles into a degraded equilibrium; past ~+80..+100 the realized
+state saturates around `AIRSPEED_MAX=22`/TECS limits. Phase 4B fixed-case
+repetition/full-lane acceptance remains open; the generating plugin/doc changes
+are still uncommitted working-tree state. See
 `governance/runbooks/features/airspeed_failure_behavior/`.
+The lane now also includes headwind stepped-ramp and pulse-ladder cases with
+their own 100 m AGL long Eastbound missions and no RTL waypoint.
+`ratio_bias_ramp_p10_to_p100_headwind` verifies baseline once, then applies
+60 s windows from +10 through +100 reported-airspeed bias without resets; it is
+accumulating drift evidence, not an independent dose-response sweep.
+`ratio_bias_ramp_p10_to_p200_headwind` uses the same mission and schedule shape
+but continues through +200 as a stronger failure-boundary probe after +100
+showed a stable degraded equilibrium.
+`ratio_bias_pulse_p10_to_p130_headwind` verifies baseline, alternates 60 s
+baseline/fault windows from +10 through +130, resets params after the final
+observation, and treats the result as threshold/transient evidence rather than
+a replacement for the independent fixed-bias sweep.
 
 Follow-up review fixes on 2026-06-06 aligned current docs with the accepted
 measurement-smoke root and made live ratio-bias attempts recompute

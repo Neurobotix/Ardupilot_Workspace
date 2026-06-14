@@ -39,8 +39,15 @@
 - test_suite migration feature runbook:
   `governance/runbooks/features/test_suite_migration/`
 - Airspeed failure behavior feature runbook (second `test_suite` plugin lane;
-  Phase 2 raw measurement smoke accepted 2026-06-06; no curated feature evidence yet):
+  Phase 2 raw measurement smoke accepted 2026-06-06):
   `governance/runbooks/features/airspeed_failure_behavior/`
+- Airspeed failure behavior technical analysis (2026-06-11; sweep + pulse ladder
+  + stepped ramps; later accepted for bounded Phase 4A on 2026-06-14):
+  `evidence/reports/features/2026-06-11_airspeed_failure_behavior_interim_analysis.md`;
+  curated: `evidence/curated_logs/airspeed_failure_behavior_2026-06-11/`
+- Airspeed failure behavior Phase 4A bounded acceptance (2026-06-14; ratio
+  sweep + pulse ladder + stepped ramps accepted, fixed-case Phase 4B open):
+  `evidence/reports/features/2026-06-14_airspeed_failure_ratio_ramp_pulse_acceptance.md`
 - test_suite migration Phase 1 (wrapper parity) evidence:
   `evidence/reports/features/TEST_SUITE_MIGRATION_PHASE_1_2026-05-24.md`
 - test_suite migration Phase 2 (generic manifest) evidence:
@@ -103,7 +110,7 @@
 - Quick start: `docs/onboarding/quick_start.md`
 - Troubleshooting guide: `docs/operations/troubleshooting.md`
 - Simulation lanes and flight modes: `docs/architecture/simulation_lanes.md`
-- Airspeed failure behavior lane (behavior characterization; Phase 2 measurement smoke accepted 2026-06-06; Phase 3 not yet run): `docs/architecture/airspeed_failure_lane.md`
+- Airspeed failure behavior lane (behavior characterization; Phase 2 measurement smoke accepted 2026-06-06; Phase 4A ratio/ramp/pulse characterization accepted 2026-06-14; fixed-case Phase 4B remains open): `docs/architecture/airspeed_failure_lane.md`
 - Launch target status: `docs/operations/launch_targets.md`
 - Airspeed failure behavior — verified no-SITL commands, stack, output paths, live-run gate: `docs/operations/airspeed_failure_runbook.md`
 - SITL/Gazebo runtime notes: `docs/operations/sitl_gazebo_runtime.md`

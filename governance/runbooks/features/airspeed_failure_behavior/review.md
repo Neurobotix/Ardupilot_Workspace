@@ -1,8 +1,10 @@
 # Airspeed Failure Behavior Review
 
 Status: Phase 1 no-SITL foundation accepted on 2026-06-05. Phase 2 live
-measurement smoke accepted on 2026-06-06 from raw output only; no curated
-feature evidence or full behavior claim exists yet.
+measurement smoke accepted on 2026-06-06 from raw output only. Phase 4A
+ratio/ramp/pulse characterization accepted on 2026-06-14 from the 2026-06-11
+curated package. Fixed-case repetitions remain open as Phase 4B; full-lane
+acceptance is not closed.
 
 ## Acceptance Gates
 
@@ -11,13 +13,13 @@ feature evidence or full behavior claim exists yet.
 | Phase 0 | Candidate is airspeed; parameter list is sourced from `011_Sensor_Failure_Injection`; mission and lane stack are named; exact case payload semantics, ratio-sweep design, reset rules, injection trigger, fixed reference wind, mission design, and behavior-class vocabulary are locked. | Design locked 2026-06-03 (`design_research.md`, `design_adrs.md`, new mission); ratio numeric values + thresholds pending Phase 2 measurement. |
 | Phase 1 | Plugin constructs with no SITL; cases generate correctly; registry resolves plugin; CLI dry-run/list-cases works; runtime parameter-probe path exists; airspeed analysis artifact schema is tested; no legacy wind runner import is needed for plugin construction. | Accepted 2026-06-05 after strict no-SITL review. One real issue was found and fixed before acceptance: the documented module CLI was not reachable from a normally sourced workspace because `setup.bash` did not export the workspace Python source path. A narrow pyright test typing issue was also fixed. The parameter-probe path remains Phase-1 schema/name validation only; live SITL probing remains Phase 2. |
 | Phase 2 | One `healthy_reference` run and one `fail_primary` run execute under `var/runs/`; injection and reset are confirmed by parameter readback; fixed wind is recorded; required airspeed analysis artifacts exist; a dated smoke-review decision unlocks or blocks Phase 3; no curated feature evidence claim is made yet. | Accepted 2026-06-06 after the measurement rerun closed the required `OFS` no-op and `FAILP=500` probes. Final raw root: `var/runs/airspeed_failure_behavior_20260606T164050810132Z`. |
-| Phase 3 | Full v1 matrix runs with three accepted observations per case; campaign summary exists; behavior classes and observation-quality classes are assigned; failures are described as behavior outcomes where observation is valid. | Unlocked by Phase 2 measurement smoke, not implemented. |
-| Phase 4 | Curated package exists under `evidence/curated_logs/`; evidence report exists under `evidence/reports/features/`; evidence catalog is updated; presentation uses bounded wording. | Not implemented. |
+| Phase 3A / 4A | Ratio-bias sweep, headwind pulse ladder, and headwind stepped ramps have reviewed accepted observations, curated artifacts, catalog entry, and bounded wording. | Accepted 2026-06-14 by `evidence/reports/features/2026-06-14_airspeed_failure_ratio_ramp_pulse_acceptance.md`. |
+| Phase 3B / 4B | Fixed cases have three accepted observations per case; behavior classes and observation-quality classes are assigned; failures are described as behavior outcomes where observation is valid; final fixed-case/full-lane report is curated. | Open. Fixed-case repetition requirement is not satisfied. |
 
 ## Review Rules
 
-- Do not claim an accepted airspeed failure behavior result until Phase 4 is
-  accepted with dated evidence.
+- Do not claim full airspeed failure lane acceptance until Phase 4B is accepted
+  with dated evidence or the fixed-case contract is deliberately revised.
 - Do not count failed launches, pre-injection failures, or incomplete artifacts
   as behavior observations.
 - Do not count failed parameter readback, failed reset, or unverified reference
@@ -58,15 +60,68 @@ feature evidence or full behavior claim exists yet.
 - The mission ends in RTL: the classifier must separate a planned mission-end RTL
   (completion) from a fault-triggered early RTL/failsafe (`autopilot_contained`),
   using the max mission seq at the AUTO->RTL transition.
-- Presentation wording must remain bounded until the full evidence package is
-  curated and cataloged.
+- Presentation wording must remain bounded: Phase 4A is accepted only for the
+  ratio/ramp/pulse scope until the fixed-case Phase 4B package is completed or
+  the contract is deliberately revised.
 - Phase 2 measured `SIM_ARSPD_OFS` no-op and `SIM_ARSPD_FAILP=500` effect size
-  once. Phase 3 must still repeat the full v1 matrix and pool/replace the
+  once. Phase 4B must still close the fixed-case matrix and pool/replace the
   single-run provisional bands.
 
-## Required Smoke Review Checklist
+## Phase 3/4A Evidence Audit - 2026-06-14
 
-Before Phase 3 starts, record a dated smoke review that includes:
+Scope: desk audit of the existing 2026-06-11 curated package and stale
+canonical wording. No live SITL or Gazebo launch was performed.
+
+Evidence inspected:
+
+- `evidence/reports/features/2026-06-11_airspeed_failure_behavior_interim_analysis.md`
+- `evidence/curated_logs/airspeed_failure_behavior_2026-06-11/README.md`
+- `evidence/curated_logs/airspeed_failure_behavior_2026-06-11/raw_data_index.md`
+- `evidence/curated_logs/airspeed_failure_behavior_2026-06-11/manifest.json`
+- Curated ratio sweep, pulse ladder, ramp, and reproducibility CSV/JSON
+  summaries under `evidence/curated_logs/airspeed_failure_behavior_2026-06-11/`
+
+Audit result:
+
+- The package supports an interim characterization: 44 accepted one-bias
+  ratio-sweep observations, 1 accepted pulse-ladder observation, 1 accepted
+  +100 stepped-ramp observation, and 1 accepted +200 stepped-ramp observation.
+- The package and report originally labeled the work as interim; the same
+  evidence supports bounded Phase 4A acceptance when fixed cases are split into
+  Phase 4B.
+- The current evidence does not satisfy the Phase 4B fixed-case repetition
+  contract. Under the current contract, each fixed case needs three accepted
+  observations. Phase 2 has one accepted raw measurement-smoke observation each
+  for `healthy_reference`, `ofs_noop_probe`, `pitot_500pa`, and
+  `fail_primary`; `noise_5` and `noise_10` have no accepted live observations
+  in the current evidence set. If governance explicitly allows Phase 2
+  observations to seed the Phase 4B count, the minimum remaining fixed-case work
+  is two more accepted observations each for `healthy_reference`,
+  `ofs_noop_probe`, `pitot_500pa`, and `fail_primary`, plus three each for
+  `noise_5` and `noise_10`. Without that reuse decision, run three accepted
+  dedicated Phase 3 observations for all six fixed cases.
+
+Decision: Phase 3B/4B remains open. New live runs require explicit operator
+authorization under ADR-0004 before launch.
+
+## Phase 4A Bounded Acceptance - 2026-06-14
+
+Scope: ratio-bias sweep, headwind pulse ladder, and headwind stepped ramps only.
+No live SITL or Gazebo launch was performed for this acceptance review.
+
+Accepted evidence:
+
+- `evidence/reports/features/2026-06-11_airspeed_failure_behavior_interim_analysis.md`
+- `evidence/curated_logs/airspeed_failure_behavior_2026-06-11/`
+- `evidence/reports/features/2026-06-14_airspeed_failure_ratio_ramp_pulse_acceptance.md`
+
+Decision: Phase 4A accepted for bounded ratio/ramp/pulse characterization.
+Phase 4B fixed-case repetition/full-lane acceptance remains open.
+
+## Remaining Phase 4B Fixed-Case Gate Checklist
+
+Before any remaining Phase 4B fixed-case live work, preserve or record a dated
+review that includes:
 
 - raw roots for the `healthy_reference` and `fail_primary` attempts;
 - effective parameter stack and hashes;
@@ -204,7 +259,7 @@ Limitations:
   throttle, pitch, airspeed, groundspeed, altitude, mode, mission, and
   STATUSTEXT telemetry.
 - This is raw evidence only. Nothing was promoted into `evidence/`, and this is
-  not a Phase 4 feature-evidence claim.
+  not a Phase 4A or Phase 4B feature-evidence claim by itself.
 
 Decision: the two-case smoke proved the live harness but did not by itself
 unlock Phase 3 because `SIM_ARSPD_OFS` no-op and `SIM_ARSPD_FAILP=500` effect

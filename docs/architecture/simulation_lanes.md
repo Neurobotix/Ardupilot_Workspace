@@ -26,7 +26,7 @@ Per-target runtime status is in `docs/operations/launch_targets.md`.
 | LiDAR | Terrain / rangefinder work | `plane-lidar` + `gazebo-plane-lidar` + `bridge-plane` | Yes | Verified |
 | Copter base | Iris baseline | `copter` + `gazebo-copter` | No | Verified |
 | Copter LiDAR | Iris obstacle work | `copter-lidar` + `gazebo-copter-lidar` + `bridge-copter` | Yes | Verified handshake and flight; obstacle return not captured |
-| Airspeed failure behavior | Behavior characterization under degraded/corrupted airspeed signal; `test_suite` plugin lane | `plane-cte` + `gazebo-plane-cte` (plugin-owned launch) | No | Phase 2 measurement smoke accepted 2026-06-06; Phase 3 matrix not yet run. See `docs/architecture/airspeed_failure_lane.md` |
+| Airspeed failure behavior | Behavior characterization under degraded/corrupted airspeed signal; `test_suite` plugin lane | `plane-cte` + `gazebo-plane-cte` (plugin-owned launch) | No | Phase 2 measurement smoke accepted 2026-06-06; Phase 4A ratio/ramp/pulse characterization accepted 2026-06-14; fixed-case Phase 4B remains open. See `docs/architecture/airspeed_failure_lane.md` |
 | Staircase | Tight LiDAR overpass mission | `plane-staircase` + `gazebo-plane-staircase` + `bridge-plane` | Yes | Not yet tested |
 | Integrated airspeed+LiDAR | First clean integrated stack | `plane-airspeed-lidar` + `gazebo-plane-airspeed-lidar` + `bridge-plane` | Yes | Not yet tested |
 | Altitude-wind | Runtime wind-function proof lane | `plane-altitude-wind` + `gazebo-plane-altitude-wind` + `wind-publisher-altitude` | No | Not yet tested |
