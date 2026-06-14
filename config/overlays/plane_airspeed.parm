@@ -1,5 +1,16 @@
-# ArduPlane Parameters - Mini Talon Airspeed Overlay
+# ArduPlane Parameters - Mini Talon Airspeed Overlay (default)
 # Apply on top of plane_base.parm for Gazebo wind / pitot worlds.
+#
+# This is the DEFAULT, production-like Mini Talon airspeed overlay. It enables
+# the Gazebo JSON airspeed sensor and keeps the conservative 14/10/22
+# cruise/min/max envelope used by the accepted CTE wind-envelope evidence
+# (evidence/reports/features/2026-06-02_cte_wind_envelope_result.md). It matches
+# the recovered production-era overlay under
+# evidence/curated_logs/recovered_param_stacks/.
+#
+# Aggressive high-wind CTE tuning is intentionally NOT here. For a deliberate
+# high-wind stress profile (cruise 28 etc.), name
+# config/overlays/plane_airspeed_cte_high_wind_aggressive.parm explicitly.
 #
 # One-source rule:
 # - Gazebo provides wind
@@ -10,32 +21,14 @@ ARSPD_USE        1
 ARSPD_AUTOCAL    0         # Do not learn offset from live wind on startup
 ARSPD_SKIP_CAL   1         # Keep startup from zeroing in active wind
 ARSPD_OFFSET     0
-ARSPD_OPTIONS    0         # Trust Gazebo JSON airspeed in deliberate high-wind tests
-ARSPD_WIND_GATE  0         # Disable EKF/wind consistency disable-reenable cycling
 
-# High-wind CTE profile.
-# The 12/12 m/s matrix corner is a 16.97 m/s resultant wind, so the old
-# 14 m/s cruise target could not make reliable upwind progress. Keep this
-# in the airspeed overlay so the base Mini Talon params remain conservative.
-AIRSPEED_CRUISE  28
-AIRSPEED_MIN     18
-AIRSPEED_MAX     38
-TRIM_THROTTLE    75
-TECS_SPDWEIGHT   1.2
-TECS_CLMB_MAX    8
-TECS_SINK_MAX    3
-MIN_GROUNDSPEED  8
-ROLL_LIMIT_DEG   30
-NAVL1_PERIOD     22
-NAVL1_LIM_BANK   25        # Loiter-only bank cap; waypoint turns use ROLL_LIMIT_DEG
-TECS_PITCH_MIN   -5
-TKOFF_THR_MAX    100
-TKOFF_ROTATE_SPD 14
-TECS_LAND_ARSPD  16
-TECS_LAND_THR    65
+# Production-like Mini Talon airspeed envelope.
+AIRSPEED_CRUISE  14
+AIRSPEED_MIN     10
+AIRSPEED_MAX     22
 STALL_PREVENTION 1
 
 SIM_WIND_SPD     0
 SIM_WIND_DIR     180
 SIM_WIND_TURB    0
-AHRS_WIND_MAX    35
+AHRS_WIND_MAX    15

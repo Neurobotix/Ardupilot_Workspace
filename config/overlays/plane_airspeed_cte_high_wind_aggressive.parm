@@ -1,0 +1,59 @@
+# ArduPlane Parameters - Mini Talon Aggressive High-Wind CTE Stress Overlay
+#
+# WARNING: This is NOT the default Mini Talon airspeed overlay.
+# The default Gazebo airspeed overlay is config/overlays/plane_airspeed.parm
+# (conservative, production-like 14/10/22 cruise/min/max).
+#
+# This overlay is a deliberately named high-wind CTE STRESS profile. It raises
+# the commanded cruise/min/max well above the production-like Mini Talon values
+# so the aircraft keeps upwind ground-speed margin in the strong corners of a
+# wind matrix. It is preserved for stress experiments only and is intentionally
+# NOT wired into any launch target or wind-matrix/CTE default param stack.
+#
+# Provenance: these are the aggressive values that had previously leaked into
+# config/overlays/plane_airspeed.parm. The accepted CTE wind-envelope evidence
+# (evidence/reports/features/2026-06-02_cte_wind_envelope_result.md and
+# docs/presentations/platform_briefing/cte_result_brief.md) is the
+# production-like cruise=14 story, NOT this aggressive cruise=28 profile.
+#
+# To use this overlay, name it explicitly as a param-file stack member; do not
+# rename it back over the default plane_airspeed.parm.
+#
+# One-source rule:
+# - Gazebo provides wind
+# - SITL wind remains disabled
+
+ARSPD_TYPE       100       # JSON airspeed sensor from Gazebo / ArduPilotPlugin
+ARSPD_USE        1
+ARSPD_AUTOCAL    0         # Do not learn offset from live wind on startup
+ARSPD_SKIP_CAL   1         # Keep startup from zeroing in active wind
+ARSPD_OFFSET     0
+ARSPD_OPTIONS    0         # Trust Gazebo JSON airspeed in deliberate high-wind tests
+ARSPD_WIND_GATE  0         # Disable EKF/wind consistency disable-reenable cycling
+
+# High-wind CTE profile.
+# The 12/12 m/s matrix corner is a 16.97 m/s resultant wind, so the
+# production-like 14 m/s cruise target could not make reliable upwind progress.
+# This aggressive profile lifts the airspeed envelope above that wind magnitude.
+AIRSPEED_CRUISE  28
+AIRSPEED_MIN     18
+AIRSPEED_MAX     38
+TRIM_THROTTLE    75
+TECS_SPDWEIGHT   1.2
+TECS_CLMB_MAX    8
+TECS_SINK_MAX    3
+MIN_GROUNDSPEED  8
+ROLL_LIMIT_DEG   30
+NAVL1_PERIOD     22
+NAVL1_LIM_BANK   25        # Loiter-only bank cap; waypoint turns use ROLL_LIMIT_DEG
+TECS_PITCH_MIN   -5
+TKOFF_THR_MAX    100
+TKOFF_ROTATE_SPD 14
+TECS_LAND_ARSPD  16
+TECS_LAND_THR    65
+STALL_PREVENTION 1
+
+SIM_WIND_SPD     0
+SIM_WIND_DIR     180
+SIM_WIND_TURB    0
+AHRS_WIND_MAX    35

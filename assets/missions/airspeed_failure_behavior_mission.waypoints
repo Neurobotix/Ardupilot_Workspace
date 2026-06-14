@@ -1,0 +1,74 @@
+QGC WPL 110
+# ============================================================================
+# AIRSPEED FAILURE BEHAVIOR MISSION v1
+# Purpose:
+#   Purpose-built mission for the airspeed_failure_behavior lane. It is NOT the
+#   old airspeed_validation_mission (which existed for airspeed INTEGRATION
+#   testing). This mission is designed for fault-injection behavior
+#   characterization: inject one airspeed fault at a fixed, repeatable point and
+#   observe the aircraft response over a long straight cruise leg, then a
+#   reciprocal leg, then RTL.
+#
+# Design decisions (see governance/runbooks/features/airspeed_failure_behavior/
+# design_adrs.md, "ADR (Proposed): Airspeed Failure Mission Design"):
+#   - Cruise altitude 100 m AGL (high vertical margin so altitude loss / TECS
+#     fighting a bad airspeed is observable before terrain).
+#   - 800 m measurement legs (~80 s East headwind, ~40 s West tailwind).
+#   - Injection fires on ENTERING seq 4 (MISSION_CURRENT.seq==4, first edge):
+#     the aircraft has settled on seq 3 and begins the straight 800 m East
+#     headwind measurement leg toward WP4, giving ~800 m of clean post-injection
+#     cruise before the seq 5 turn, plus the full reciprocal West leg.
+#   - Mission ends in RTL (seq 9). There is NO landing sequence. Completion =
+#     front-half progress + both measurement legs + RTL reached and stabilized.
+#
+# World assumptions:
+#   - Home: lat=-35.363262, lon=149.165237
+#   - Fixed reference wind (Gazebo world ENU): x=-5, y=0, z=0 m/s
+#     (-X => wind blowing West => headwind on the Eastbound leg, tailwind West).
+#   - ENU axes: +X East, +Y North. Aircraft starts facing East, takes off into
+#     the wind. CONFIRM the wind sign on the smoke build (see reference-wind ADR).
+#
+# Commanded cruise: DO_CHANGE_SPEED = 15 m/s (inside the conservative 14/22
+#   AIRSPEED envelope of config/overlays/plane_airspeed.parm).
+#
+# Expected steady-state (healthy_reference, fixed -5,0,0 wind):
+#   - East measurement leg (WP3 -> WP4, headwind):  ARSP ~15, GPS ~10, ARSP-GPS ~+5
+#   - West measurement leg (WP6 -> WP7, tailwind):   ARSP ~15, GPS ~20, ARSP-GPS ~-5
+#   The +5/-5 sign flip is the per-attempt wind/observability sanity check.
+#
+# Injection point: seq 4. Ignore takeoff transient and turn segments for
+#   steady-state interpretation.
+# ============================================================================
+
+# Home
+0	1	0	16	0	0	0	0	-35.3632620	149.1652370	584.00	1
+
+# WP1: TAKEOFF East, climb to 100 m AGL
+1	0	3	22	15.0	0	0	0	-35.3632620	149.1668924	100.00	1
+
+# WP2: Command target airspeed = 15 m/s
+# MAV_CMD_DO_CHANGE_SPEED (178): param1=0 (airspeed), param2=15
+2	0	0	178	0	15.0	0	0	0	0	0	1
+
+# WP3: Eastbound settle leg start, 300 m East of home (stabilize cruise)
+3	0	3	16	0	0	0	0	-35.3632620	149.1685416	100.00	1
+
+# WP4: Eastbound MEASUREMENT leg end, 1100 m East of home (800 m measurement leg)
+# INJECTION POINT: fault is injected on ENTERING seq 4 (start of WP3->WP4 leg).
+4	0	3	16	0	0	0	0	-35.3632620	149.1773540	100.00	1
+
+# WP5: North offset for reciprocal turn, 150 m North / 1100 m East
+5	0	3	16	0	0	0	0	-35.3619145	149.1773540	100.00	1
+
+# WP6: Westbound MEASUREMENT leg start, 150 m North / 1100 m East
+6	0	3	16	0	0	0	0	-35.3619145	149.1773540	100.00	1
+
+# WP7: Westbound MEASUREMENT leg end, 150 m North / 300 m East (800 m measurement leg)
+7	0	3	16	0	0	0	0	-35.3619145	149.1685416	100.00	1
+
+# WP8: Return toward home, 150 m North of home
+8	0	3	16	0	0	0	0	-35.3619145	149.1652370	100.00	1
+
+# WP9: RETURN TO LAUNCH. Mission ends here; no landing sequence.
+# MAV_CMD_NAV_RETURN_TO_LAUNCH (20). Completion = RTL reached and stabilized.
+9	0	3	20	0	0	0	0	0	0	0	1

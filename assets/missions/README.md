@@ -5,9 +5,30 @@ Active waypoint missions live directly in this directory.
 ## Active Missions
 
 - `airspeed_validation_mission.waypoints`
-  Purpose: reciprocal-leg airspeed validation in wind.
+  Purpose: reciprocal-leg airspeed INTEGRATION validation in wind (legacy; not
+  the fault-injection lane).
+- `airspeed_failure_behavior_mission.waypoints`
+  Purpose: airspeed fault-injection behavior lane. 100 m cruise, 800 m reciprocal
+  East/West measurement legs, fault injected on entering seq 4, ends in RTL (no
+  landing sequence). See
+  `governance/runbooks/features/airspeed_failure_behavior/`.
+- `airspeed_failure_headwind_ramp_mission.waypoints`
+  Purpose: positive reported-airspeed stepped-ramp variant for the airspeed
+  fault-injection behavior lane. 100 m cruise, longer Eastbound climb/settle
+  runway, one 23000 m continuous headwind line holder, ramp schedule starts on
+  entering seq 4, and the monitor finishes after the case-specific final ramp
+  observation (`+100%` standard or `+200%` extended) with no RTL waypoint.
+- `airspeed_failure_headwind_pulse_ladder_mission.waypoints`
+  Purpose: positive reported-airspeed pulse-ladder variant for the airspeed
+  fault-injection behavior lane. 100 m cruise, longer Eastbound climb/settle
+  runway, one 23000 m continuous headwind line holder, pulse schedule starts
+  on entering seq 4, and the monitor finishes after the final observation with
+  no RTL waypoint.
 - `lidar_staircase_mission.waypoints`
   Purpose: LiDAR overpass mission for the staircase world.
+- `quad_star_showcase_mission.waypoints`
+  Purpose: Iris quadcopter showcase mission that traces a five-point star and
+  returns to launch.
 - `runway_autoland_gentle_approach_v8.waypoints`
   Purpose: retained runway autoland mission from the landing-tuning cycle.
 - `square_500m_five_laps_loiter5_land.waypoints`

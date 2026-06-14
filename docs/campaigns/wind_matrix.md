@@ -65,6 +65,32 @@ Phase 5 writes per-attempt parameter-file provenance into campaign run config
 and manifest records. Comparisons must use parameter content hashes, not infer
 equivalence from path names.
 
+## Unified CLI (`sim-test`)
+
+The `test_suite` now has a single entry point that covers all plugins and run
+modes. Run it with no arguments for an interactive wizard:
+
+```bash
+sim-test
+```
+
+Or pass sub-commands to use the existing flag surface directly:
+
+```bash
+sim-test case   --x 0 --y 4 --rep 1
+sim-test suite  --x-values 0,4,8,12 --y-values 0,4,8,12
+sim-test rr     --x-values 0,4,8,12
+```
+
+The wizard selects sensor family (`wind_matrix` or `airspeed_failure`), run
+mode, case parameters, and optionally advanced timeouts. For `wind_matrix` it
+mirrors the full flag surface of `run_case`, `run_suite`, and `run_round_robin`.
+For `airspeed_failure` it asks which fixed fault cases to include, ratio bias
+percents, vehicle `ARSPD_RATIO`, and whether the ratio is already verified.
+
+Source: `src/sim_ard_gaw/campaigns/test_suite/cli/run.py` and
+`src/sim_ard_gaw/campaigns/test_suite/cli/interactive.py`.
+
 ## Phase 5 Safety Policy
 
 - Matrix launchers take a campaign-root manifest lock before unsafe manifest

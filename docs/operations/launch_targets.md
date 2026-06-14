@@ -49,8 +49,18 @@ optional local-only final overlay when a plane lane names it below.
 
 `config/vehicles/plane_base.parm` is intentionally sensor-neutral. It contains
 generic `AIRSPEED_*` defaults while keeping `ARSPD_TYPE` disabled. Gazebo
-airspeed sensor enablement and lane-specific or high-wind airspeed overrides
-come from `config/overlays/plane_airspeed.parm` or campaign lane files.
+airspeed sensor enablement and lane-specific airspeed overrides come from
+`config/overlays/plane_airspeed.parm` or campaign lane files.
+
+`config/overlays/plane_airspeed.parm` is the default Mini Talon Gazebo airspeed
+overlay. It enables the JSON airspeed sensor and keeps the production-like
+conservative envelope (`AIRSPEED_CRUISE 14`, `AIRSPEED_MIN 10`,
+`AIRSPEED_MAX 22`). This matches the recovered production-era overlay and the
+accepted CTE wind-envelope evidence (cruise = 14 m/s). Aggressive high-wind CTE
+tuning lives separately in
+`config/overlays/plane_airspeed_cte_high_wind_aggressive.parm` (cruise 28). That
+aggressive overlay is a deliberate stress profile only; it is not wired into any
+launch target or CTE/wind-matrix default and must be named explicitly to use.
 
 | Target or caller | Shared stack in applied order | Local override behavior |
 | --- | --- | --- |

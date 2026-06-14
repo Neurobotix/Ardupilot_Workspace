@@ -58,7 +58,9 @@ alternate world, mission, or mesh variant in the same directory.
 | `assets/missions/square_500m_five_laps_loiter5_land.waypoints` | waypoint mission | Wind-matrix square, loiter, land mission. | campaign-specific | `run_one.py`; `run_matrix.py`; `docs/campaigns/wind_matrix.md`. | not yet verified |
 | `assets/missions/lidar_staircase_mission.waypoints` | waypoint mission | Staircase LiDAR overpass mission. | active | `plane-staircase` launch guidance. | not yet verified |
 | `assets/missions/mini_talon_airspeed_lidar/staircase_sensor_validation.waypoints` | waypoint mission | Integrated airspeed + LiDAR staircase mission. | campaign-specific | `plane-airspeed-lidar`; integrated lane README. | not yet verified |
-| `assets/missions/airspeed_validation_mission.waypoints` | waypoint mission | Reciprocal-leg airspeed validation mission. | active | `assets/missions/README.md`. | unknown |
+| `assets/missions/airspeed_validation_mission.waypoints` | waypoint mission | Reciprocal-leg airspeed INTEGRATION validation mission (legacy; not the fault lane). | active | `assets/missions/README.md`. | unknown |
+| `assets/missions/airspeed_failure_behavior_mission.waypoints` | waypoint mission | Airspeed fault-injection behavior lane mission: 100 m cruise, 800 m reciprocal legs, inject on entering seq 4, ends in RTL (no landing). | active (Phase 2 measurement smoke run 2026-06-06) | `assets/missions/README.md`; `governance/runbooks/features/airspeed_failure_behavior/`; raw root `var/runs/airspeed_failure_behavior_20260606T164050810132Z/`. | not yet verified (Phase 2 is raw-only smoke; no dated evidence report under `evidence/reports/` yet) |
+| `assets/missions/quad_star_showcase_mission.waypoints` | waypoint mission | Iris quadcopter showcase mission that traces a five-point star and returns to launch. | active | `assets/missions/README.md`. | not yet verified |
 | `assets/missions/runway_autoland_gentle_approach_v8.waypoints` | waypoint mission | Retained runway autoland tuning mission. | active | `assets/missions/README.md`. | unknown |
 | `assets/missions/archive/runway_autoland_short_final_v7.waypoints` | waypoint mission | Historical runway autoland variant. | archive | `assets/missions/archive/README.md`. | unknown |
 
@@ -68,4 +70,5 @@ Count basis for this pass:
 
 - models: 10 first-level model directories under `assets/models/`;
 - worlds: 14 `.sdf` files under `assets/worlds/`;
-- missions: 6 `.waypoints` files under `assets/missions/`.
+- missions: 7 non-archive `.waypoints` files under `assets/missions`, plus
+  1 archived historical variant.

@@ -280,10 +280,11 @@ comparison) is the remaining gate before Phase 4.
 
 ### Stage 4 — second plugin proof — UNBLOCKED 2026-06-01
 - Phase 3G is accepted, so this stage is authorized.
-- Stand up a second non-wind plugin (suggested: a no-stimulus airspeed
-  validation bench, or a GPS dropout injector).
-- Stand up a second non-wind plugin (suggested: a no-stimulus airspeed
-  validation bench, or a GPS dropout injector).
+- The selected planned second-plugin candidate is airspeed
+  failure/degradation behavior, documented in
+  `governance/runbooks/features/airspeed_failure_behavior/`. This runbook
+  locks candidate scope and acceptance gates; it does not claim implementation
+  or runtime evidence.
 - If it requires editing `core/`, the boundaries are still wrong.
 - Do not use a second plugin as architecture theater. A second plugin proves
   nothing if the first plugin is still secretly a wind-specific legacy wrapper.

@@ -19,7 +19,66 @@ campaign test-suite implementation ownership into organized
 and script paths. Evidence:
 `evidence/reports/migration/PHASE_8_COMPAT_RETIREMENT_2026-05-24.md`.
 
-Active feature work: the `test_suite` migration completed its Phase 3 sequence
+A unified interactive CLI entry point (`sim-test`) was added on 2026-06-07 via
+`src/sim_ard_gaw/campaigns/test_suite/cli/run.py` and
+`src/sim_ard_gaw/campaigns/test_suite/cli/interactive.py`. It covers both
+`wind_matrix` (single case / sequential suite / round-robin) and
+`airspeed_failure` (sequential suite). No existing CLI modules were modified.
+`questionary` is now a declared dependency in `requirements.txt`. Activate with
+`env/bin/pip install -e .` then `sim-test`.
+
+Active feature work: the airspeed failure behavior lane has a Phase 1 no-SITL
+plugin foundation accepted after strict review on 2026-06-05: plugin package,
+dry-run CLI, registry key, case generator, parameter schema validation,
+artifact schemas, classifier helpers, manifest accepted-observation counting,
+and no-SITL tests. The 2026-06-05 review fixed the sourced-workspace Python
+module path for the documented CLI and found no remaining blocker, critical, or
+high Phase 1 findings. Phase 2 live measurement smoke was accepted on
+2026-06-06 from raw root
+`var/runs/airspeed_failure_behavior_20260606T164050810132Z/`: the guarded run
+verified fixed-wind echo, `SIM_ARSPD_*` boot defaults, vehicle
+`ARSPD_RATIO/USE/TYPE`, seq-4 injection timing, injection/reset readback,
+required artifacts, planned RTL discrimination, `OFS` no-op behavior,
+`FAILP=500` effect size, and behavior summaries
+(`healthy_reference=nominal_completion`, `ofs_noop_probe=nominal_completion`,
+`pitot_500pa=degraded_completion`, `fail_primary=degraded_completion`).
+On 2026-06-11 an operator-directed analysis was reviewed, curated, and reported
+from 47 accepted observations (signed ratio-bias sweep +10..+100/−10..−50 on
+2026-06-08/09, pulse ladder +10..+130 and stepped ramps +100/+200 on
+2026-06-10): report
+`evidence/reports/features/2026-06-11_airspeed_failure_behavior_interim_analysis.md`,
+curated package `evidence/curated_logs/airspeed_failure_behavior_2026-06-11/`.
+On 2026-06-14 the same package was accepted for **bounded Phase 4A**
+ratio/ramp/pulse characterization by
+`evidence/reports/features/2026-06-14_airspeed_failure_ratio_ramp_pulse_acceptance.md`.
+Headline: abrupt bias pulses ≥+60% trip `ARSPD_WIND_GATE=5` and disable the
+sensor; the same biases reached by slow +10% steps stay accepted while the
+aircraft settles into a degraded equilibrium; past ~+80..+100 the realized
+state saturates around `AIRSPEED_MAX=22`/TECS limits. Phase 4B fixed-case
+repetition/full-lane acceptance remains open; the generating plugin/doc changes
+are still uncommitted working-tree state. See
+`governance/runbooks/features/airspeed_failure_behavior/`.
+The lane now also includes headwind stepped-ramp and pulse-ladder cases with
+their own 100 m AGL long Eastbound missions and no RTL waypoint.
+`ratio_bias_ramp_p10_to_p100_headwind` verifies baseline once, then applies
+60 s windows from +10 through +100 reported-airspeed bias without resets; it is
+accumulating drift evidence, not an independent dose-response sweep.
+`ratio_bias_ramp_p10_to_p200_headwind` uses the same mission and schedule shape
+but continues through +200 as a stronger failure-boundary probe after +100
+showed a stable degraded equilibrium.
+`ratio_bias_pulse_p10_to_p130_headwind` verifies baseline, alternates 60 s
+baseline/fault windows from +10 through +130, resets params after the final
+observation, and treats the result as threshold/transient evidence rather than
+a replacement for the independent fixed-bias sweep.
+
+Follow-up review fixes on 2026-06-06 aligned current docs with the accepted
+measurement-smoke root and made live ratio-bias attempts recompute
+`SIM_ARSPD_RATIO` from the measured MAVLink `ARSPD_RATIO` readback before
+injection. A 2026-06-07 blocker review removed the former sign-flip case from the v1
+case set because default `ARSPD_TUBE_ORDR=2`/AUTO uses absolute pressure, so
+that payload is not a sustained collapse fault on this stack.
+
+Additional active feature work: the `test_suite` migration completed its Phase 3 sequence
 (3A–3G) on 2026-06-01. The staged `wind_matrix` plugin is fully zero-legacy
 (environment, MAVLink control/monitor, and wind injection all plugin-owned) and
 was live-proven against the retained legacy tool run directly; the Phase 3G gate

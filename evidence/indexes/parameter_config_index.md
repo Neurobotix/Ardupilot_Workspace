@@ -28,7 +28,8 @@ compatibility runners and wrappers still govern some command surfaces.
 | `config/vehicles/plane_base.parm` | Sensor-neutral Mini Talon base with generic `AIRSPEED_*` defaults. | vehicle base | yes | `8941fa559f762fb4111c150db04e4d36c0ad05d680f8cff2cd28219ba8ceaa01` | First file for `plane`, `plane-cte` / `plane-airspeed`, `plane-lidar`, `plane-staircase`, `plane-airspeed-lidar`, `plane-altitude-wind`, and current CTE campaign callers. |
 | `config/vehicles/copter_params.parm` | Iris frame and Copter SITL defaults. | vehicle base | yes | `fd12b0f6398de5438a1b0d3f2638c5f1b9e682bb672a03ea81fc4d005fe38579` | `copter` and `copter-lidar`; launcher loads with `--wipe-eeprom`. |
 | `config/vehicles/plane_params_rebuild.parm` | Standalone rebuild stack. | vehicle base | yes | `c5d38923b87daed0cb495d85c72ce8023721e089313ed5d44f1ad7375b2ece3e` | `plane-rebuild` only; do not stack with `plane_base.parm` or local plane override. |
-| `config/overlays/plane_airspeed.parm` | Gazebo airspeed and high-wind CTE overlay. | overlay | yes | `ebf99c7e5b65e24ddfacb0bafa2295579c9cb073600c8548f6050f10d778e577` | After `plane_base.parm` for `plane-cte` / `plane-airspeed` and current CTE campaign callers. |
+| `config/overlays/plane_airspeed.parm` | Default Gazebo airspeed overlay; production-like conservative 14/10/22 envelope. | overlay | yes | `154bf537b26c6018e55a8a0e8c0c0d2ca2103e7d91931c923db478f0622c6159` | After `plane_base.parm` for `plane-cte` / `plane-airspeed` and current CTE/wind-matrix campaign callers. |
+| `config/overlays/plane_airspeed_cte_high_wind_aggressive.parm` | Deliberately named aggressive high-wind CTE stress overlay (28/18/38). NOT the default airspeed overlay. | overlay | yes | `5fd76251d9d0a4738fec6b57365357200f030604588c1602d22bae0e750c8f95` | None by default; not wired into any launch target or campaign default. Stress experiments only, named explicitly. |
 | `config/overlays/plane_lidar.parm` | MAVLink bridge-backed downward rangefinder overlay. | overlay | yes | `5837ebe4c1e7e23ee7d0343de2318a2044f924ea4f8d5f22d05b01582f77210b` | After `plane_base.parm` for `plane-lidar`; also before staircase nav overlay for `plane-staircase`. |
 | `config/overlays/staircase_plane_params.parm` | Tight nav overlay for staircase LiDAR mission. | overlay | yes | `1b045dde27f2fae2dffbeeedaa695e2b8246a0b11a3397ffe7b6ef0f8acd24a1` | Final shared overlay for `plane-staircase` before any optional local plane override. |
 | `config/campaigns/mini_talon_airspeed_lidar/plane_full.parm` | Shared integrated airspeed + LiDAR lane parameters. | campaign | yes | `32f38f58cd90dc8bd5522612a92eec747a90326108fa2d9ddc05635dca9a8b33` | After `plane_base.parm` for `plane-airspeed-lidar`. |
@@ -59,8 +60,25 @@ compatibility runners and wrappers still govern some command surfaces.
 
 - `plane_base.parm` explicitly leaves `ARSPD_TYPE` disabled while keeping
   generic `AIRSPEED_*` defaults. Gazebo airspeed sensor enablement and
-  lane-specific or high-wind airspeed overrides live in the airspeed overlay or
-  campaign lane files.
+  lane-specific airspeed overrides live in the airspeed overlay or campaign
+  lane files.
+- 2026-06-03 airspeed-overlay boundary fix: `config/overlays/plane_airspeed.parm`
+  was restored to the production-like conservative Mini Talon envelope
+  (`AIRSPEED_CRUISE 14`, `AIRSPEED_MIN 10`, `AIRSPEED_MAX 22`,
+  `AHRS_WIND_MAX 15`) so the default Gazebo airspeed overlay matches the
+  recovered production-era overlay and the accepted CTE wind-envelope evidence
+  (`evidence/reports/features/2026-06-02_cte_wind_envelope_result.md`, cruise
+  = 14 m/s). The aggressive high-wind CTE tuning that had leaked into that file
+  (`AIRSPEED_CRUISE 28`, `AIRSPEED_MIN 18`, `AIRSPEED_MAX 38`,
+  `TRIM_THROTTLE 75`, `AHRS_WIND_MAX 35`, etc.) was moved verbatim into the new
+  separately named `config/overlays/plane_airspeed_cte_high_wind_aggressive.parm`.
+  That aggressive overlay is a stress profile only and is not the default; it is
+  not wired into any launch target or CTE/wind-matrix default param stack.
+  `plane-cte`, `plane-airspeed`, and the wind-matrix/CTE callers
+  (`run_one.py`, `run_one_og.py`, `run_matrix.py`, and the `wind_matrix`
+  test-suite plugin defaults) reference `plane_airspeed.parm` by path and so now
+  load the conservative 14 m/s envelope, preserving the existing
+  cruise-airspeed-limited CTE evidence story.
 - Hashes above are for shared active and campaign files in the Phase 4 runtime
   stack audit. Historical comparison-input hashes are also recorded above and
   in the recovered-stack `SHA256SUMS` evidence manifest; archive and local-only

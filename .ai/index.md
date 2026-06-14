@@ -34,8 +34,20 @@
   `governance/runbooks/migration/phase_8_compatibility_retirement.md`
 - Phase 8 compatibility-retirement evidence:
   `evidence/reports/migration/PHASE_8_COMPAT_RETIREMENT_2026-05-24.md`
+- Unified test-suite interactive CLI: `src/sim_ard_gaw/campaigns/test_suite/cli/run.py`
+  and `src/sim_ard_gaw/campaigns/test_suite/cli/interactive.py`
 - test_suite migration feature runbook:
   `governance/runbooks/features/test_suite_migration/`
+- Airspeed failure behavior feature runbook (second `test_suite` plugin lane;
+  Phase 2 raw measurement smoke accepted 2026-06-06):
+  `governance/runbooks/features/airspeed_failure_behavior/`
+- Airspeed failure behavior technical analysis (2026-06-11; sweep + pulse ladder
+  + stepped ramps; later accepted for bounded Phase 4A on 2026-06-14):
+  `evidence/reports/features/2026-06-11_airspeed_failure_behavior_interim_analysis.md`;
+  curated: `evidence/curated_logs/airspeed_failure_behavior_2026-06-11/`
+- Airspeed failure behavior Phase 4A bounded acceptance (2026-06-14; ratio
+  sweep + pulse ladder + stepped ramps accepted, fixed-case Phase 4B open):
+  `evidence/reports/features/2026-06-14_airspeed_failure_ratio_ramp_pulse_acceptance.md`
 - test_suite migration Phase 1 (wrapper parity) evidence:
   `evidence/reports/features/TEST_SUITE_MIGRATION_PHASE_1_2026-05-24.md`
 - test_suite migration Phase 2 (generic manifest) evidence:
@@ -98,7 +110,9 @@
 - Quick start: `docs/onboarding/quick_start.md`
 - Troubleshooting guide: `docs/operations/troubleshooting.md`
 - Simulation lanes and flight modes: `docs/architecture/simulation_lanes.md`
+- Airspeed failure behavior lane (behavior characterization; Phase 2 measurement smoke accepted 2026-06-06; Phase 4A ratio/ramp/pulse characterization accepted 2026-06-14; fixed-case Phase 4B remains open): `docs/architecture/airspeed_failure_lane.md`
 - Launch target status: `docs/operations/launch_targets.md`
+- Airspeed failure behavior — verified no-SITL commands, stack, output paths, live-run gate: `docs/operations/airspeed_failure_runbook.md`
 - SITL/Gazebo runtime notes: `docs/operations/sitl_gazebo_runtime.md`
 - Vehicle status: `docs/vehicles/status.md`
 - Wind matrix campaign status: `docs/campaigns/wind_matrix.md`
@@ -110,6 +124,15 @@
   `governance/decisions/ADR-0003-phase5-campaign-safety-contract.md`
 - Clean-run and workspace-plugin decision:
   `governance/decisions/ADR-0004-clean-run-and-workspace-plugin-policy.md`
+- Airspeed failure behavior design decisions (accepted 2026-06-03; full reasoning
+  in `governance/runbooks/features/airspeed_failure_behavior/design_adrs.md` and
+  `design_research.md`):
+  `governance/decisions/ADR-0006-airspeed-failure-mission-design.md`,
+  `ADR-0007-airspeed-failure-case-payloads-and-ratio-sweep.md`,
+  `ADR-0008-airspeed-failure-reset-protocol.md`,
+  `ADR-0009-airspeed-failure-injection-trigger.md`,
+  `ADR-0010-airspeed-failure-reference-wind.md`,
+  `ADR-0011-airspeed-failure-behavior-classification.md`
 - Phase 5 Gazebo plugin fallback incident:
   `governance/audits/2026-05-21_phase5_gazebo_plugin_fallback_incident.md`
 - Phase 6 evidence/operations runbook:
