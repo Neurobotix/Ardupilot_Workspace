@@ -1,0 +1,47 @@
+QGC WPL 110
+# ============================================================================
+# AIRSPEED FAILURE HEADWIND STEPPED RAMP MISSION v2 (cruise-follow)
+# Purpose:
+#   Identical to airspeed_failure_headwind_ramp_mission.waypoints EXCEPT the
+#   commanded cruise is no longer pinned by DO_CHANGE_SPEED. Per ADR-0016, the
+#   seq-2 DO_CHANGE_SPEED (178) item is replaced by a benign NAV_WAYPOINT so that
+#   mode_auto_target_airspeed_cm() falls through to AIRSPEED_CRUISE
+#   (ArduPlane/navigation.cpp:140). The flown cruise is then whatever the loaded
+#   overlay sets via AIRSPEED_CRUISE -- which is what the cruise-axis cells need.
+#
+# Why a placeholder instead of deleting seq 2:
+#   The injection trigger fires on ENTERING seq 4 after front-half progress
+#   through seq 1,2,3 (src .../airspeed_failure/defaults.py INJECTION_TRIGGER).
+#   Deleting seq 2 and renumbering would shift the ramp start to seq 3 and break
+#   the trigger. Keeping seq 2 as a NAV_WAYPOINT preserves seq numbering, the
+#   front-half geometry, and the seq-4 trigger unchanged.
+#
+# Design (unchanged from v1):
+#   - Cruise altitude 100 m AGL; experiment may find stall/loss thresholds.
+#   - Fixed reference wind Gazebo ENU x=-5, y=0, z=0 m/s; Eastbound = headwind.
+#   - Measurement starts on ENTERING seq 4 after the seq 3 settle point.
+#   - WP3 -> WP4 is a long Eastbound headwind line; monitor finishes after the
+#     final observe window, resets params, does not wait for RTL.
+#   - There is intentionally no RTL waypoint in this mission.
+#
+# Commanded cruise: NONE hardcoded. Cruise = AIRSPEED_CRUISE from the overlay.
+# Injection schedule lives in the airspeed_failure plugin (unchanged).
+# ============================================================================
+
+# Home
+0	1	0	16	0	0	0	0	-35.3632620	149.1652370	584.00	1
+
+# WP1: TAKEOFF East, climb to 100 m AGL over a longer runway.
+1	0	3	22	15.0	0	0	0	-35.3632620	149.1784556	100.00	1
+
+# WP2: Benign NAV_WAYPOINT placeholder (was DO_CHANGE_SPEED in v1). Co-located
+# just East of the takeoff egress so front-half geometry is preserved. No speed
+# command -> cruise follows AIRSPEED_CRUISE.
+2	0	3	16	0	0	0	0	-35.3632620	149.1800000	100.00	1
+
+# WP3: Eastbound settle point, 2000 m East of home.
+3	0	3	16	0	0	0	0	-35.3632620	149.1872680	100.00	1
+
+# WP4: Long Eastbound HEADWIND line holder, 25000 m East of home.
+# STEPPED RAMP START: baseline confirmation begins on ENTERING seq 4.
+4	0	3	16	0	0	0	0	-35.3632620	149.4406245	100.00	1
