@@ -6,6 +6,7 @@ constructs the plugin, and prints the requested payload metadata.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import sys
 import time
@@ -42,6 +43,27 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--live-case", dest="live_case_id")
     parser.add_argument("--confirm-live-phase2", action="store_true")
     parser.add_argument("--campaign-root", type=Path, default=None)
+    parser.add_argument(
+        "--param-airspeed",
+        type=Path,
+        default=None,
+        help=(
+            "Airspeed overlay applied on top of plane_base.parm. Selects the "
+            "envelope cell for the ADR-0012 sensitivity matrix. Defaults to the "
+            "baseline config/overlays/plane_airspeed.parm (14/22)."
+        ),
+    )
+    parser.add_argument(
+        "--mission",
+        type=Path,
+        default=None,
+        help=(
+            "Override the mission file for the live case(s). Used to fly the "
+            "ADR-0016 cruise-follow ramp mission (no DO_CHANGE_SPEED) so the "
+            "overlay's AIRSPEED_CRUISE is actually flown. Defaults to the case's "
+            "built-in mission."
+        ),
+    )
     parser.add_argument("--mavlink", default="udpin:0.0.0.0:14551")
     parser.add_argument("--mission-timeout", type=float, default=900.0)
     parser.add_argument("--ready-timeout", type=float, default=60.0)
@@ -84,8 +106,19 @@ def _config_from_args(args: argparse.Namespace) -> AirspeedFailureConfig:
         biases = defaults.FULL_RATIO_BIAS_PERCENTS
     else:
         biases = defaults.V1_RATIO_BIAS_PERCENTS
+    if args.param_airspeed is not None:
+        param_airspeed = args.param_airspeed.expanduser().resolve()
+        if not param_airspeed.exists():
+            raise SystemExit(f"ERROR: --param-airspeed file not found: {param_airspeed}")
+        param_file_stack: tuple[Path, ...] | None = (
+            defaults.PLANE_BASE_PARAM_FILE,
+            param_airspeed,
+        )
+    else:
+        param_file_stack = None
     return AirspeedFailureConfig(
         ratio_bias_percents=tuple(biases),
+        param_file_stack=param_file_stack,
         campaign_root=args.campaign_root.resolve() if args.campaign_root else defaults.default_campaign_root(),
         vehicle_arspd_ratio=args.vehicle_arspd_ratio,
         vehicle_arspd_ratio_verified=args.verified_vehicle_ratio,
@@ -156,24 +189,37 @@ def main(argv: Iterable[str] | None = None) -> None:
         run_live_cases(
             config,
             [args.live_case_id],
+            mission_override=args.mission,
             title="Airspeed Failure Behavior - Phase 2 single live case",
         )
 
 
-def run_live_cases(config: AirspeedFailureConfig, cases: list[str], *, title: str) -> None:
+def run_live_cases(
+    config: AirspeedFailureConfig,
+    cases: list[str],
+    *,
+    title: str,
+    mission_override: Path | None = None,
+) -> None:
     plugin = build_plugin(config)
     generator = AirspeedFailureCaseGenerator(config)
     runner = plugin.attempt_runner()
+    if mission_override is not None:
+        mission_override = mission_override.expanduser().resolve()
+        if not mission_override.exists():
+            raise SystemExit(f"ERROR: --mission file not found: {mission_override}")
     defaults.log("=" * 60)
     defaults.log(title)
     defaults.log(f"  Campaign root: {config.campaign_root}")
-    defaults.log(f"  Mission      : {config.mission_file}")
+    defaults.log(f"  Mission      : {mission_override or config.mission_file}")
     defaults.log(f"  Cases        : {', '.join(cases)}")
     defaults.log("  Raw output only; no curated evidence promotion")
     defaults.log("=" * 60)
     config.campaign_root.mkdir(parents=True, exist_ok=True)
     for index, case_id in enumerate(cases, start=1):
         case = generator.get_case(case_id)
+        if mission_override is not None:
+            case = dataclasses.replace(case, mission_file=mission_override)
         attempt_index = next_available_attempt_index(plugin, case)
         attempt_dir = plugin.attempt_dir_factory()(plugin.manifest, case, attempt_index)
         defaults.log(
