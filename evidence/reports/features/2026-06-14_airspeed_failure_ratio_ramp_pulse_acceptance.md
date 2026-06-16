@@ -157,6 +157,14 @@ Within this bounded scope, the evidence supports these findings:
   +80..+100: raw reported airspeed continues rising while true airspeed,
   groundspeed, altitude, throttle, pitch/elevator response, and sensor state are
   effectively flat;
+  - **Correction (ADR-0015, 2026-06-16):** the mechanism of this "saturation"
+    was identified by the later envelope-matrix work. The flat believed-airspeed
+    value (~22 m/s) is the `AHRS_WIND_MAX` clamp (`ground_speed + AHRS_WIND_MAX`,
+    with `AHRS_WIND_MAX=15`), NOT a control-authority or `AIRSPEED_MAX` envelope
+    limit. Raw `ARSP` keeps rising to ~37 m/s while the clamp holds the believed
+    value near `ground_speed + 15`; the sensor stays in use and healthy
+    (`ARSP.U=1`) — clamped, not rejected. This corrects only the mechanism; the
+    observation above (raw rises, believed/true/alt flat) stands as logged.
 - the +100 and +200 ramp overlap reproduces closely enough to support the
   single-configuration interpretation recorded by the June 11 report.
 

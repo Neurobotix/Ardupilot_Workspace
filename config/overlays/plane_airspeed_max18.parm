@@ -1,0 +1,28 @@
+# ArduPlane Parameters - Mini Talon Airspeed Overlay (envelope cell: max18)
+# Apply on top of plane_base.parm for Gazebo wind / pitot worlds.
+#
+# Envelope Sensitivity Matrix cell (ADR-0012, ADR-0013): MAX-ONLY (low ceiling).
+# Identical to config/overlays/plane_airspeed.parm EXCEPT AIRSPEED_MAX, so the
+# ceiling is the only changed variable. This is a headline cell: it tests
+# whether the ramp plateau-onset moves with AIRSPEED_MAX. Run at n=3.
+#
+# One-source rule:
+# - Gazebo provides wind
+# - SITL wind remains disabled
+
+ARSPD_TYPE       100       # JSON airspeed sensor from Gazebo / ArduPilotPlugin
+ARSPD_USE        1
+ARSPD_AUTOCAL    0         # Do not learn offset from live wind on startup
+ARSPD_SKIP_CAL   1         # Keep startup from zeroing in active wind
+ARSPD_OFFSET     0
+
+# Max-only envelope cell: ceiling lowered to 18, cruise held at baseline 14.
+AIRSPEED_CRUISE  14
+AIRSPEED_MIN     10
+AIRSPEED_MAX     18
+STALL_PREVENTION 1
+
+SIM_WIND_SPD     0
+SIM_WIND_DIR     180
+SIM_WIND_TURB    0
+AHRS_WIND_MAX    15

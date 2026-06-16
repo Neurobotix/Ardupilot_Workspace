@@ -45,6 +45,11 @@ records in `governance/decisions/`.
 | [ADR-0009](../../../decisions/ADR-0009-airspeed-failure-injection-trigger.md) | Injection trigger on entering seq 4 |
 | [ADR-0010](../../../decisions/ADR-0010-airspeed-failure-reference-wind.md) | Fixed reference wind x=−5, y=0, z=0 ENU |
 | [ADR-0011](../../../decisions/ADR-0011-airspeed-failure-behavior-classification.md) | Behavior-class vocabulary and observation-quality gating |
+| [ADR-0012](../../../decisions/ADR-0012-airspeed-envelope-sensitivity-matrix.md) | Phase 4C envelope sensitivity matrix (outer config loop, inner fault experiment) |
+| [ADR-0013](../../../decisions/ADR-0013-airspeed-envelope-overlay-mechanism.md) | Envelope overlay files driven through the existing `--param-airspeed` seam |
+| [ADR-0014](../../../decisions/ADR-0014-airspeed-plateau-metric-and-preregistered-predictions.md) | Ramp plateau-onset metric and pre-registered, falsifiable predictions |
+| [ADR-0015](../../../decisions/ADR-0015-airspeed-ahrs-wind-max-clamp-correction.md) | Correction: the ramp plateau is the `AHRS_WIND_MAX` clamp, not `AIRSPEED_MAX`; P1 withdrawn, `AHRS_WIND_MAX` made first-class |
+| [ADR-0016](../../../decisions/ADR-0016-airspeed-two-tier-bias-lane-and-validation-gate.md) | Two-tier lane (protected `AHRS_WIND_MAX=15` / diagnostic `=0`), mandatory mechanism validation gate, `DO_CHANGE_SPEED` removed from the cruise-follow mission |
 
 ## Code Paths
 
