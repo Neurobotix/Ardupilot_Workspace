@@ -1,0 +1,41 @@
+# ArduPlane Parameters - Mini Talon Airspeed Overlay (Tier 2 diagnostic: windmax0)
+# Apply on top of plane_base.parm for Gazebo wind / pitot worlds.
+#
+# Envelope/mechanism matrix cell (ADR-0016): TIER 2 DIAGNOSTIC.
+# Identical to config/overlays/plane_airspeed.parm EXCEPT AHRS_WIND_MAX, which is
+# set to 0 to DISABLE the AHRS believed-airspeed clamp on both the sensor path
+# and the EKF synthetic path (libraries/AP_AHRS/AP_AHRS.cpp:985 and :1057, both
+# gated on _wind_max > 0). With the clamp off, the believed airspeed (CTUN.As)
+# should track the raw reported airspeed (ARSP.Airspeed) instead of being pinned
+# at ground_speed + AHRS_WIND_MAX.
+#
+# PURPOSE: diagnostic mechanism probe -- "what does TECS do if it receives the
+# full lie?" This is NOT a safety or real-stack claim. The protected real stack
+# uses AHRS_WIND_MAX = 15 (plane_airspeed.parm).
+#
+# MANDATORY VALIDATION (ADR-0016 sec. 4): the first Tier 2 run is a mechanism
+# verification flight. ARSPD_WIND_GATE=5 and the EKF airspeed innovation gate are
+# independent of AHRS_WIND_MAX and may still reject/bound the lie. The mechanism
+# gate (tests/.../mechanism_gate.py) must confirm CTUN.As tracks ARSP.Airspeed
+# before any "TECS fully believes the lie" claim is made.
+#
+# One-source rule:
+# - Gazebo provides wind
+# - SITL wind remains disabled
+
+ARSPD_TYPE       100       # JSON airspeed sensor from Gazebo / ArduPilotPlugin
+ARSPD_USE        1
+ARSPD_AUTOCAL    0         # Do not learn offset from live wind on startup
+ARSPD_SKIP_CAL   1         # Keep startup from zeroing in active wind
+ARSPD_OFFSET     0
+
+# Baseline 14/10/22 envelope; only AHRS_WIND_MAX changes vs. plane_airspeed.parm.
+AIRSPEED_CRUISE  14
+AIRSPEED_MIN     10
+AIRSPEED_MAX     22
+STALL_PREVENTION 1
+
+SIM_WIND_SPD     0
+SIM_WIND_DIR     180
+SIM_WIND_TURB    0
+AHRS_WIND_MAX    0         # TIER 2: clamp disabled (vs. 15 in the protected stack)

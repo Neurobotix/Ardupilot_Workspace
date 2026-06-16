@@ -1,0 +1,28 @@
+# ArduPlane Parameters - Mini Talon Airspeed Overlay (envelope cell: cruise17)
+# Apply on top of plane_base.parm for Gazebo wind / pitot worlds.
+#
+# Envelope Sensitivity Matrix cell (ADR-0012, ADR-0013): CRUISE-ONLY.
+# Identical to config/overlays/plane_airspeed.parm EXCEPT AIRSPEED_CRUISE,
+# so the operating point is the only changed variable. AIRSPEED_MAX and
+# AIRSPEED_MIN are held at the baseline 22 / 10.
+#
+# One-source rule:
+# - Gazebo provides wind
+# - SITL wind remains disabled
+
+ARSPD_TYPE       100       # JSON airspeed sensor from Gazebo / ArduPilotPlugin
+ARSPD_USE        1
+ARSPD_AUTOCAL    0         # Do not learn offset from live wind on startup
+ARSPD_SKIP_CAL   1         # Keep startup from zeroing in active wind
+ARSPD_OFFSET     0
+
+# Cruise-only envelope cell: cruise raised to 17, ceiling held at 22.
+AIRSPEED_CRUISE  17
+AIRSPEED_MIN     10
+AIRSPEED_MAX     22
+STALL_PREVENTION 1
+
+SIM_WIND_SPD     0
+SIM_WIND_DIR     180
+SIM_WIND_TURB    0
+AHRS_WIND_MAX    15

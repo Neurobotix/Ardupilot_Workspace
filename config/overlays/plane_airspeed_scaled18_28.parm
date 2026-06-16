@@ -1,0 +1,33 @@
+# ArduPlane Parameters - Mini Talon Airspeed Overlay (envelope cell: scaled18_28)
+# Apply on top of plane_base.parm for Gazebo wind / pitot worlds.
+#
+# Envelope Sensitivity Matrix cell (ADR-0012, ADR-0013): BOTH-SCALED.
+# Identical to config/overlays/plane_airspeed.parm EXCEPT AIRSPEED_CRUISE and
+# AIRSPEED_MAX. The pair 18/28 preserves the baseline max/cruise margin
+# (28/18 = 1.556 vs. baseline 22/14 = 1.571), so comparing this cell against the
+# 14/22 baseline separates absolute-speed effects from envelope-margin effects.
+# AIRSPEED_MIN held at baseline 10.
+#
+# Shares the MAX=28 untested-regime caveat with plane_airspeed_max28.parm; the
+# 14/28 flyability smoke covers the high-ceiling concern (ADR-0012).
+#
+# One-source rule:
+# - Gazebo provides wind
+# - SITL wind remains disabled
+
+ARSPD_TYPE       100       # JSON airspeed sensor from Gazebo / ArduPilotPlugin
+ARSPD_USE        1
+ARSPD_AUTOCAL    0         # Do not learn offset from live wind on startup
+ARSPD_SKIP_CAL   1         # Keep startup from zeroing in active wind
+ARSPD_OFFSET     0
+
+# Both-scaled envelope cell: cruise 18, ceiling 28 (margin preserved ~1.56).
+AIRSPEED_CRUISE  18
+AIRSPEED_MIN     10
+AIRSPEED_MAX     28
+STALL_PREVENTION 1
+
+SIM_WIND_SPD     0
+SIM_WIND_DIR     180
+SIM_WIND_TURB    0
+AHRS_WIND_MAX    15
