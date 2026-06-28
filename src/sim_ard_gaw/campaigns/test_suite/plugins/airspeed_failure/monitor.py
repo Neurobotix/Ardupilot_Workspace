@@ -12,7 +12,7 @@ from . import defaults
 from . import mavlink
 from .analyzers import classify_observation
 from .config import AirspeedFailureConfig
-from .stimulus import compare_readback
+from .stimulus import compare_readback, terminal_live_verification
 
 
 @dataclass
@@ -45,6 +45,80 @@ def first_seq4_edge_after_front_half(sequences: Iterable[int]) -> bool:
         if seq == defaults.INJECTION_TRIGGER["seq"]:
             return seen_front_half
     return False
+
+
+def apply_reference_wind_sign_confirmation(
+    artifact: dict[str, Any],
+    metrics: dict[str, Any],
+    *,
+    require_westbound: bool,
+) -> dict[str, Any]:
+    """Return a reference-wind artifact with mission-aware sign verification."""
+    east = _clean_float(metrics.get("eastbound_mean_mps"))
+    west = _clean_float(metrics.get("westbound_mean_mps"))
+    east_expected = float(metrics["expected_eastbound_mps"])
+    west_expected = float(metrics["expected_westbound_mps"])
+    tolerance = defaults.NOMINAL_WIND_SIGN_TOLERANCE_MPS
+
+    def direction_status(value: float | None, expected: float) -> str:
+        if value is None:
+            return "missing"
+        if abs(value - expected) <= tolerance:
+            return "confirmed"
+        return "out_of_band"
+
+    direction_statuses = {
+        "eastbound": direction_status(east, east_expected),
+        "westbound": direction_status(west, west_expected),
+    }
+    required_directions = ["eastbound"]
+    if require_westbound:
+        required_directions.append("westbound")
+    required_statuses = [direction_statuses[name] for name in required_directions]
+    if "missing" in required_statuses:
+        status = "missing_required_direction"
+    elif all(value == "confirmed" for value in required_statuses):
+        status = "confirmed"
+    else:
+        status = "out_of_band"
+
+    updated = dict(artifact)
+    publication_echo_verified = bool(
+        updated.get("publication_echo_verified", updated.get("verified"))
+    )
+    updated.update(
+        {
+            "publication_echo_verified": publication_echo_verified,
+            "verified": publication_echo_verified and status == "confirmed",
+            "realized_arsp_minus_gps_eastbound_mps": east,
+            "realized_arsp_minus_gps_westbound_mps": west,
+            "sign_confirmation": {
+                "expected_eastbound_arsp_minus_gps_mps": east_expected,
+                "expected_westbound_arsp_minus_gps_mps": west_expected,
+                "realized_eastbound_arsp_minus_gps_mps": east,
+                "realized_westbound_arsp_minus_gps_mps": west,
+                "tolerance_mps": tolerance,
+                "required_directions": required_directions,
+                "direction_statuses": direction_statuses,
+                "status": status,
+            },
+            "note": (
+                "Live publication/echo plus mission-aware healthy-reference "
+                "ARSP-GPS sign confirmation."
+            ),
+        }
+    )
+    return updated
+
+
+def planned_rtl_reached(
+    auto_to_rtl_transition_seq: int | None,
+    planned_rtl_min_seq: int,
+) -> bool:
+    return bool(
+        auto_to_rtl_transition_seq is not None
+        and auto_to_rtl_transition_seq >= planned_rtl_min_seq
+    )
 
 
 class _LiveAttemptMonitor:
@@ -133,6 +207,20 @@ class _LiveAttemptMonitor:
         observation = self._observation()
         artifacts_present = self._write_artifacts(observation)
         observation["required_artifacts_present"] = artifacts_present
+        self.ctx.stimulus_result["verify"] = terminal_live_verification(
+            injection_triggered=self.injection_triggered,
+            injection_readback_ok=self.injected_readback_ok,
+            reset_status=self.reset_status,
+            schedule_required=bool(self.injection_schedule),
+            schedule_complete=self._bias_schedule_complete(),
+        )
+        if self.case.case_id in {
+            "healthy_reference",
+            defaults.TAILWIND_HEALTHY_CASE_ID,
+        }:
+            observation["wind_verified"] = bool(
+                (self.ctx.extra.get("reference_wind") or {}).get("verified")
+            )
         summary = classify_observation(observation)
         defaults.write_json(self.ctx.attempt_dir / "airspeed_behavior_summary.json", summary)
         self.ctx.artifacts["airspeed_behavior_summary"] = (
@@ -148,6 +236,10 @@ class _LiveAttemptMonitor:
             "behavior_class": summary["behavior_class"],
             "observation_quality_class": summary["observation_quality_class"],
             "accepted_observation": summary["accepted_observation"],
+            "wind_profile": self.case.parameters.get("wind_profile"),
+            "mission_profile_id": self.case.parameters.get("mission_profile_id"),
+            "speed_source": self.case.parameters.get("speed_source"),
+            "mechanism_tier": self.case.parameters.get("mechanism_tier"),
             "artifacts": {name: str(path) for name, path in self.ctx.artifacts.items()},
             "parameters": dict(self.case.parameters),
             "notes": [summary["reason"]],
@@ -498,8 +590,10 @@ class _LiveAttemptMonitor:
             return True
         if (
             not self.injection_schedule
-            and self.auto_to_rtl_transition_seq is not None
-            and self.auto_to_rtl_transition_seq >= self._planned_rtl_min_seq()
+            and planned_rtl_reached(
+                self.auto_to_rtl_transition_seq,
+                self._planned_rtl_min_seq(),
+            )
         ):
             transition_t = _parse_transition_t(self.mode_timeline)
             if (
@@ -595,7 +689,10 @@ class _LiveAttemptMonitor:
             self.ctx.artifacts["airspeed_injection"] = injection_path
         for key, path in artifacts.items():
             self.ctx.artifacts[key] = path
-        if self.case.case_id == "healthy_reference":
+        if self.case.case_id in {
+            "healthy_reference",
+            defaults.TAILWIND_HEALTHY_CASE_ID,
+        }:
             baseline_path = self.ctx.attempt_dir / "reference_baseline.json"
             defaults.write_json(baseline_path, self._reference_baseline())
             self.ctx.artifacts["reference_baseline"] = baseline_path
@@ -653,8 +750,10 @@ class _LiveAttemptMonitor:
         if self.injection_schedule:
             return self._bias_schedule_complete() and self.terminal_state_reached
         return bool(
-            self.auto_to_rtl_transition_seq is not None
-            and self.auto_to_rtl_transition_seq >= self._planned_rtl_min_seq()
+            planned_rtl_reached(
+                self.auto_to_rtl_transition_seq,
+                self._planned_rtl_min_seq(),
+            )
             and self.terminal_state_reached
         )
 
@@ -747,7 +846,10 @@ class _LiveAttemptMonitor:
             "auto_to_rtl_transition_seq": self.auto_to_rtl_transition_seq,
             "planned_rtl_min_seq": self._planned_rtl_min_seq(),
             "auto_to_rtl_transition_time_utc": self.auto_to_rtl_transition_time_utc,
-            "planned_rtl": self._mission_complete(),
+            "planned_rtl": planned_rtl_reached(
+                self.auto_to_rtl_transition_seq,
+                self._planned_rtl_min_seq(),
+            ),
             "timeout": self.timeout,
             "loss_of_progress": self.timeout and not self._mission_complete(),
             "front_half_seen": self.front_half_seen,
@@ -776,8 +878,20 @@ class _LiveAttemptMonitor:
         post_airspeed = _mean(_values(post, "airspeed_mps"))
         pre_groundspeed = _mean(_values(pre, "groundspeed_mps"))
         post_groundspeed = _mean(_values(post, "groundspeed_mps"))
+        wind_profile = self.case.parameters.get("wind_profile") or {}
+        expected_east = _clean_float(
+            wind_profile.get("expected_arsp_minus_gps_mps")
+            if isinstance(wind_profile, dict)
+            else None
+        )
+        if expected_east is None:
+            expected_east = 5.0
+        commanded = self._intended_airspeed_eas_mps()
         return {
-            "commanded_airspeed_mps": 15.0,
+            "wind_profile": wind_profile,
+            "mission_profile_id": self.case.parameters.get("mission_profile_id"),
+            "speed_source": self.case.parameters.get("speed_source"),
+            "commanded_airspeed_mps": commanded,
             "pre_injection": _sample_stats(pre),
             "post_injection": _sample_stats(post),
             "eastbound_seq4": _sample_stats(east),
@@ -785,8 +899,8 @@ class _LiveAttemptMonitor:
             "airspeed_minus_groundspeed": {
                 "eastbound_mean_mps": _mean(_values(east, "airspeed_minus_groundspeed_mps")),
                 "westbound_mean_mps": _mean(_values(west, "airspeed_minus_groundspeed_mps")),
-                "expected_eastbound_mps": 5.0,
-                "expected_westbound_mps": -5.0,
+                "expected_eastbound_mps": expected_east,
+                "expected_westbound_mps": -expected_east,
             },
             "fault_visible_deltas": {
                 "airspeed_mean_delta_mps": (
@@ -807,6 +921,15 @@ class _LiveAttemptMonitor:
                 _schedule_metrics(post) if self.schedule_kind == "pulse_ladder" else None
             ),
         }
+
+    def _intended_airspeed_eas_mps(self) -> float:
+        if self.case.parameters.get("speed_source") == "airspeed_cruise":
+            vehicle = self.ctx.extra.get("vehicle_airspeed_params")
+            if isinstance(vehicle, dict):
+                value = _clean_float(vehicle.get("AIRSPEED_CRUISE"))
+                if value is not None:
+                    return value
+        return 15.0
 
     def _altitude_speed_envelope(self) -> dict[str, Any]:
         post = [s for s in self.samples if s.get("post_injection_s") is not None]
@@ -878,17 +1001,21 @@ class _LiveAttemptMonitor:
         east = metrics["eastbound_seq4"]
         west = metrics["westbound_seq7"]
         transition_t = _parse_transition_t(self.mode_timeline)
+        commanded = self._intended_airspeed_eas_mps()
         return {
             "case_id": self.case.case_id,
             "created_at_utc": defaults.utc_now(),
-            "commanded_airspeed_mps": 15.0,
+            "wind_profile": self.case.parameters.get("wind_profile"),
+            "mission_profile_id": self.case.parameters.get("mission_profile_id"),
+            "speed_source": self.case.parameters.get("speed_source"),
+            "commanded_airspeed_mps": commanded,
             "band_status": "single_run_provisional",
             "band_method": "mean/std from accepted healthy_reference smoke; replace with pooled bands after Phase 3 repetitions.",
             "steady_arsp_vs_commanded": {
                 "post_mean_airspeed_mps": metrics["post_injection"]["airspeed_mps"]["mean"],
                 "eastbound_mean_airspeed_mps": east["airspeed_mps"]["mean"],
                 "eastbound_std_airspeed_mps": east["airspeed_mps"]["std"],
-                "commanded_airspeed_mps": 15.0,
+                "commanded_airspeed_mps": commanded,
                 "nominal_band_k_sigma": 3.0,
                 "provisional_low_mps": _band_low(east["airspeed_mps"], 3.0),
                 "provisional_high_mps": _band_high(east["airspeed_mps"], 3.0),
@@ -992,38 +1119,20 @@ class _LiveAttemptMonitor:
 
     def _backfill_reference_wind_from_metrics(self) -> None:
         path = self.ctx.artifacts.get("reference_wind")
-        if self.case.case_id != "healthy_reference" or path is None or not path.exists():
+        if self.case.case_id not in {
+            "healthy_reference",
+            defaults.TAILWIND_HEALTHY_CASE_ID,
+        } or path is None or not path.exists():
             return
         artifact = defaults.read_json(path)
         metrics = self._signal_metrics()["airspeed_minus_groundspeed"]
-        east = metrics.get("eastbound_mean_mps")
-        west = metrics.get("westbound_mean_mps")
-        east_expected = float(metrics["expected_eastbound_mps"])
-        west_expected = float(metrics["expected_westbound_mps"])
-        east_ok = (
-            isinstance(east, float)
-            and abs(east - east_expected) <= defaults.NOMINAL_WIND_SIGN_TOLERANCE_MPS
-        )
-        west_ok = (
-            isinstance(west, float)
-            and abs(west - west_expected) <= defaults.NOMINAL_WIND_SIGN_TOLERANCE_MPS
-        )
-        artifact.update(
-            {
-                "realized_arsp_minus_gps_eastbound_mps": east,
-                "realized_arsp_minus_gps_westbound_mps": west,
-                "sign_confirmation": {
-                    "expected_eastbound_arsp_minus_gps_mps": east_expected,
-                    "expected_westbound_arsp_minus_gps_mps": west_expected,
-                    "realized_eastbound_arsp_minus_gps_mps": east,
-                    "realized_westbound_arsp_minus_gps_mps": west,
-                    "tolerance_mps": defaults.NOMINAL_WIND_SIGN_TOLERANCE_MPS,
-                    "status": "confirmed" if east_ok and west_ok else "out_of_band",
-                },
-                "note": "Phase 2 live echo plus healthy_reference ARSP-GPS sign confirmation.",
-            }
+        artifact = apply_reference_wind_sign_confirmation(
+            artifact,
+            metrics,
+            require_westbound=self.case.case_id == "healthy_reference",
         )
         defaults.write_json(path, artifact)
+        self.ctx.extra["reference_wind"] = artifact
 
 
 def _parse_transition_t(mode_timeline: list[dict[str, Any]]) -> float | None:

@@ -58,8 +58,10 @@ from sim_ard_gaw.campaigns.test_suite.plugins.airspeed_failure.plugin import (  
     build_plugin,
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.airspeed_failure.stimulus import (  # noqa: E402
+    AirspeedFailureStimulus,
     build_injection_artifact,
     compare_readback,
+    terminal_live_verification,
 )
 
 EXPECTED_SIM_ARSPD_PARAMS = [
@@ -88,6 +90,30 @@ def _cases(config: AirspeedFailureConfig | None = None):
 
 
 class AirspeedFailurePhase1Tests(unittest.TestCase):
+    def test_stimulus_verification_distinguishes_no_sitl_and_live_terminal(self) -> None:
+        case = _cases()[0]
+        no_sitl = AirspeedFailureStimulus(AirspeedFailureConfig()).verify(
+            case,
+            cast(Any, None),
+        )
+        live_pending = AirspeedFailureStimulus(
+            AirspeedFailureConfig(launch_stack=True)
+        ).verify(case, cast(Any, None))
+        live_terminal = terminal_live_verification(
+            injection_triggered=True,
+            injection_readback_ok=True,
+            reset_status={"status": "ok", "compare": {"ok": True}},
+            schedule_required=True,
+            schedule_complete=True,
+        )
+        self.assertEqual("phase1_no_sitl", no_sitl["phase"])
+        self.assertEqual("live_pending_monitor", live_pending["phase"])
+        self.assertTrue(live_pending["terminal_verification_pending"])
+        self.assertEqual("live_terminal", live_terminal["phase"])
+        self.assertTrue(live_terminal["live_readback_performed"])
+        self.assertTrue(live_terminal["injection_readback_ok"])
+        self.assertTrue(live_terminal["reset_readback_ok"])
+
     def test_fixed_case_generation_payloads(self) -> None:
         cases = _cases()
         self.assertEqual(

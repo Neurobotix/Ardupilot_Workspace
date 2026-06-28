@@ -259,6 +259,22 @@ def _wizard_round_robin(ns: argparse.Namespace) -> None:
 # ── airspeed_failure wizard ───────────────────────────────────────────────────
 
 def _wizard_airspeed_failure(ns: argparse.Namespace) -> None:
+    ns.af_wind_profile = _select(
+        "Wind profile",
+        ["headwind_eastbound", "tailwind_eastbound"],
+    )
+    ns.af_speed_source = _select(
+        "Continuous-case speed source",
+        ["do_change_speed_15", "airspeed_cruise"],
+    )
+    ns.af_mechanism_tier = _select(
+        "Mechanism tier",
+        ["protected", "diagnostic"],
+    )
+    ns.af_expected_ahrs_wind_max = _ask_float(
+        "Expected boot AHRS_WIND_MAX",
+        0.0 if ns.af_mechanism_tier == "diagnostic" else 15.0,
+    )
     # Case selection — fixed cases shown as checkboxes, ratio biases as text
     questionary.print("  Fixed fault cases — confirm each (Y/n):", style="bold")
     selected_fixed = [
@@ -328,6 +344,9 @@ def _print_summary(plugin: str, mode: RunMode, ns: argparse.Namespace) -> None:
             f"   biases : {ns.af_bias_percents}",
             f"   ratio  : {ns.af_vehicle_arspd_ratio}  verified={ns.af_verified_vehicle_ratio}",
             f"   runs   : {ns.af_runs_per_case}",
+            f"   wind   : {ns.af_wind_profile}",
+            f"   speed  : {ns.af_speed_source}",
+            f"   mech   : {ns.af_mechanism_tier}",
             f"   mavlink: {ns.mavlink}",
             f"   root   : {ns.campaign_root or '(auto)'}",
         ]

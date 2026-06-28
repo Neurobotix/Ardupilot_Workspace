@@ -224,6 +224,18 @@ class Phase3StagedAttemptTests(unittest.TestCase):
         )
         self.assertEqual(AttemptStatus.SUCCESS, manifest.records[0].status)
 
+    def test_staged_record_preserves_attempt_start_and_terminal_end_times(self) -> None:
+        events: list[str] = []
+        runner, manifest = _runner(events)
+        with patch(
+            "test_suite.core.attempt_runner._utc_now_iso",
+            side_effect=["2026-06-22T10:00:00Z", "2026-06-22T10:03:00Z"],
+        ):
+            runner.run(_case(), 1, 1, Path("/tmp/attempt"))
+        record = manifest.records[0]
+        self.assertEqual("2026-06-22T10:00:00Z", record.start_time_utc)
+        self.assertEqual("2026-06-22T10:03:00Z", record.end_time_utc)
+
     def test_cleanup_runs_on_success(self) -> None:
         events: list[str] = []
         runner, _manifest = _runner(events)

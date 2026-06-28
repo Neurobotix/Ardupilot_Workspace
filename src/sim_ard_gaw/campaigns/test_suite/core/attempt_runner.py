@@ -106,8 +106,12 @@ class StagedStrategy(AttemptStrategy):
             verdict=verdict,
             monitor_result=monitor_result,
             analysis_results=list(analysis_results),
-            start_time_utc=plugin_manifest_fields.get("start_time_utc") or _utc_now_iso(),
-            end_time_utc=plugin_manifest_fields.get("end_time_utc") or "",
+            start_time_utc=(
+                plugin_manifest_fields.get("start_time_utc")
+                or ctx.extra.get("attempt_start_time_utc")
+                or _utc_now_iso()
+            ),
+            end_time_utc=plugin_manifest_fields.get("end_time_utc") or _utc_now_iso(),
             duration_wall_s=time.time() - ctx.start_wall_s,
             artifacts=artifacts,
             parameters=plugin_manifest_fields.get(
@@ -183,6 +187,7 @@ class AttemptRunner:
         slot_deadline_monotonic_s: float | None = None,
         attempt_metadata: dict | None = None,
     ) -> AttemptRecord:
+        attempt_start_time_utc = _utc_now_iso()
         ctx = AttemptContext(
             case=case,
             campaign_root=self._artifact_root,
@@ -193,6 +198,7 @@ class AttemptRunner:
             start_monotonic_s=time.monotonic(),
             slot_deadline_monotonic_s=slot_deadline_monotonic_s,
         )
+        ctx.extra["attempt_start_time_utc"] = attempt_start_time_utc
         attempt_dir.mkdir(parents=True, exist_ok=True)
         if attempt_metadata:
             ctx.extra.update(attempt_metadata)
@@ -256,8 +262,9 @@ def _default_attempt_id(ctx: AttemptContext) -> str:
 
 
 def _running_attempt_record(ctx: AttemptContext) -> AttemptRecord:
-    start_time = _utc_now_iso()
-    ctx.extra.setdefault("attempt_start_time_utc", start_time)
+    start_time = str(
+        ctx.extra.setdefault("attempt_start_time_utc", _utc_now_iso())
+    )
     return AttemptRecord(
         attempt_id=_default_attempt_id(ctx),
         suite_name=ctx.case.suite_name,

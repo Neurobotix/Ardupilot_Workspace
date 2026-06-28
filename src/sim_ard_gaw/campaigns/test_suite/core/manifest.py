@@ -123,6 +123,7 @@ def attempt_record_to_generic_fields(record: AttemptRecord) -> dict[str, Any]:
         "artifacts": _to_jsonable(record.artifacts),
         "started_at": record.start_time_utc or None,
         "finished_at": record.end_time_utc or None,
+        "duration_wall_s": record.duration_wall_s,
     }
 
 
