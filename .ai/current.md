@@ -71,6 +71,78 @@ baseline/fault windows from +10 through +130, resets params after the final
 observation, and treats the result as threshold/transient evidence rather than
 a replacement for the independent fixed-bias sweep.
 
+Tailwind counterpart extension: Phase 0 inventory and Phase 1 design were
+operator-approved on 2026-06-21. Phase 2 no-SITL implementation adds named
+headwind/tailwind profiles, distinct tailwind ramp/pulse cases, two
+direction-neutral 36 km Eastbound missions preserving DO15 versus
+`AIRSPEED_CRUISE` semantics, an approved 17-attempt configuration recipe, and
+a time-aligned source-arithmetic mechanism gate. Historical headwind defaults
+remain unchanged. That 2026-06-21 Phase 2 state had no tailwind SITL run or
+evidence/status claim; live tailwind commands require a separate Phase 3
+confirmation flag.
+
+The first authorized healthy-tailwind gate attempt ran on 2026-06-22 under
+`var/runs/tailwind_phase3_healthy_speed15_gate_20260622/`. Its flight data were
+nominal and the live geometry retained ample distance, but review found that
+the historical two-direction wind-sign classifier incorrectly required an
+absent Westbound sample from the one-way mission. The 2026-06-22 correction
+makes required sign directions mission-aware, makes healthy acceptance consume
+the completed sign result, separates schedule completion from actual planned
+RTL, and records the configured mechanism tier/wind limit. The original raw
+attempt is preserved. Attempt 2 exercised that correction successfully, but a
+strict review found three inherited evidence defects also present in historical
+headwind roots: terminal-time-only manifest timestamps, a stale no-SITL
+stimulus-verification marker on live attempts, and missing mission/untracked-file
+content hashes. The 2026-06-22 follow-up fixes all three for future attempts;
+historical raw manifests remain unchanged. One final post-fix healthy gate is
+required before starting the 17-attempt matrix. Attempt 3 then completed on
+2026-06-22 with `success` / `valid_nominal_completion`, distinct start/end
+timestamps, finalized live verification, and hashed mission/untracked-input
+provenance; the healthy gate is satisfied for the bounded matrix work.
+
+The protected DO15 tailwind P130 pulse case subsequently ran twice under
+`var/runs/tailwind_standard_speed15_pulse_p130_n1/`. A 2026-06-23 strict review
+found evaluator-only false negatives: wall UTC was incorrectly aligned to the
+drifting BIN clock, `ARSP.U` was used instead of the actual `CTUN.AsT` source,
+and only the final pulse was judged. The corrected evaluator uses BIN `PARM`
+transitions, `CTUN.AsT=1`, and all 13 fault windows. Additive reanalysis marks
+both preserved attempts `clamp_verified` (0.462/0.390 m/s mean clamp error),
+with AHRS source rejection beginning at +50% and `ARSP.U` disable at +60%.
+No rerun is required for these two attempts. Evidence:
+`evidence/reports/features/2026-06-23_tailwind_pulse_evaluator_correction.md`.
+
+Chunk 2 coverage reconciliation on 2026-06-23 froze Phase 0–9 expectations
+before inspecting unreviewed Phase 1–8 tailwind telemetry, then inventoried the
+raw run set without performing corrected behavior analysis. All 17 approved
+Phase 1–9 fault-matrix attempts exist with matching configuration, required
+artifacts, BINs, applied-event readbacks, and reset readbacks; Phase 9 has one
+additional valid repetition. The final healthy gate attempt is usable, while
+its two superseded predecessors retain known provenance defects. Sixteen
+Phase 1–8 attempts are ready for Chunk 3 corrected offline analysis; no rerun
+is currently justified. Frozen expectations and inventory:
+`governance/runbooks/features/airspeed_failure_behavior/tailwind_phase_0_9_expectations.md`
+and `tailwind_phase_0_9_inventory.md` in the same feature bundle.
+
+Chunk 3 corrected offline reanalysis of all 16 Phase 1–8 tailwind attempts
+completed on 2026-06-23. The frozen expectations hash was verified unchanged
+before and after; all 16 BIN hashes match the inventory; raw run trees are
+unchanged; zero schedule-matching errors. A second evaluator defect was found
+and fixed: `analyze_mechanism_bin` only applied the last-interpretable
+representative window for `schedule_kind="pulse_ladder"`, so ramp attempts had a
+verified pre-rejection clamp/tracking window erased by a later rejected window.
+The fix applies last-interpretable selection to every schedule kind (pulse_ladder
+behavior unchanged, so the Phase 9 additive reanalysis is unaffected and was not
+touched), with regression test
+`MechanismGateScheduleExtractionTests::test_ramp_verified_window_not_erased_by_later_rejection`.
+After the fix, 12 of 15 historical Phase 1–8 mechanism verdicts were false
+negatives; 15/16 attempts are now mechanism-interpretable (Phase 8 P100 stays a
+genuine `clamp_not_exercised`). No genuine raw-data defect was found and no rerun
+is justified. This is working analysis only; the locked Chunk 5 expectation
+columns and curated evidence are untouched. Working package:
+`var/analysis/tailwind_phase_1_8_corrected_reanalysis_20260623/`; factual record:
+`governance/runbooks/features/airspeed_failure_behavior/tailwind_phase_1_8_corrected_reanalysis.md`.
+Chunk 4 and Chunk 5 are not yet performed.
+
 Follow-up review fixes on 2026-06-06 aligned current docs with the accepted
 measurement-smoke root and made live ratio-bias attempts recompute
 `SIM_ARSPD_RATIO` from the measured MAVLink `ARSPD_RATIO` readback before

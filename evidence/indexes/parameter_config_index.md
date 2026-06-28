@@ -1,6 +1,6 @@
 # Parameter And Config Index
 
-Date: 2026-05-24
+Last updated: 2026-06-21
 
 Scope: Phase 4 classification of shared runtime parameter files, archives,
 local-only overlays, and recovered historical parameter evidence.
@@ -34,6 +34,7 @@ compatibility runners and wrappers still govern some command surfaces.
 | `config/overlays/staircase_plane_params.parm` | Tight nav overlay for staircase LiDAR mission. | overlay | yes | `1b045dde27f2fae2dffbeeedaa695e2b8246a0b11a3397ffe7b6ef0f8acd24a1` | Final shared overlay for `plane-staircase` before any optional local plane override. |
 | `config/campaigns/mini_talon_airspeed_lidar/plane_full.parm` | Shared integrated airspeed + LiDAR lane parameters. | campaign | yes | `32f38f58cd90dc8bd5522612a92eec747a90326108fa2d9ddc05635dca9a8b33` | After `plane_base.parm` for `plane-airspeed-lidar`. |
 | `config/campaigns/mini_talon_altitude_wind/plane_full.parm` | Shared altitude-wind lane overlay. | campaign | yes | `0ff9bc7610a9beb9d29bc2256abd79a8e34c2c6a09554558a37d9a1d6681fe87` | After `plane_base.parm` for `plane-altitude-wind`. |
+| `config/campaigns/airspeed_failure_tailwind_counterparts.json` | No-SITL recipe for the operator-approved 17 deduplicated tailwind counterpart attempts and historical-root provenance. | campaign recipe | yes | `93010d6803525d7d31e9dabd07a218b82259b8396199657626486ee81535a9ef` | Planning/configuration input only; does not launch a campaign. |
 | `config/archive/plane_all_in_one_legacy.parm` | Superseded mixed plane snapshot. | archive | no | n/a | None; comparison only. |
 | `config/archive/plane_benchmark_dualwind_legacy.parm` | Superseded benchmark snapshot with dual-wind behavior. | archive | no | n/a | None; comparison only. |
 | `.private/config/plane_params.local.parm` | Local plane final overlay observed on this machine. | local-only override | no | n/a | Appended by most compatibility plane lanes and current CTE campaign callers when present; skipped by `plane-rebuild`. |
