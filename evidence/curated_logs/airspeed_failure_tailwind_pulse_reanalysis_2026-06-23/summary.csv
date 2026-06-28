@@ -1,0 +1,3 @@
+attempt_index,original_accepted_observation,corrected_accepted_observation,corrected_mechanism_status,clamp_exercised_sample_count,clamp_error_mean_mps,first_ahrs_source_rejection_bias_percent,first_arsp_parameter_disable_bias_percent,fault_window_count,matching_error_count
+1,False,True,clamp_verified,10,0.4615030748611062,50.0,60.0,13,0
+2,False,True,clamp_verified,11,0.3901352491553347,50.0,60.0,13,0
