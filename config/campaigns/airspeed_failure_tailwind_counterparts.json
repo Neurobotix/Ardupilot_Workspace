@@ -1,0 +1,111 @@
+{
+  "campaign_id": "airspeed_failure_tailwind_counterparts",
+  "status": "phase2_no_sitl_recipe",
+  "wind_profile_id": "tailwind_eastbound",
+  "approved_counterpart_attempts": 17,
+  "excluded_historical_roots": [
+    {
+      "root": "var/runs/airspeed_failure_behavior_ratio_bias_ramp_p10_to_p100_headwind_20260609T133408Z",
+      "reason": "incomplete legacy 200 m mission; operator-approved exclusion"
+    }
+  ],
+  "cells": [
+    {
+      "cell_id": "protected_cruise_follow_p200",
+      "case_id": "ratio_bias_ramp_p10_to_p200_tailwind",
+      "speed_source": "airspeed_cruise",
+      "airspeed_overlay": "config/overlays/plane_airspeed.parm",
+      "mechanism_tier": "protected",
+      "expected_ahrs_wind_max": 15.0,
+      "attempts": 3,
+      "historical_source_roots": ["var/runs/tier1_protected_cruisefollow_n3"]
+    },
+    {
+      "cell_id": "diagnostic_cruise_follow_p200",
+      "case_id": "ratio_bias_ramp_p10_to_p200_tailwind",
+      "speed_source": "airspeed_cruise",
+      "airspeed_overlay": "config/overlays/plane_airspeed_windmax0.parm",
+      "mechanism_tier": "diagnostic",
+      "expected_ahrs_wind_max": 0.0,
+      "attempts": 3,
+      "historical_source_roots": ["var/runs/tier2_windmax0_verify_20260616T100204Z"]
+    },
+    {
+      "cell_id": "max28_speed15_p200",
+      "case_id": "ratio_bias_ramp_p10_to_p200_tailwind",
+      "speed_source": "do_change_speed_15",
+      "airspeed_overlay": "config/overlays/plane_airspeed_max28.parm",
+      "mechanism_tier": "protected",
+      "expected_ahrs_wind_max": 15.0,
+      "attempts": 3,
+      "historical_source_roots": [
+        "var/runs/envelope_matrix_max28_n3",
+        "var/runs/airspeed_envelope_smoke_max28_ramp_p200_20260614T124322Z",
+        "var/runs/airspeed_envelope_smoke_max28_ramp_p200_20260614T121220Z"
+      ]
+    },
+    {
+      "cell_id": "max18_speed15_p200",
+      "case_id": "ratio_bias_ramp_p10_to_p200_tailwind",
+      "speed_source": "do_change_speed_15",
+      "airspeed_overlay": "config/overlays/plane_airspeed_max18.parm",
+      "mechanism_tier": "protected",
+      "expected_ahrs_wind_max": 15.0,
+      "attempts": 3,
+      "historical_source_roots": [
+        "var/runs/envelope_matrix_max18_n3",
+        "var/runs/envelope_matrix_max18_ramp_p200_20260615T085029Z"
+      ]
+    },
+    {
+      "cell_id": "cruise17_speed15_p200",
+      "case_id": "ratio_bias_ramp_p10_to_p200_tailwind",
+      "speed_source": "do_change_speed_15",
+      "airspeed_overlay": "config/overlays/plane_airspeed_cruise17.parm",
+      "mechanism_tier": "protected",
+      "expected_ahrs_wind_max": 15.0,
+      "attempts": 1,
+      "historical_source_roots": ["var/runs/envelope_matrix_cruise17_ramp_p200_20260615T091922Z"]
+    },
+    {
+      "cell_id": "scaled18_28_speed15_p200",
+      "case_id": "ratio_bias_ramp_p10_to_p200_tailwind",
+      "speed_source": "do_change_speed_15",
+      "airspeed_overlay": "config/overlays/plane_airspeed_scaled18_28.parm",
+      "mechanism_tier": "protected",
+      "expected_ahrs_wind_max": 15.0,
+      "attempts": 1,
+      "historical_source_roots": ["var/runs/envelope_matrix_scaled18_28_ramp_p200_20260615T082120Z"]
+    },
+    {
+      "cell_id": "standard_speed15_p200",
+      "case_id": "ratio_bias_ramp_p10_to_p200_tailwind",
+      "speed_source": "do_change_speed_15",
+      "airspeed_overlay": "config/overlays/plane_airspeed.parm",
+      "mechanism_tier": "protected",
+      "expected_ahrs_wind_max": 15.0,
+      "attempts": 1,
+      "historical_source_roots": ["var/runs/airspeed_failure_behavior_ratio_bias_ramp_p10_to_p200_headwind_20260610T122611Z"]
+    },
+    {
+      "cell_id": "standard_speed15_p100",
+      "case_id": "ratio_bias_ramp_p10_to_p100_tailwind",
+      "speed_source": "do_change_speed_15",
+      "airspeed_overlay": "config/overlays/plane_airspeed.parm",
+      "mechanism_tier": "protected",
+      "expected_ahrs_wind_max": 15.0,
+      "attempts": 1,
+      "historical_source_roots": ["var/runs/airspeed_failure_behavior_ratio_bias_ramp_p10_to_p100_headwind_20260610T111134Z"]
+    },
+    {
+      "cell_id": "standard_speed15_pulse_p130",
+      "case_id": "ratio_bias_pulse_p10_to_p130_tailwind",
+      "speed_source": "do_change_speed_15",
+      "airspeed_overlay": "config/overlays/plane_airspeed.parm",
+      "mechanism_tier": "protected",
+      "expected_ahrs_wind_max": 15.0,
+      "attempts": 1,
+      "historical_source_roots": ["var/runs/airspeed_failure_behavior_ratio_bias_pulse_p10_to_p130_headwind_20260610T075155Z"]
+    }
+  ]
+}

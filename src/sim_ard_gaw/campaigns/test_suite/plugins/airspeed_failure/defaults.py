@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from .wind_profiles import HEADWIND_EASTBOUND
+
 
 SRC_ROOT = Path(__file__).resolve().parents[5]
 WORKSPACE_ROOT = Path(os.environ.get("ARDUPILOT_WORKSPACE", SRC_ROOT.parent)).resolve()
@@ -35,6 +37,14 @@ RAMP_MISSION_FILE = (
 PULSE_LADDER_MISSION_FILE = (
     ASSETS_ROOT / "missions" / "airspeed_failure_headwind_pulse_ladder_mission.waypoints"
 )
+EASTBOUND_LONG_SPEED_15_MISSION_FILE = (
+    ASSETS_ROOT / "missions" / "airspeed_failure_eastbound_long_speed_15_mission.waypoints"
+)
+EASTBOUND_LONG_CRUISE_FOLLOW_MISSION_FILE = (
+    ASSETS_ROOT
+    / "missions"
+    / "airspeed_failure_eastbound_long_cruise_follow_mission.waypoints"
+)
 SITL_TARGET = "plane-cte"
 GAZEBO_TARGET = "gazebo-plane-cte"
 SITL_LAUNCH_COMMAND = "scripts/ops/launch.sh plane-cte"
@@ -45,6 +55,7 @@ PLANE_AIRSPEED_PARAM_FILE = CONFIG_ROOT / "overlays" / "plane_airspeed.parm"
 WORLD_NAME = "mini_talon_wind_runway"
 WIND_TOPIC = f"/world/{WORLD_NAME}/wind/"
 WIND_INFO_TOPIC = f"/world/{WORLD_NAME}/wind_info"
+DEFAULT_WIND_PROFILE_ID = HEADWIND_EASTBOUND.profile_id
 REFERENCE_WIND_MPS = {"x": -5.0, "y": 0.0, "z": 0.0}
 WIND_ECHO_TOLERANCE_MPS = 0.01
 WIND_FRAME_NOTE = (
@@ -146,6 +157,10 @@ RAMP_SETTLE_NOTE = (
     "is accumulating drift evidence, not independent dose-response evidence."
 )
 PULSE_LADDER_CASE_ID = "ratio_bias_pulse_p10_to_p130_headwind"
+TAILWIND_RAMP_CASE_ID = "ratio_bias_ramp_p10_to_p100_tailwind"
+TAILWIND_EXTENDED_RAMP_CASE_ID = "ratio_bias_ramp_p10_to_p200_tailwind"
+TAILWIND_PULSE_LADDER_CASE_ID = "ratio_bias_pulse_p10_to_p130_tailwind"
+TAILWIND_HEALTHY_CASE_ID = "healthy_reference_tailwind"
 PULSE_LADDER_BIAS_PERCENTS = tuple(range(10, 131, 10))
 PULSE_LADDER_INITIAL_BASELINE_SETTLE_S = 60.0
 PULSE_LADDER_BASELINE_SETTLE_S = 60.0

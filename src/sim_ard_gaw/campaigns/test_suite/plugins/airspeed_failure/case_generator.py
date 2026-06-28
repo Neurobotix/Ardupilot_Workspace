@@ -14,6 +14,18 @@ class AirspeedFailureCaseGenerator(CaseGenerator):
         self._config = config
 
     def iter_cases(self) -> Iterable[TestCase]:
+        if self._config.is_tailwind:
+            yield self._tailwind_healthy_case()
+            yield self._ramp_case(
+                defaults.TAILWIND_RAMP_CASE_ID,
+                defaults.RAMP_BIAS_PERCENTS,
+            )
+            yield self._ramp_case(
+                defaults.TAILWIND_EXTENDED_RAMP_CASE_ID,
+                defaults.EXTENDED_RAMP_BIAS_PERCENTS,
+            )
+            yield self._pulse_ladder_case()
+            return
         for case_id in defaults.FIXED_CASE_ORDER:
             yield self._case_from_payload(case_id, defaults.FIXED_CASE_PAYLOADS[case_id])
         for bias_percent in self._config.ratio_bias_percents:
@@ -24,6 +36,31 @@ class AirspeedFailureCaseGenerator(CaseGenerator):
             defaults.EXTENDED_RAMP_BIAS_PERCENTS,
         )
         yield self._pulse_ladder_case()
+
+    def _tailwind_healthy_case(self) -> TestCase:
+        schedule = healthy_validation_schedule()
+        return TestCase(
+            suite_name=defaults.SUITE_NAME,
+            case_id=defaults.TAILWIND_HEALTHY_CASE_ID,
+            parameters=case_metadata(
+                case_id=defaults.TAILWIND_HEALTHY_CASE_ID,
+                injection_payload=dict(defaults.SOURCE_DEFAULTS),
+                ratio_recipe=None,
+                calibration_required=False,
+                injection_schedule=schedule,
+                wind_profile=self._config.wind_profile.as_dict(),
+                mission_profile_id=self._mission_profile_id(),
+                speed_source=self._config.continuous_speed_source,
+                mechanism_gate_required=False,
+                mechanism_tier=self._config.mechanism_tier,
+                expected_ahrs_wind_max=self._config.expected_ahrs_wind_max,
+            ),
+            scenario_name=defaults.SCENARIO_NAME,
+            stimulus_name="healthy_tailwind_validation",
+            mission_file=self._config.continuous_mission_file,
+            acceptance_target_runs=1,
+            tags=("airspeed", "healthy", "tailwind", "validation"),
+        )
 
     def get_case(self, case_id: str) -> TestCase:
         for case in self.iter_cases():
@@ -41,6 +78,7 @@ class AirspeedFailureCaseGenerator(CaseGenerator):
                 ratio_recipe=None,
                 calibration_required=False,
                 planned_rtl_min_seq=defaults.PLANNED_RTL_MIN_SEQ,
+                wind_profile=self._config.wind_profile.as_dict(),
             ),
             scenario_name=defaults.SCENARIO_NAME,
             stimulus_name="sim_arspd_param_fault",
@@ -71,6 +109,7 @@ class AirspeedFailureCaseGenerator(CaseGenerator):
                 ratio_recipe=recipe,
                 calibration_required=self._config.calibration_required,
                 planned_rtl_min_seq=defaults.PLANNED_RTL_MIN_SEQ,
+                wind_profile=self._config.wind_profile.as_dict(),
             ),
             scenario_name=defaults.SCENARIO_NAME,
             stimulus_name="sim_arspd_ratio_bias",
@@ -87,6 +126,17 @@ class AirspeedFailureCaseGenerator(CaseGenerator):
             case_id=case_id,
             bias_percents=bias_percents,
         )
+        recipe.update(
+            {
+                "mission_file": str(
+                    self._config.continuous_mission_file
+                    if self._config.is_tailwind
+                    else defaults.RAMP_MISSION_FILE
+                ),
+                "wind_profile": self._config.wind_profile.as_dict(),
+                "speed_source": self._config.continuous_speed_source,
+            }
+        )
         schedule = ramp_schedule(recipe)
         return TestCase(
             suite_name=defaults.SUITE_NAME,
@@ -98,10 +148,24 @@ class AirspeedFailureCaseGenerator(CaseGenerator):
                 calibration_required=self._config.calibration_required,
                 injection_schedule=schedule,
                 ramp_recipe=recipe,
+                wind_profile=self._config.wind_profile.as_dict(),
+                mission_profile_id=self._mission_profile_id(),
+                speed_source=self._config.continuous_speed_source,
+                mechanism_gate_required=True,
+                mechanism_tier=self._config.mechanism_tier,
+                expected_ahrs_wind_max=self._config.expected_ahrs_wind_max,
             ),
             scenario_name=defaults.SCENARIO_NAME,
-            stimulus_name="sim_arspd_ratio_bias_headwind_stepped_ramp",
-            mission_file=defaults.RAMP_MISSION_FILE,
+            stimulus_name=(
+                "sim_arspd_ratio_bias_tailwind_stepped_ramp"
+                if self._config.is_tailwind
+                else "sim_arspd_ratio_bias_headwind_stepped_ramp"
+            ),
+            mission_file=(
+                self._config.continuous_mission_file
+                if self._config.is_tailwind
+                else defaults.RAMP_MISSION_FILE
+            ),
             acceptance_target_runs=self._config.runs_per_case,
             tags=("airspeed", "ratio_bias", "stepped_ramp", "calibration_required"),
         )
@@ -112,24 +176,62 @@ class AirspeedFailureCaseGenerator(CaseGenerator):
             vehicle_arspd_ratio_verified=self._config.vehicle_arspd_ratio_verified,
             vehicle_arspd_ratio_source=None,
         )
+        recipe.update(
+            {
+                "mission_file": str(
+                    self._config.continuous_mission_file
+                    if self._config.is_tailwind
+                    else defaults.PULSE_LADDER_MISSION_FILE
+                ),
+                "wind_profile": self._config.wind_profile.as_dict(),
+                "speed_source": self._config.continuous_speed_source,
+            }
+        )
         schedule = pulse_ladder_schedule(recipe)
         return TestCase(
             suite_name=defaults.SUITE_NAME,
-            case_id=defaults.PULSE_LADDER_CASE_ID,
+            case_id=(
+                defaults.TAILWIND_PULSE_LADDER_CASE_ID
+                if self._config.is_tailwind
+                else defaults.PULSE_LADDER_CASE_ID
+            ),
             parameters=case_metadata(
-                case_id=defaults.PULSE_LADDER_CASE_ID,
+                case_id=(
+                    defaults.TAILWIND_PULSE_LADDER_CASE_ID
+                    if self._config.is_tailwind
+                    else defaults.PULSE_LADDER_CASE_ID
+                ),
                 injection_payload=schedule[1]["payload"],
                 ratio_recipe=None,
                 calibration_required=self._config.calibration_required,
                 injection_schedule=schedule,
                 pulse_ladder_recipe=recipe,
+                wind_profile=self._config.wind_profile.as_dict(),
+                mission_profile_id=self._mission_profile_id(),
+                speed_source=self._config.continuous_speed_source,
+                mechanism_gate_required=True,
+                mechanism_tier=self._config.mechanism_tier,
+                expected_ahrs_wind_max=self._config.expected_ahrs_wind_max,
             ),
             scenario_name=defaults.SCENARIO_NAME,
-            stimulus_name="sim_arspd_ratio_bias_headwind_pulse_ladder",
-            mission_file=defaults.PULSE_LADDER_MISSION_FILE,
+            stimulus_name=(
+                "sim_arspd_ratio_bias_tailwind_pulse_ladder"
+                if self._config.is_tailwind
+                else "sim_arspd_ratio_bias_headwind_pulse_ladder"
+            ),
+            mission_file=(
+                self._config.continuous_mission_file
+                if self._config.is_tailwind
+                else defaults.PULSE_LADDER_MISSION_FILE
+            ),
             acceptance_target_runs=self._config.runs_per_case,
             tags=("airspeed", "ratio_bias", "pulse_ladder", "calibration_required"),
         )
+
+    def _mission_profile_id(self) -> str:
+        if not self._config.is_tailwind:
+            return "historical_headwind"
+        return f"eastbound_long_36km_{self._config.continuous_speed_source}"
 
 
 def ratio_case_id(bias_percent: int) -> str:
@@ -147,6 +249,12 @@ def case_metadata(
     ramp_recipe: dict[str, Any] | None = None,
     pulse_ladder_recipe: dict[str, Any] | None = None,
     planned_rtl_min_seq: int = defaults.PLANNED_RTL_MIN_SEQ,
+    wind_profile: dict[str, Any] | None = None,
+    mission_profile_id: str = "historical",
+    speed_source: str = "historical",
+    mechanism_gate_required: bool = False,
+    mechanism_tier: str | None = None,
+    expected_ahrs_wind_max: float | None = None,
 ) -> dict[str, Any]:
     validate_payload(injection_payload)
     if injection_schedule is not None:
@@ -189,7 +297,28 @@ def case_metadata(
         "pulse_ladder_recipe": pulse_ladder_recipe,
         "calibration_required": calibration_required,
         "schema_validation": schema_validation_payload(),
+        "wind_profile": wind_profile,
+        "mission_profile_id": mission_profile_id,
+        "speed_source": speed_source,
+        "mechanism_gate_required": mechanism_gate_required,
+        "mechanism_tier": mechanism_tier,
+        "expected_ahrs_wind_max": expected_ahrs_wind_max,
     }
+
+
+def healthy_validation_schedule() -> list[dict[str, Any]]:
+    return [
+        {
+            "event_index": 1,
+            "cycle_index": 0,
+            "phase": "baseline_settle",
+            "bias_percent": 0,
+            "elapsed_since_trigger_s": 0.0,
+            "observe_s": 60.0,
+            "schedule_complete_s": 60.0,
+            "payload": dict(defaults.SOURCE_DEFAULTS),
+        }
+    ]
 
 
 def validate_payload(payload: dict[str, float]) -> None:
@@ -228,6 +357,9 @@ def resolve_ratio_case_with_vehicle_ratio(
             case_id=str(old_recipe.get("case_id") or case.case_id),
             bias_percents=tuple(int(value) for value in old_recipe["bias_percents"]),
         )
+        for name in ("mission_file", "wind_profile", "speed_source"):
+            if name in old_recipe:
+                recipe[name] = old_recipe[name]
         schedule = ramp_schedule(recipe)
         case.parameters["injection_payload"] = schedule[1]["payload"]
         case.parameters["injection_schedule"] = schedule
@@ -237,11 +369,15 @@ def resolve_ratio_case_with_vehicle_ratio(
         return
 
     if case.parameters.get("pulse_ladder_recipe") is not None:
+        old_recipe = dict(case.parameters.get("pulse_ladder_recipe") or {})
         recipe = pulse_ladder_recipe(
             vehicle_arspd_ratio=vehicle_arspd_ratio,
             vehicle_arspd_ratio_verified=True,
             vehicle_arspd_ratio_source="MAVLink PARAM_VALUE after clean SITL boot",
         )
+        for name in ("mission_file", "wind_profile", "speed_source"):
+            if name in old_recipe:
+                recipe[name] = old_recipe[name]
         schedule = pulse_ladder_schedule(recipe)
         case.parameters["injection_payload"] = schedule[1]["payload"]
         case.parameters["injection_schedule"] = schedule

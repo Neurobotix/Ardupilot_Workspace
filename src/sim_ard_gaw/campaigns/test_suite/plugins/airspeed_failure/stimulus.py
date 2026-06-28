@@ -21,7 +21,40 @@ class AirspeedFailureStimulus(StimulusAdapter):
         return artifact
 
     def verify(self, case: TestCase, ctx: AttemptContext) -> dict[str, Any]:
-        return {"phase": "phase1_no_sitl", "live_readback_performed": False}
+        if not self.config.launch_stack:
+            return {"phase": "phase1_no_sitl", "live_readback_performed": False}
+        return {
+            "phase": "live_pending_monitor",
+            "live_readback_performed": False,
+            "terminal_verification_pending": True,
+        }
+
+
+def terminal_live_verification(
+    *,
+    injection_triggered: bool,
+    injection_readback_ok: bool,
+    reset_status: dict[str, Any],
+    schedule_required: bool,
+    schedule_complete: bool,
+) -> dict[str, Any]:
+    reset_compare = reset_status.get("compare")
+    reset_state = str(reset_status.get("status") or "not_attempted")
+    reset_readback_ok = bool(
+        reset_state == "ok"
+        and isinstance(reset_compare, dict)
+        and reset_compare.get("ok") is True
+    )
+    return {
+        "phase": "live_terminal",
+        "terminal_verification_pending": False,
+        "live_readback_performed": injection_triggered,
+        "injection_readback_ok": injection_readback_ok,
+        "reset_readback_performed": reset_state in {"ok", "failed"},
+        "reset_readback_ok": reset_readback_ok,
+        "schedule_required": schedule_required,
+        "schedule_complete": schedule_complete if schedule_required else None,
+    }
 
 
 def build_injection_artifact(case: TestCase) -> dict[str, Any]:
