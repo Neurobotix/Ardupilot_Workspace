@@ -228,6 +228,15 @@ Full contracts are in `design_adrs.md` (Trigger, Reference Wind, Reset ADRs).
   fault-triggered early RTL/failsafe (before the legs finish) is
   `autopilot_contained`, not completion.
 
+Tailwind extension decision (operator-approved 2026-06-21): retain the
+historical headwind rule above as the default, and add a first-class
+`tailwind_eastbound` profile at `x=+5,y=0,z=0`. The approved rerun scope is 17
+deduplicated tailwind counterparts only; no additional headwind campaign is in
+scope. New cases use a 36 km direction-neutral Eastbound mission, while
+historical headwind missions remain reproducible. Because geometry differs,
+comparisons against historical headwind data must carry a mission-geometry
+caveat.
+
 ## Required Analysis Outputs
 
 The plugin needs airspeed-specific analysis. Existing CTE/square scripts are

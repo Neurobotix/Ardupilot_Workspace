@@ -38,8 +38,9 @@
   and `src/sim_ard_gaw/campaigns/test_suite/cli/interactive.py`
 - test_suite migration feature runbook:
   `governance/runbooks/features/test_suite_migration/`
-- Airspeed failure behavior feature runbook (second `test_suite` plugin lane;
-  Phase 2 raw measurement smoke accepted 2026-06-06):
+- Airspeed failure behavior feature runbook (historical headwind Phase 2 raw
+  measurement smoke accepted 2026-06-06; tailwind healthy gate and corrected
+  two-attempt P130 pulse interpretation recorded through 2026-06-23):
   `governance/runbooks/features/airspeed_failure_behavior/`
 - Airspeed failure behavior technical analysis (2026-06-11; sweep + pulse ladder
   + stepped ramps; later accepted for bounded Phase 4A on 2026-06-14):
@@ -48,6 +49,9 @@
 - Airspeed failure behavior Phase 4A bounded acceptance (2026-06-14; ratio
   sweep + pulse ladder + stepped ramps accepted, fixed-case Phase 4B open):
   `evidence/reports/features/2026-06-14_airspeed_failure_ratio_ramp_pulse_acceptance.md`
+- Tailwind P130 pulse evaluator correction and two-attempt additive reanalysis
+  (2026-06-23; raw manifests preserved):
+  `evidence/reports/features/2026-06-23_tailwind_pulse_evaluator_correction.md`
 - test_suite migration Phase 1 (wrapper parity) evidence:
   `evidence/reports/features/TEST_SUITE_MIGRATION_PHASE_1_2026-05-24.md`
 - test_suite migration Phase 2 (generic manifest) evidence:

@@ -24,6 +24,16 @@ Active waypoint missions live directly in this directory.
   runway, one 23000 m continuous headwind line holder, pulse schedule starts
   on entering seq 4, and the monitor finishes after the final observation with
   no RTL waypoint.
+- `airspeed_failure_eastbound_long_speed_15_mission.waypoints`
+  Purpose: direction-neutral 36 km Eastbound measurement geometry for new
+  headwind/tailwind studies whose intended speed source is an explicit
+  `DO_CHANGE_SPEED=15` command. Injection remains on entering seq 4; the
+  monitor stops the run and the mission has no RTL waypoint.
+- `airspeed_failure_eastbound_long_cruise_follow_mission.waypoints`
+  Purpose: the same direction-neutral 36 km geometry without
+  `DO_CHANGE_SPEED`, so the selected overlay's `AIRSPEED_CRUISE` is the sole
+  cruise-speed source. Seq numbering and the seq-4 injection contract match
+  the speed-15 variant.
 - `lidar_staircase_mission.waypoints`
   Purpose: LiDAR overpass mission for the staircase world.
 - `quad_star_showcase_mission.waypoints`

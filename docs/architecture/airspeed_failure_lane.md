@@ -24,6 +24,13 @@ Current status:
 - Phase 4B (fixed-case repetition matrix / full-lane acceptance): open.
   Fixed-case repetitions for `healthy_reference`, `ofs_noop_probe`, `noise_5`,
   `noise_10`, `pitot_500pa`, and `fail_primary` remain unclosed.
+- Tailwind counterpart work: Phase 0 historical inventory and Phase 1 design
+  were operator-approved on 2026-06-21. The healthy DO15 gate passed on
+  2026-06-22. Two protected DO15 P130 pulse attempts were reanalyzed on
+  2026-06-23 after correcting the mechanism evaluator; both are
+  `clamp_verified`, with the additive record at
+  `evidence/reports/features/2026-06-23_tailwind_pulse_evaluator_correction.md`.
+  The remaining counterpart matrix is still open.
 
 The 2026-06-14 acceptance is a bounded behavior-characterization claim, not a
 safety claim and not full fixed-case lane acceptance. Do not treat Phase 2 smoke
@@ -88,6 +95,65 @@ echo-verified before arming. Unverified wind = not an accepted observation.
 The fixed wind is kept well inside the CTE wind-envelope edge (~14–17 m/s
 resultant) so wind remains a controlled constant, not the independent variable.
 Decisions in ADR-0010.
+
+New continuous-study cases select a named profile instead of mutating that
+historical default:
+
+| Profile | Gazebo ENU vector | Eastbound expected `ARSP-GPS` |
+| --- | --- | --- |
+| `headwind_eastbound` | `x=-5,y=0,z=0` | approximately `+5 m/s` |
+| `tailwind_eastbound` | `x=+5,y=0,z=0` | approximately `-5 m/s` |
+
+The direction-neutral expectation is
+`-(wind_vector_enu dot measurement_track_unit_enu)`. Historical headwind case
+IDs and mission defaults remain unchanged.
+
+## Tailwind Counterpart Missions
+
+The no-SITL tailwind implementation adds one 36 km Eastbound geometry with two
+speed-source variants:
+
+- `assets/missions/airspeed_failure_eastbound_long_speed_15_mission.waypoints`
+  retains the historical `DO_CHANGE_SPEED=15` behavior;
+- `assets/missions/airspeed_failure_eastbound_long_cruise_follow_mission.waypoints`
+  contains no speed command and follows the selected overlay's
+  `AIRSPEED_CRUISE`.
+
+Both preserve seq 1–4, inject on entering seq 4 at 100 m AGL, contain no RTL,
+and are monitor-complete. The approved recipe is
+`config/campaigns/airspeed_failure_tailwind_counterparts.json`: 17 tailwind
+attempts, with the incomplete 2026-06-09 predecessor excluded. This recipe is
+configuration only and does not authorize or launch live work.
+
+Tailwind case IDs are:
+
+- `healthy_reference_tailwind`;
+- `ratio_bias_ramp_p10_to_p100_tailwind`;
+- `ratio_bias_ramp_p10_to_p200_tailwind`;
+- `ratio_bias_pulse_p10_to_p130_tailwind`.
+
+## Mechanism Analysis Contract
+
+`airspeed_mechanism_gate.json` is required analysis for scheduled counterpart
+cases. Schedule windows are anchored to the logged `SIM_ARSPD_RATIO` `PARM`
+transitions in the BIN clock; wall-clock injection timestamps are provenance,
+not BIN window boundaries. Raw-to-believed checks use only `CTUN.AsT=1`
+(`AIRSPEED_SENSOR`) rows. `ARSP.U` is retained separately because it reports
+the parameter enable/disable state and can lag the AHRS source switch. The
+protected upper equivalent-airspeed bound follows the ArduPilot source
+arithmetic:
+
+```text
+upper_EAS = (GPS.Spd + AHRS_WIND_MAX) / CTUN.E2T
+```
+
+TECS demand is checked in true-airspeed units against
+`intended_EAS * CTUN.E2T`. Pulse ladders evaluate every fault window and report
+both the first AHRS source rejection (`CTUN.AsT != 1`) and the first airspeed
+parameter disable (`ARSP.U=0`).
+The mechanism vocabulary is `clamp_verified`,
+`unclamped_tracking_verified`, `clamp_not_exercised`,
+`sensor_rejected_before_verification`, and `mechanism_unverified`.
 
 ## Injection Trigger
 

@@ -311,6 +311,7 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
             generic["stimulus_result"]["wind_mps"],
         )
         self.assertEqual(False, generic["verdict"]["retryable"])
+        self.assertEqual(record.duration_wall_s, generic["duration_wall_s"])
 
     def test_square_only_generic_verdict_stays_partial_not_success(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

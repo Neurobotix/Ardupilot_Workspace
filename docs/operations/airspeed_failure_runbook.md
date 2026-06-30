@@ -10,6 +10,11 @@ The fixed-case repetition matrix remains open as Phase 4B. **Live SITL runs are
 gated by ADR-0004 and require explicit operator authorization** — see the
 live-run section below.
 
+Tailwind counterpart support is currently **no-SITL only**. The named profile,
+36 km missions, distinct case IDs, and 17-attempt recipe are implemented, but
+healthy live validation has not been authorized or run. Do not describe the
+tailwind lane as verified.
+
 Architecture doc:
 [docs/architecture/airspeed_failure_lane.md](../architecture/airspeed_failure_lane.md)
 
@@ -82,6 +87,61 @@ ratio_bias_p100
 ratio_bias_m20
 ratio_bias_m40
 ```
+
+Tailwind discovery is separate and does not alter the default headwind list:
+
+```bash
+./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_airspeed_failure \
+    --wind-profile tailwind_eastbound --list-cases
+```
+
+Expected no-SITL case IDs:
+
+```text
+healthy_reference_tailwind
+ratio_bias_ramp_p10_to_p100_tailwind
+ratio_bias_ramp_p10_to_p200_tailwind
+ratio_bias_pulse_p10_to_p130_tailwind
+```
+
+Dry-run the cruise-follow P200 counterpart without launching:
+
+```bash
+./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_airspeed_failure \
+    --wind-profile tailwind_eastbound \
+    --speed-source airspeed_cruise \
+    --dry-run --case ratio_bias_ramp_p10_to_p200_tailwind
+```
+
+The dry-run records `x=+5`, the Eastbound `ARSP-GPS≈-5` expectation, the
+36 km cruise-follow mission, and the unchanged 21-event/1260-second schedule.
+It does not publish wind or start SITL.
+
+The healthy-tailwind live gate is one-way: Eastbound sign confirmation is
+required and Westbound is recorded as unobserved, not treated as a failure.
+The historical healthy-reference mission remains two-way and still requires
+both directions. Healthy acceptance requires successful wind publication and
+echo plus every mission-required realized sign check. Schedule completion on a
+long no-RTL mission must not be reported as a planned RTL transition.
+
+Terminal live manifests record distinct attempt-start and verdict-end UTC
+timestamps plus wall duration. Their stimulus verification is finalized from
+the monitor's actual injection and reset readbacks. `run_config.json` records
+SHA-256/size provenance for the selected mission, parameter stack, workspace
+Gazebo plugin, tracked diff, and every untracked workspace input. Do not accept
+a governed tailwind attempt if any of those terminal/provenance fields are
+missing or contradictory.
+
+Scheduled mechanism analysis must use the BIN-native evidence contract:
+
+- anchor each ramp/pulse window to its `SIM_ARSPD_RATIO` `PARM` transition;
+- use only `CTUN.AsT=1` rows for sensor clamp/tracking checks;
+- retain `ARSP.U` separately as the later parameter-disable state;
+- for pulse ladders, report the first AHRS source rejection and first parameter
+  disable across all fault windows.
+
+Do not align a long SITL BIN directly to wall-clock injection UTC. SITL and
+wall time drift, and doing so can mix a fault window with its reset window.
 
 ### Dry-run a specific case
 

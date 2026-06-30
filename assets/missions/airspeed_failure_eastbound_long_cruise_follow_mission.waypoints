@@ -1,0 +1,11 @@
+QGC WPL 110
+# AIRSPEED FAILURE DIRECTION-NEUTRAL EASTBOUND LONG MISSION
+# Speed source: AIRSPEED_CRUISE; there is no DO_CHANGE_SPEED command.
+# Wind is selected by the campaign profile; this mission does not encode its sign.
+# Seq 1-4 and the seq-4 injection edge are preserved. WP3->WP4 is 36 km.
+# The monitor stops after the schedule; there is intentionally no RTL waypoint.
+0	1	0	16	0	0	0	0	-35.3632620	149.1652370	584.00	1
+1	0	3	22	15.0	0	0	0	-35.3632620	149.1784556	100.00	1
+2	0	3	16	0	0	0	0	-35.3632620	149.1800000	100.00	1
+3	0	3	16	0	0	0	0	-35.3632620	149.1872680	100.00	1
+4	0	3	16	0	0	0	0	-35.3632620	149.5842712	100.00	1

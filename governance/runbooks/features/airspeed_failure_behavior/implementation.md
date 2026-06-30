@@ -368,3 +368,26 @@ make doctor
 
 Run relevant unit tests for the new plugin when implementation begins. Run
 build or presentation checks only if presentation files are touched.
+
+## Tailwind Counterpart Phase 2 - 2026-06-21
+
+This phase is no-SITL implementation only. It adds named
+`headwind_eastbound`/`tailwind_eastbound` profiles, direction-neutral expected
+wind arithmetic, distinct tailwind ramp/pulse IDs, two 36 km Eastbound mission
+variants, and the operator-approved 17-attempt campaign recipe. The incomplete
+2026-06-09 P100 predecessor is explicitly excluded.
+
+Historical headwind defaults, IDs, schedules, and mission selection remain
+unchanged. Tailwind cases use either an explicit DO15 mission or a geometrically
+identical cruise-follow mission, according to the historical speed-source
+semantics recorded by the recipe.
+
+The mechanism gate is phase-windowed over BIN messages. The 2026-06-23
+correction anchors scheduled windows to logged `SIM_ARSPD_RATIO` `PARM`
+transitions instead of wall UTC, checks sensor-derived raw-to-believed rows only
+when `CTUN.AsT=1`, and records `ARSP.U` parameter-disable intervals separately.
+Pulse ladders evaluate all fault windows and report both the first AHRS source
+rejection and first parameter disable. It checks the protected bound in EAS/TAS
+units using `CTUN.E2T`, checks `TECS.spdem` against the selected speed source,
+and emits the five operator-requested mechanism states. Live tailwind commands
+have a separate Phase 3 confirmation guard.

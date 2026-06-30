@@ -394,6 +394,158 @@ Decision: Phase 1 accepted. Phase 2 live smoke may start only under the
 authorization and clean-run gates in `plan.md`, `implementation.md`, this
 review, `.ai/entrypoint.md`, and ADR-0004.
 
+## Tailwind Counterpart Phase 2 Review - 2026-06-21
+
+Scope: no-SITL implementation only. No SITL or Gazebo launch was performed,
+and no tailwind evidence or acceptance status was promoted.
+
+Implemented review points:
+
+- Named headwind and tailwind wind profiles with direction-neutral expected
+  airspeed-minus-groundspeed arithmetic.
+- Four distinct tailwind case IDs covering healthy, +100 ramp, +200 ramp, and
+  +130 pulse schedules without changing historical headwind defaults.
+- Two 36 km Eastbound mission assets preserving paired DO15 and
+  `AIRSPEED_CRUISE` speed-source semantics.
+- A governed 17-attempt recipe that records source roots, duplicate aliases,
+  and the approved exclusion of the incomplete 2026-06-09 P100 root.
+- Time-aligned source-arithmetic mechanism classification with separate clamp,
+  unclamped tracking, rejection-before-verification, and unverified outcomes.
+- A separate `--confirm-live-tailwind-phase3` guard for every live tailwind
+  attempt.
+
+Checks:
+
+- Airspeed tailwind, mechanism-gate, and historical Phase 1 unit suites:
+  PASS, 49 tests.
+- Targeted pyright over the plugin, CLIs, and test modules: PASS, 0 errors.
+- Targeted `compileall`: PASS.
+- Tailwind `--list-cases` and representative `--dry-run`: PASS; no launch.
+- `git diff --check`: PASS.
+- `make doctor`: PASS.
+
+Decision: Phase 2 no-SITL implementation is complete. Phase 3 remains blocked
+pending explicit operator approval for the healthy-tailwind validation run.
+
+## Tailwind Healthy Gate Attempt 1 Review - 2026-06-22
+
+Raw runtime root:
+`var/runs/tailwind_phase3_healthy_speed15_gate_20260622/`.
+
+The authorized healthy-tailwind attempt produced a nominal flight observation:
+the Gazebo wind publication and echo were `x=+5 m/s`, realized Eastbound
+`ARSP-GPS` was `-5.525 m/s` against a `-5.0 ± 1.25 m/s` requirement, mean
+airspeed was `15.002 m/s`, mean groundspeed was `20.527 m/s`, altitude loss was
+`0.154 m`, all 1,573 BIN `ARSP.U` samples remained enabled, and the BIN contained
+no `ERR` or `EV` messages. The gate stopped with approximately 34.8 km remaining
+on the long leg. No simulator processes remained after cleanup.
+
+Review nevertheless blocked the matrix because the generated
+`reference_wind.json` reported `out_of_band`. Root cause: the historical
+two-direction healthy classifier required both Eastbound and Westbound samples,
+while the new 36 km mission is intentionally one-way. Acceptance also consumed
+publication/echo verification before the realized-sign result was backfilled.
+
+The correction:
+
+- requires only Eastbound sign confirmation for the one-way tailwind gate while
+  preserving both-direction requirements for the historical mission;
+- makes final healthy acceptance consume publication/echo plus the completed
+  required-direction sign result;
+- reports planned RTL only after an actual qualifying AUTO-to-RTL transition;
+- records configured mechanism tier and expected `AHRS_WIND_MAX` in healthy
+  case/run provenance.
+
+The original raw attempt and its original artifact are intentionally preserved.
+Offline replay of its values through the corrected classifier returns
+`confirmed`, overall wind verification `true`, and planned RTL `false`; this is
+a code-path check, not replacement live evidence. A post-fix healthy-tailwind
+attempt is required before the 17-attempt matrix begins.
+
+## Tailwind Healthy Gate Attempt 2 Strict Review - 2026-06-22
+
+Attempt 2 under the same raw root exercised the mission-aware sign correction
+successfully. Publication/echo and overall wind verification were true,
+Eastbound `ARSP-GPS` was `-5.525 m/s`, mean airspeed was `15.001 m/s`, mean
+groundspeed was `20.526 m/s`, altitude loss was `0.198 m`, planned RTL was
+false, all 1,586 BIN `ARSP.U` samples remained enabled, and the BIN contained no
+`ERR` or `EV` messages. Required artifacts, parameter/reset readbacks, isolated
+SITL state, remaining mission distance, and cleanup passed review.
+
+Strict provenance review still blocked the matrix because:
+
+- generic staged manifests derived the start timestamp at terminalization, so
+  start and finish were identical;
+- the manifest retained the stimulus adapter's pre-monitor
+  `phase1_no_sitl`/`live_readback_performed=false` marker despite successful
+  live injection/reset readbacks;
+- run provenance named untracked inputs and the mission but did not hash their
+  content.
+
+All three behaviors predated the tailwind lane and are visible in historical
+headwind roots. The correction captures attempt start before environment
+launch, terminal end after verdict, and wall duration; replaces pending live
+stimulus verification with terminal injection/reset truth; and records
+SHA-256/size provenance for the selected mission and every untracked workspace
+file. Historical raw manifests, including attempts 1 and 2, remain unchanged.
+A final post-fix healthy-tailwind attempt is required before the matrix gate can
+be accepted.
+
+Post-fix checks:
+
+- Core lifecycle/manifest, campaign provenance, and airspeed unit suites:
+  PASS, 117 tests.
+- Targeted pyright: PASS, 0 errors.
+- Targeted `compileall`: PASS.
+- No-SITL provenance-shape inspection: PASS; mission and all five current
+  untracked inputs carry SHA-256 and size.
+- Representative cruise-follow tailwind dry-run: PASS; no launch.
+- `git diff --check`: PASS.
+- `make doctor`: PASS.
+
+## Tailwind Healthy Gate Attempt 3 - 2026-06-22
+
+Attempt 3 under
+`var/runs/tailwind_phase3_healthy_speed15_gate_20260622/` exercised the final
+provenance/lifecycle correction and completed as `success` with
+`valid_nominal_completion`. Its manifest records start
+`2026-06-22T11:24:51Z`, finish `2026-06-22T11:28:06Z`, mean airspeed
+15.00 m/s, mean groundspeed 20.53 m/s, altitude loss 0.14 m, and max mission
+sequence 4. The healthy gate is therefore satisfied for the bounded tailwind
+matrix work.
+
+## Tailwind P130 Pulse Reanalysis - 2026-06-23
+
+Two live attempts under
+`var/runs/tailwind_standard_speed15_pulse_p130_n1/` completed all 26 scheduled
+events, but their original manifests were false-negative
+`sensor_rejected_before_verification` results. Strict review found that the
+evaluator aligned wall-clock schedule UTC directly to the drifting SITL BIN
+clock, treated `ARSP.U=1` as proof of the active AHRS source, and evaluated only
+the final pulse.
+
+The corrected evaluator now:
+
+- anchors windows to logged `SIM_ARSPD_RATIO` `PARM` transitions;
+- requires `CTUN.AsT=1` for sensor-derived clamp/tracking rows;
+- evaluates all 13 fault windows and reports separate AHRS source-rejection
+  and `ARSP.U` parameter-disable thresholds.
+
+Additive offline reanalysis preserves the raw attempts and historical
+manifests. Both attempts are now interpretable `clamp_verified` observations:
+mean clamp error is 0.462 m/s and 0.390 m/s against the 2.0 m/s tolerance; AHRS
+first switches away from the sensor at +50%, while the parameter-disable path
+first activates at +60%. No rerun is required for these two attempts.
+
+Evidence:
+`evidence/reports/features/2026-06-23_tailwind_pulse_evaluator_correction.md`;
+curated summary:
+`evidence/curated_logs/airspeed_failure_tailwind_pulse_reanalysis_2026-06-23/`.
+
+Post-correction checks: 28 mechanism/tailwind tests and 90 broader regression
+tests passed; targeted pyright reported 0 errors; compileall, diff check, and
+`make doctor` passed.
+
 ## Rollback / Retirement Rule
 
 If airspeed becomes unsuitable before Phase 2, record the reason here and

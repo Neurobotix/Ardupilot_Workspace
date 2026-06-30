@@ -337,6 +337,10 @@ def _run_airspeed_failure_body(args) -> None:
         upload_timeout_s=args.upload_timeout,
         arm_timeout_s=args.arm_timeout,
         mode_timeout_s=args.mode_timeout,
+        wind_profile_id=args.af_wind_profile,
+        continuous_speed_source=args.af_speed_source,
+        mechanism_tier=args.af_mechanism_tier,
+        expected_ahrs_wind_max=args.af_expected_ahrs_wind_max,
     )
 
     print()
@@ -347,6 +351,8 @@ def _run_airspeed_failure_body(args) -> None:
     print(f"  Fixed cases   : {ordered_fixed}")
     print(f"  Ratio biases  : {bias_percents}")
     print(f"  Runs/case     : {config.runs_per_case}")
+    print(f"  Wind profile  : {config.wind_profile_id}")
+    print(f"  Speed source  : {config.continuous_speed_source}")
     print(f"  MAVLink       : {config.mavlink_addr}")
     print("=" * 60)
     print()

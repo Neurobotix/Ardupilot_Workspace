@@ -20,6 +20,10 @@ repetitions remain open as Phase 4B; full-lane acceptance is not closed.
    semantics, and mission geometry reasoning.
 5. `design_adrs.md` — full draft reasoning behind the six accepted ADRs.
 6. `evidence.md` — evidence pointers and the current Phase 3/Phase 4 boundary.
+7. `tailwind_phase_0_9_expectations.md` — Chunk 2 frozen Phase 0–9
+   preregistration and historical headwind actual-behavior table.
+8. `tailwind_phase_0_9_inventory.md` — Chunk 2 tailwind raw-evidence inventory,
+   coverage reconciliation, readiness decision, and exact Chunk 3 input list.
 
 ## This Bundle
 
@@ -31,6 +35,8 @@ repetitions remain open as Phase 4B; full-lane acceptance is not closed.
 | `design_research.md` | Phase 0 | Source-level SIM_ARSPD_* analysis, signal-chain derivation, mission geometry, must-measure items |
 | `design_adrs.md` | Phase 0 | Full ADR draft reasoning for the six promoted decisions |
 | `evidence.md` | Phase 2–4 | Raw and curated evidence pointers, interim package, and remaining closure requirements |
+| `tailwind_phase_0_9_expectations.md` | Tailwind Chunk 2 | Frozen Phase 0–9 expectations, local-source principles, and raw/BIN-derived historical headwind behavior |
+| `tailwind_phase_0_9_inventory.md` | Tailwind Chunk 2 | Full run/BIN/provenance inventory, expected-versus-discovered coverage, and rerun decision |
 
 ## Accepted ADRs
 

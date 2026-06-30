@@ -18,6 +18,7 @@ from ..plugins.airspeed_failure.case_generator import AirspeedFailureCaseGenerat
 from ..plugins.airspeed_failure.config import AirspeedFailureConfig
 from ..plugins.airspeed_failure import defaults
 from ..plugins.airspeed_failure.environment import build_reference_wind_artifact
+from ..plugins.airspeed_failure.wind_profiles import WIND_PROFILES
 from ..plugins.airspeed_failure.stimulus import build_injection_artifact
 
 
@@ -38,10 +39,27 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--vehicle-arspd-ratio", type=float, default=defaults.DEFAULT_VEHICLE_ARSPD_RATIO)
     parser.add_argument("--verified-vehicle-ratio", action="store_true")
     parser.add_argument("--probe-schema", action="store_true")
+    parser.add_argument(
+        "--wind-profile",
+        choices=sorted(WIND_PROFILES),
+        default=defaults.DEFAULT_WIND_PROFILE_ID,
+    )
+    parser.add_argument(
+        "--speed-source",
+        choices=("do_change_speed_15", "airspeed_cruise"),
+        default="do_change_speed_15",
+    )
+    parser.add_argument(
+        "--mechanism-tier",
+        choices=("protected", "diagnostic"),
+        default="protected",
+    )
+    parser.add_argument("--expected-ahrs-wind-max", type=float, default=15.0)
     parser.add_argument("--live-smoke", action="store_true")
     parser.add_argument("--live-measurement-probes", action="store_true")
     parser.add_argument("--live-case", dest="live_case_id")
     parser.add_argument("--confirm-live-phase2", action="store_true")
+    parser.add_argument("--confirm-live-tailwind-phase3", action="store_true")
     parser.add_argument("--campaign-root", type=Path, default=None)
     parser.add_argument(
         "--param-airspeed",
@@ -96,6 +114,15 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         or args.live_case_id
     ) and not args.confirm_live_phase2:
         parser.error("live Phase 2 runs require --confirm-live-phase2")
+    if (
+        (args.live_smoke or args.live_measurement_probes or args.live_case_id)
+        and args.wind_profile == "tailwind_eastbound"
+        and not args.confirm_live_tailwind_phase3
+    ):
+        parser.error(
+            "live tailwind runs require separate Phase 3 approval and "
+            "--confirm-live-tailwind-phase3"
+        )
     return args
 
 
@@ -134,6 +161,10 @@ def _config_from_args(args: argparse.Namespace) -> AirspeedFailureConfig:
         arm_timeout_s=args.arm_timeout,
         mode_timeout_s=args.mode_timeout,
         mission_timeout_s=args.mission_timeout,
+        wind_profile_id=args.wind_profile,
+        continuous_speed_source=args.speed_source,
+        mechanism_tier=args.mechanism_tier,
+        expected_ahrs_wind_max=args.expected_ahrs_wind_max,
     )
 
 
@@ -165,7 +196,10 @@ def main(argv: Iterable[str] | None = None) -> None:
                 "parameters": case.parameters,
             },
             "injection_artifact": build_injection_artifact(case),
-            "reference_wind_artifact": build_reference_wind_artifact(verified=False),
+            "reference_wind_artifact": build_reference_wind_artifact(
+                verified=False,
+                profile=config.wind_profile,
+            ),
             "parameter_schema": defaults.parameter_schema(),
             "launch_performed": False,
         }

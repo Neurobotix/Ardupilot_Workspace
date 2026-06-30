@@ -14,13 +14,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from sim_ard_gaw.campaigns.provenance import parameter_file_provenance
+from sim_ard_gaw.campaigns.provenance import (
+    file_provenance,
+    parameter_file_provenance,
+    relative_file_provenance,
+)
 
 from . import defaults
 from . import mavlink
 from . import runtime
 from .case_generator import resolve_ratio_case_with_vehicle_ratio
 from .config import AirspeedFailureConfig
+from .wind_profiles import HEADWIND_EASTBOUND, WindProfile
 from ...core.environment import EnvironmentAdapter
 from ...core.models import AttemptContext, TestCase
 
@@ -40,7 +45,7 @@ class AirspeedFailureEnvironment(EnvironmentAdapter):
     def launch(self, case: TestCase, ctx: AttemptContext) -> None:
         if not self._config.launch_stack:
             return None
-        ctx.extra["attempt_start_time_utc"] = _stamp()
+        ctx.extra.setdefault("attempt_start_time_utc", _stamp())
         stack_log_dir = self._config.campaign_root / "scripts" / "airspeed_failure_stack"
         stack_log_dir.mkdir(parents=True, exist_ok=True)
         prefix = f"{case.case_id}__attempt_{ctx.attempt_index:03d}__{_token()}"
@@ -126,7 +131,17 @@ class AirspeedFailureEnvironment(EnvironmentAdapter):
         )
         vehicle_params = mavlink.read_params(
             master,
-            ["ARSPD_RATIO", "ARSPD_USE", "ARSPD_TYPE"],
+            [
+                "ARSPD_RATIO",
+                "ARSPD_USE",
+                "ARSPD_TYPE",
+                "AHRS_WIND_MAX",
+                "ARSPD_WIND_MAX",
+                "ARSPD_WIND_GATE",
+                "ARSPD_OPTIONS",
+                "AIRSPEED_CRUISE",
+                "AIRSPEED_MAX",
+            ],
             timeout=5.0,
         )
         baseline_ok = baseline_matches_source_defaults(sim_baseline)
@@ -171,7 +186,7 @@ class AirspeedFailureEnvironment(EnvironmentAdapter):
                 "SIM_ARSPD boot baseline does not match source defaults; "
                 "Phase 2 must stop for operator review."
             )
-        wind_artifact = publish_reference_wind()
+        wind_artifact = publish_reference_wind(self._config.wind_profile)
         wind_path = ctx.attempt_dir / "reference_wind.json"
         defaults.write_json(wind_path, wind_artifact)
         ctx.artifacts["reference_wind"] = wind_path
@@ -199,6 +214,10 @@ def reference_wind_artifact_schema() -> dict[str, object]:
         "artifact": "reference_wind.json",
         "required_fields": [
             "requested_mps",
+            "wind_profile_id",
+            "measurement_track_unit_enu",
+            "expected_arsp_minus_gps_formula",
+            "expected_arsp_minus_gps_mps",
             "frame",
             "world_name",
             "topic",
@@ -215,11 +234,27 @@ def reference_wind_artifact_schema() -> dict[str, object]:
     }
 
 
-def build_reference_wind_artifact(*, verified: bool = False) -> dict[str, Any]:
+def build_reference_wind_artifact(
+    *,
+    verified: bool = False,
+    profile: WindProfile = HEADWIND_EASTBOUND,
+) -> dict[str, Any]:
+    profile_data = profile.as_dict()
     return {
-        "requested_mps": dict(defaults.REFERENCE_WIND_MPS),
+        "wind_profile_id": profile.profile_id,
+        "requested_mps": dict(profile_data["vector_enu_mps"]),
+        "measurement_track_unit_enu": dict(
+            profile_data["measurement_track_unit_enu"]
+        ),
+        "expected_arsp_minus_gps_formula": profile_data[
+            "expected_arsp_minus_gps_formula"
+        ],
+        "expected_arsp_minus_gps_mps": profile.expected_arsp_minus_gps_mps,
         "frame": "gazebo_world_enu",
-        "frame_note": defaults.WIND_FRAME_NOTE,
+        "frame_note": (
+            "Gazebo world-frame ENU: +X=East, +Y=North; the named profile "
+            "and Eastbound measurement track determine wind sign."
+        ),
         "world_name": defaults.WORLD_NAME,
         "topic": defaults.WIND_TOPIC,
         "wind_info_topic": defaults.WIND_INFO_TOPIC,
@@ -231,7 +266,9 @@ def build_reference_wind_artifact(*, verified: bool = False) -> dict[str, Any]:
         "realized_arsp_minus_gps_eastbound_mps": None,
         "sign_confirmation": {
             "status": "pending_phase2",
-            "expected_eastbound_arsp_minus_gps_mps": 5.0,
+            "expected_eastbound_arsp_minus_gps_mps": (
+                profile.expected_arsp_minus_gps_mps
+            ),
         },
         "note": (
             "Phase 1 schema only; Phase 2 must confirm frame/sign against "
@@ -271,20 +308,25 @@ def parse_wind_echo(stdout: str) -> dict[str, float | bool] | None:
     return parsed
 
 
-def wind_echo_matches(parsed: dict[str, float | bool] | None) -> bool:
+def wind_echo_matches(
+    parsed: dict[str, float | bool] | None,
+    expected_mps: dict[str, float] | None = None,
+) -> bool:
     if parsed is None or parsed.get("enable_wind") is False:
         return False
-    for axis, expected in defaults.REFERENCE_WIND_MPS.items():
+    expected_vector = expected_mps or defaults.REFERENCE_WIND_MPS
+    for axis, expected in expected_vector.items():
         got = parsed.get(axis)
         if not isinstance(got, float) or abs(got - expected) > defaults.WIND_ECHO_TOLERANCE_MPS:
             return False
     return True
 
 
-def publish_reference_wind() -> dict[str, Any]:
-    x = defaults.REFERENCE_WIND_MPS["x"]
-    y = defaults.REFERENCE_WIND_MPS["y"]
-    z = defaults.REFERENCE_WIND_MPS["z"]
+def publish_reference_wind(
+    profile: WindProfile = HEADWIND_EASTBOUND,
+) -> dict[str, Any]:
+    x, y, z = profile.vector_enu_mps
+    expected = {"x": x, "y": y, "z": z}
     payload = f"linear_velocity:{{x:{x:.3f},y:{y:.3f},z:{z:.3f}}}, enable_wind:true"
     cmd = ["gz", "topic", "-t", defaults.WIND_TOPIC, "-m", "gz.msgs.Wind", "-p", payload]
     echo_cmd = ["gz", "topic", "-e", "-t", defaults.WIND_TOPIC, "-n", "1"]
@@ -312,8 +354,12 @@ def publish_reference_wind() -> dict[str, Any]:
         echo_stdout, echo_stderr = echo_proc.communicate()
         echo_timed_out = True
     parsed = parse_wind_echo(echo_stdout)
-    verified = result.returncode == 0 and not echo_timed_out and wind_echo_matches(parsed)
-    artifact = build_reference_wind_artifact(verified=verified)
+    verified = (
+        result.returncode == 0
+        and not echo_timed_out
+        and wind_echo_matches(parsed, expected)
+    )
+    artifact = build_reference_wind_artifact(verified=verified, profile=profile)
     artifact.update(
         {
             "phase": "phase2_live",
@@ -346,6 +392,7 @@ def build_run_config(
     gazebo_log: Path,
     sitl_use_dir: Path | None,
 ) -> dict[str, Any]:
+    mission_file = (case.mission_file or config.mission_file).expanduser().resolve()
     plugin_stat = (
         defaults.WORKSPACE_GAZEBO_PLUGIN_FILE.stat()
         if defaults.WORKSPACE_GAZEBO_PLUGIN_FILE.exists()
@@ -355,11 +402,17 @@ def build_run_config(
         "created_at_utc": defaults.utc_now(),
         "timezone": "UTC",
         "case_id": case.case_id,
+        "wind_profile": config.wind_profile.as_dict(),
+        "mission_profile_id": case.parameters.get("mission_profile_id"),
+        "speed_source": case.parameters.get("speed_source"),
+        "mechanism_tier": config.mechanism_tier,
+        "expected_ahrs_wind_max": config.expected_ahrs_wind_max,
         "attempt_index": attempt_index,
         "target_run_index": target_run_index,
         "campaign_root": str(config.campaign_root),
         "attempt_dir": str(defaults.attempt_dir(config.campaign_root, case.case_id, attempt_index)),
-        "mission_file": str(case.mission_file or config.mission_file),
+        "mission_file": str(mission_file),
+        "mission_file_provenance": file_provenance(mission_file),
         "mavlink_addr": config.mavlink_addr,
         "launch_stack": config.launch_stack,
         "fresh_sitl_process_per_attempt": True,
@@ -402,12 +455,17 @@ def source_tree_snapshot() -> dict[str, Any]:
         allow_failure=True,
     )
     diff = _git_output(["git", "diff", "--binary"], allow_failure=True)
+    untracked_files = untracked.splitlines()
     return {
         "git_head": head,
         "dirty": bool(status.strip()),
         "status_short": status.splitlines(),
         "diff_name_status": diff_name_status.splitlines(),
-        "untracked_files": untracked.splitlines(),
+        "untracked_files": untracked_files,
+        "untracked_file_provenance": relative_file_provenance(
+            defaults.WORKSPACE_ROOT,
+            untracked_files,
+        ),
         "diff_stat": diff_stat.splitlines(),
         "diff_sha256": hashlib.sha256(diff.encode("utf-8")).hexdigest() if diff else None,
         "note": "Live smoke was run from this working tree snapshot, not necessarily a committed tree.",

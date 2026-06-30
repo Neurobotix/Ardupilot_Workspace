@@ -6,7 +6,8 @@ Shared runtime configuration lives under explicit subhomes:
 
 - `vehicles/`: vehicle base parameters and standalone vehicle lane stacks.
 - `overlays/`: feature overlays applied after a vehicle base.
-- `campaigns/`: campaign or integrated-lane parameter files.
+- `campaigns/`: campaign or integrated-lane parameter files and governed
+  no-SITL campaign recipes.
 - `archive/`: superseded snapshots retained for comparison only.
 
 `.private/config/*.local.parm` is optional local overlay space. It is not shared

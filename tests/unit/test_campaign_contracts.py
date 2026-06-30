@@ -12,7 +12,10 @@ from sim_ard_gaw.campaigns.mission_contract import (  # noqa: E402
     MissionContractError,
     validate_square_wind_mission_contract,
 )
-from sim_ard_gaw.campaigns.provenance import parameter_file_provenance  # noqa: E402
+from sim_ard_gaw.campaigns.provenance import (  # noqa: E402
+    parameter_file_provenance,
+    relative_file_provenance,
+)
 
 
 MISSION = ROOT / "assets" / "missions" / "square_500m_five_laps_loiter5_land.waypoints"
@@ -31,6 +34,16 @@ class CampaignContractTests(unittest.TestCase):
             ])
             self.assertEqual(64, len(str(rows[0]["sha256"])))
             self.assertNotEqual(rows[0]["sha256"], rows[1]["sha256"])
+
+    def test_relative_file_provenance_hashes_untracked_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = root / "new_input.txt"
+            path.write_text("tailwind input\n", encoding="utf-8")
+            rows = relative_file_provenance(root, ["new_input.txt"])
+            self.assertEqual("new_input.txt", rows[0]["path"])
+            self.assertEqual(path.stat().st_size, rows[0]["size_bytes"])
+            self.assertEqual(64, len(str(rows[0]["sha256"])))
 
     def test_square_mission_contract_accepts_canonical_mission(self) -> None:
         validated = validate_square_wind_mission_contract(MISSION)
