@@ -1320,6 +1320,14 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             "argv",
             ["run_case", "--x", "0", "--y", "4", "--rep", "1"],
         ):
+            self.assertEqual("staged", cli_run_case._parse_args().attempt_strategy)
+
+        with patch.object(
+            sys,
+            "argv",
+            ["run_case", "--x", "0", "--y", "4", "--rep", "1",
+             "--attempt-strategy", "legacy"],
+        ):
             self.assertEqual("legacy", cli_run_case._parse_args().attempt_strategy)
 
         with patch.object(sys, "argv", ["run_suite", "--attempt-strategy", "staged"]):
