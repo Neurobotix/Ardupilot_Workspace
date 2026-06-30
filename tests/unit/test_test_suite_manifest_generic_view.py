@@ -13,23 +13,21 @@ from typing import Any
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS = ROOT / "src" / "sim_ard_gaw" / "compat_scripts"
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(SCRIPTS))
 
-import run_one  # noqa: E402
+from sim_ard_gaw.campaigns.wind_matrix import run_one  # noqa: E402
 from sim_ard_gaw.campaigns.manifest_safety import (  # noqa: E402
     CampaignManifestLockError,
     campaign_manifest_lock,
 )
-from test_suite.core.attempt_runner import AttemptRunner, AttemptStrategy  # noqa: E402
-from test_suite.core.environment import EnvironmentAdapter  # noqa: E402
-from test_suite.core.manifest import (  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.core.attempt_runner import AttemptRunner, AttemptStrategy  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.core.environment import EnvironmentAdapter  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.core.manifest import (  # noqa: E402
     GENERIC_MANIFEST_SCHEMA_VERSION,
     attempt_record_to_generic_fields,
     generic_manifest_view,
 )
-from test_suite.core.models import (  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.core.models import (  # noqa: E402
     AnalysisResult,
     AttemptContext,
     AttemptRecord,
@@ -38,9 +36,9 @@ from test_suite.core.models import (  # noqa: E402
     Verdict,
     VerdictClass,
 )
-from test_suite.plugins.wind_matrix import manifest as wind_manifest_module  # noqa: E402
-from test_suite.plugins.wind_matrix.manifest import WindMatrixManifest  # noqa: E402
-from test_suite.plugins.wind_matrix.plugin import _record_from_legacy  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import manifest as wind_manifest_module  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.manifest import WindMatrixManifest  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.plugin import _record_from_legacy  # noqa: E402
 
 
 def _hold_campaign_lock(root_text: str, acquired: Any, release: Any) -> None:
@@ -445,5 +443,5 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    os.environ.setdefault("PYTHONPATH", os.pathsep.join([str(ROOT / "src"), str(SCRIPTS)]))
+    os.environ.setdefault("PYTHONPATH", os.pathsep.join([str(ROOT / "src")]))
     unittest.main()
