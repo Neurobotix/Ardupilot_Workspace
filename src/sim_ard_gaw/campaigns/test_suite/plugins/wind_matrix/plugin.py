@@ -4,13 +4,11 @@ This module is the only public surface of the plugin. It wires the
 plugin's adapters together and exposes `build_plugin(config)` for the
 CLI.
 
-Phase-3 design:
-- `legacy` remains the default strategy and delegates to
-  `run_one.run_one(...)`.
-- `staged` is an explicit opt-in strategy that wires wind stimulus,
+Design:
+- `staged` is the only supported strategy. It wires wind stimulus,
   MAVLink control, monitoring, analysis, and verdict adapters through
-  the framework. It is not the campaign default until live parity
-  evidence exists.
+  the framework. The historical `legacy` strategy (which delegated to
+  the `run_one` monolith) has been retired.
 """
 from __future__ import annotations
 
@@ -24,7 +22,6 @@ from ...core.analysis import AnalyzerChain
 from ...core.attempt_runner import (
     AttemptRunner,
     AttemptStrategy,
-    LegacyDelegateStrategy,
     StagedStrategy,
 )
 from ...core.case_generator import CaseGenerator
@@ -59,7 +56,6 @@ from .defaults import (
 )
 from .environment import WindMatrixEnvironment
 from . import analysis_helpers
-from . import legacy
 from . import mavlink_control
 from .manifest import WindMatrixManifest
 from .monitor import WindMatrixDisarmCompletionMonitor
@@ -77,23 +73,19 @@ class WindMatrixPlugin:
     case_generator: CaseGenerator
     environment: EnvironmentAdapter
     manifest: Manifest
-    legacy_body: Callable[[AttemptContext], AttemptRecord]
     staged_strategy: AttemptStrategy | None = None
 
     def attempt_runner(self) -> AttemptRunner:
-        strategy: AttemptStrategy
-        if self.config.attempt_strategy == "staged":
-            if self.staged_strategy is None:
-                raise RuntimeError("staged attempt strategy was not configured")
-            strategy = self.staged_strategy
-        elif self.config.attempt_strategy == "legacy":
-            strategy = LegacyDelegateStrategy(body=self.legacy_body)
-        else:
+        if self.config.attempt_strategy != "staged":
             raise ValueError(
-                "attempt_strategy must be 'legacy' or 'staged', got "
-                f"{self.config.attempt_strategy!r}"
+                "wind_matrix supports only attempt_strategy='staged'; got "
+                f"{self.config.attempt_strategy!r}. The legacy run_one delegate "
+                "has been retired."
             )
-        prewrite_running = self.config.attempt_strategy == "staged"
+        if self.staged_strategy is None:
+            raise RuntimeError("staged attempt strategy was not configured")
+        strategy: AttemptStrategy = self.staged_strategy
+        prewrite_running = True
         running_record_factory: Callable[[AttemptContext], AttemptRecord] | None = None
         exception_record_factory: (
             Callable[[AttemptContext, BaseException], AttemptRecord] | None
@@ -129,62 +121,6 @@ class WindMatrixPlugin:
             return attempt_dir_path(self.config.campaign_root, case.case_id, idx)
 
         return _factory
-
-
-def _legacy_run_one_body(config: WindMatrixConfig) -> Callable[[AttemptContext], AttemptRecord]:
-    """Build the Phase-1 LegacyDelegateStrategy body.
-
-    The body calls `run_one.run_one(...)` and translates its returned
-    record dict into a framework `AttemptRecord`.
-    """
-    run_one = legacy.run_one_module()
-
-    def body(ctx: AttemptContext) -> AttemptRecord:
-        x = ctx.case.parameters["wind_x_mps"]
-        y = ctx.case.parameters["wind_y_mps"]
-        slot_deadline = ctx.slot_deadline_monotonic_s
-        if slot_deadline is not None and config.slot_deadline_margin_s:
-            slot_deadline = slot_deadline - config.slot_deadline_margin_s
-        record_dict = run_one.run_one(
-            x_wind=x,
-            y_wind=y,
-            rep=ctx.target_run_index,
-            campaign_root=config.campaign_root,
-            mavlink_addr=config.mavlink_addr,
-            mission_file=config.mission_file,
-            heartbeat_timeout=config.heartbeat_timeout_s,
-            mission_timeout=config.mission_timeout_s,
-            ready_timeout=config.ready_timeout_s,
-            upload_timeout=config.upload_timeout_s,
-            arm_timeout=config.arm_timeout_s,
-            mode_timeout=config.mode_timeout_s,
-            accept_square_only=config.accept_square_only,
-            manual_control=not config.auto_control,
-            force_arm=config.force_arm,
-            wipe_eeprom=config.wipe_eeprom,
-            require_analysis=config.require_analysis,
-            before_bin_names=ctx.extra.get("before_bin_names"),
-            sitl_log_dir=ctx.extra.get("sitl_log_dir"),
-            slot_deadline_monotonic=slot_deadline,
-            preloaded_wind_world=ctx.extra.get(
-                "preloaded_wind_world", config.preloaded_wind_world,
-            ),
-            preloaded_wind_refresh=ctx.extra.get(
-                "preloaded_wind_refresh", config.preloaded_wind_refresh,
-            ),
-            auto_wind_phase=config.auto_wind_phase,
-            param_file_stack=(
-                list(config.param_file_stack)
-                if config.param_file_stack is not None else None
-            ),
-        )
-        return _record_from_legacy(ctx, record_dict)
-
-    return body
-
-
-def _legacy_body_unavailable(ctx: AttemptContext) -> AttemptRecord:
-    raise RuntimeError("legacy delegate is not configured for staged construction")
 
 
 def build_wind_matrix_running_record(
@@ -363,20 +299,16 @@ _LEGACY_STATUS_TO_VERDICT = {
 
 
 def build_plugin(config: WindMatrixConfig) -> WindMatrixPlugin:
-    if config.attempt_strategy not in {"legacy", "staged"}:
+    if config.attempt_strategy != "staged":
         raise ValueError(
-            "attempt_strategy must be 'legacy' or 'staged', got "
-            f"{config.attempt_strategy!r}"
+            "wind_matrix supports only attempt_strategy='staged'; got "
+            f"{config.attempt_strategy!r}. The legacy run_one delegate has "
+            "been retired."
         )
-    if (
-        config.attempt_strategy == "staged"
-        and config.auto_control
-        and config.auto_wind_phase == "after-takeoff"
-    ):
+    if config.auto_control and config.auto_wind_phase == "after-takeoff":
         raise ValueError(
             "staged wind_matrix attempts do not support "
-            "auto_wind_phase='after-takeoff'. Use attempt_strategy='legacy' "
-            "or auto_wind_phase='before-arm'."
+            "auto_wind_phase='after-takeoff'. Use auto_wind_phase='before-arm'."
         )
     return WindMatrixPlugin(
         config=config,
@@ -387,15 +319,7 @@ def build_plugin(config: WindMatrixConfig) -> WindMatrixPlugin:
             require_analysis=config.require_analysis,
             accept_square_only=config.accept_square_only,
         ),
-        legacy_body=(
-            _legacy_run_one_body(config)
-            if config.attempt_strategy == "legacy"
-            else _legacy_body_unavailable
-        ),
-        staged_strategy=(
-            _staged_strategy(config)
-            if config.attempt_strategy == "staged" else None
-        ),
+        staged_strategy=_staged_strategy(config),
     )
 
 
