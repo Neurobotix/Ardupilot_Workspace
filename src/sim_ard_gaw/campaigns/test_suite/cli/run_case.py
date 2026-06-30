@@ -21,9 +21,9 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix",
                    help="Plugin name (default: wind_matrix)")
-    p.add_argument("--attempt-strategy", choices=("legacy", "staged"),
+    p.add_argument("--attempt-strategy", choices=("staged",),
                    default="staged",
-                   help="Attempt implementation path (default: staged)")
+                   help="Attempt implementation path (staged only; legacy retired)")
     p.add_argument("--x", type=int, required=True, choices=defaults.WIND_VALUES)
     p.add_argument("--y", type=int, required=True, choices=defaults.WIND_VALUES)
     p.add_argument("--rep", type=int, required=True)

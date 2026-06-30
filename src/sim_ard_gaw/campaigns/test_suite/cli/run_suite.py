@@ -35,7 +35,7 @@ def _parse_wind_values(text: str) -> list[int]:
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix")
-    p.add_argument("--attempt-strategy", choices=("legacy", "staged"),
+    p.add_argument("--attempt-strategy", choices=("staged",),
                    default="staged")
     p.add_argument("--x-values", type=_parse_wind_values, default=[0, 4, 8, 12])
     p.add_argument("--y-values", type=_parse_wind_values, default=[0, 4, 8, 12])

@@ -327,7 +327,13 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                 with mock.patch.object(sys, "argv", ["run_case", "--x", "0", "--y", "4", "--rep", "1"]):
                     assert run_case._parse_args().attempt_strategy == "staged"
                 with mock.patch.object(sys, "argv", ["run_case", "--x", "0", "--y", "4", "--rep", "1", "--attempt-strategy", "legacy"]):
-                    assert run_case._parse_args().attempt_strategy == "legacy"
+                    rejected = False
+                    try:
+                        with contextlib.redirect_stderr(io.StringIO()):
+                            run_case._parse_args()
+                    except SystemExit:
+                        rejected = True
+                    assert rejected, "argparse should reject the retired legacy choice"
                 with mock.patch.object(sys, "argv", ["run_suite", "--attempt-strategy", "staged"]):
                     suite_args = run_suite._parse_args()
                     assert suite_args.attempt_strategy == "staged"
@@ -627,11 +633,11 @@ class Phase3DEnvironmentOwnershipTests(unittest.TestCase):
 
             with (
                 patch(
-                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.legacy.run_matrix_module",
+                    "sim_ard_gaw.campaigns.wind_matrix.run_matrix.main",
                     legacy_blocker,
                 ),
                 patch(
-                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.legacy.run_one_module",
+                    "sim_ard_gaw.campaigns.wind_matrix.run_one.run_one",
                     legacy_blocker,
                 ),
                 patch.object(wm_runtime, "cleanup_stack", return_value=None),
@@ -710,7 +716,7 @@ class Phase3EControlMonitorOwnershipTests(unittest.TestCase):
 
             with (
                 patch(
-                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.legacy.run_one_module",
+                    "sim_ard_gaw.campaigns.wind_matrix.run_one.run_one",
                     legacy_blocker,
                 ),
                 patch.object(mavlink_control, "wait_for_heartbeat", return_value=fake_master),
@@ -786,7 +792,7 @@ class Phase3FWindInjectionOwnershipTests(unittest.TestCase):
 
             with (
                 patch(
-                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.legacy.run_one_module",
+                    "sim_ard_gaw.campaigns.wind_matrix.run_one.run_one",
                     legacy_blocker,
                 ),
                 patch(

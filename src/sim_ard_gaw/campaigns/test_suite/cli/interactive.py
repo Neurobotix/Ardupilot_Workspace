@@ -125,9 +125,8 @@ def _ask_advanced_common(ns: argparse.Namespace) -> None:
     ns.mission_file = Path(
         _ask("Mission file", default=str(wm.MISSION_FILE))
     )
-    ns.attempt_strategy = _select(
-        "Attempt strategy", choices=["staged", "legacy"]
-    )
+    # staged is the only supported strategy (legacy retired).
+    ns.attempt_strategy = "staged"
     ns.heartbeat_timeout = _ask_float("Heartbeat timeout (s)", wm.DEFAULT_HEARTBEAT_TIMEOUT)
     ns.mission_timeout   = _ask_float("Mission timeout (s)",   wm.DEFAULT_MISSION_TIMEOUT)
     ns.ready_timeout     = _ask_float("Ready timeout (s)",     wm.DEFAULT_READY_TIMEOUT)

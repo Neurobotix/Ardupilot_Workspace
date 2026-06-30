@@ -37,7 +37,6 @@ from sim_ard_gaw.campaigns.test_suite.core.models import (  # noqa: E402
 )
 from sim_ard_gaw.campaigns.test_suite.core.monitor import CompletionMonitor  # noqa: E402
 from sim_ard_gaw.campaigns.test_suite.core.stimulus import StimulusAdapter  # noqa: E402
-from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import legacy  # noqa: E402
 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import defaults  # noqa: E402
 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.manifest import WindMatrixManifest  # noqa: E402
 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.config import WindMatrixConfig  # noqa: E402
@@ -484,7 +483,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 artifact_root=root,
                 log=lambda _msg: None,
             )
-            owned_run_one = legacy.run_one_module()
+            owned_run_one = run_one
             with patch.object(
                 owned_run_one,
                 "run_one",
@@ -529,7 +528,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             )
             attempt_dir = defaults.attempt_dir(root, "wind_x_00_y_04", 1)
             events: list[str] = []
-            owned_run_one = legacy.run_one_module()
+            owned_run_one = run_one
             fake_master = object()
             source_bin = root / "source.BIN"
             source_bin.write_bytes(b"bin")
@@ -891,21 +890,16 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             )
             self.assertIn("exception: launch boom", saved[0]["notes"])
 
-    def test_legacy_delegate_path_remains_available(self) -> None:
+    def test_legacy_delegate_path_is_retired(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            plugin = build_plugin(
-                WindMatrixConfig(
-                    campaign_root=Path(temp_dir),
-                    launch_stack=False,
-                    attempt_strategy="legacy",
+            with self.assertRaises(ValueError):
+                build_plugin(
+                    WindMatrixConfig(
+                        campaign_root=Path(temp_dir),
+                        launch_stack=False,
+                        attempt_strategy="legacy",
+                    )
                 )
-            )
-
-            self.assertIsInstance(
-                plugin.attempt_runner()._strategy,  # noqa: SLF001
-                LegacyDelegateStrategy,
-            )
-            self.assertTrue(callable(plugin.legacy_body))
 
     def test_square_loiter_early_cleanup_and_flush_happen_before_bin_collection(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1328,7 +1322,9 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             ["run_case", "--x", "0", "--y", "4", "--rep", "1",
              "--attempt-strategy", "legacy"],
         ):
-            self.assertEqual("legacy", cli_run_case._parse_args().attempt_strategy)
+            # legacy is retired and no longer a valid CLI choice.
+            with self.assertRaises(SystemExit):
+                cli_run_case._parse_args()
 
         with patch.object(sys, "argv", ["run_suite", "--attempt-strategy", "staged"]):
             args = cli_run_suite._parse_args()
