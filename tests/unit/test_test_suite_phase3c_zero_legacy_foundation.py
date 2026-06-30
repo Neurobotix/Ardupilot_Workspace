@@ -190,7 +190,7 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                     attempt_strategy="staged",
                 )
                 assert cfg.attempt_strategy == "staged"
-                assert WindMatrixConfig().attempt_strategy == "legacy"
+                assert WindMatrixConfig().attempt_strategy == "staged"
 
                 cases = list(WindMatrixCaseGenerator(cfg).iter_cases())
                 assert [case.case_id for case in cases] == ["wind_x_00_y_04"]
@@ -325,6 +325,8 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                 )
 
                 with mock.patch.object(sys, "argv", ["run_case", "--x", "0", "--y", "4", "--rep", "1"]):
+                    assert run_case._parse_args().attempt_strategy == "staged"
+                with mock.patch.object(sys, "argv", ["run_case", "--x", "0", "--y", "4", "--rep", "1", "--attempt-strategy", "legacy"]):
                     assert run_case._parse_args().attempt_strategy == "legacy"
                 with mock.patch.object(sys, "argv", ["run_suite", "--attempt-strategy", "staged"]):
                     suite_args = run_suite._parse_args()

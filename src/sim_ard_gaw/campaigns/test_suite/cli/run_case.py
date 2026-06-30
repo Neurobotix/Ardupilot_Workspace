@@ -1,9 +1,11 @@
 """Run one attempt for a single case.
 
-Mirrors the flag surface of the legacy `run_one.py` so existing scripts
-can be migrated by swapping the entry point. The default
-`--attempt-strategy legacy` delegates to `run_one.run_one(...)`; the
-opt-in `staged` strategy is not campaign-runtime parity evidence yet.
+Mirrors the flag surface of the historical `run_one.py`. The default
+`--attempt-strategy staged` uses the extracted stage adapters (stimulus,
+mavlink control, monitor, analysis, verdict). The `legacy` strategy
+(delegating to the retained `run_one` monolith) is being retired; staged
+became the default on the strength of the Phase 3F/3G single-combo
+live parity comparison.
 """
 from __future__ import annotations
 
@@ -20,8 +22,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--plugin", default="wind_matrix",
                    help="Plugin name (default: wind_matrix)")
     p.add_argument("--attempt-strategy", choices=("legacy", "staged"),
-                   default="legacy",
-                   help="Attempt implementation path (default: legacy)")
+                   default="staged",
+                   help="Attempt implementation path (default: staged)")
     p.add_argument("--x", type=int, required=True, choices=defaults.WIND_VALUES)
     p.add_argument("--y", type=int, required=True, choices=defaults.WIND_VALUES)
     p.add_argument("--rep", type=int, required=True)
