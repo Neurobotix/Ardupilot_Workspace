@@ -3,10 +3,12 @@
 The framework lives in `core/`. Plugins describe a sensor or subsystem
 test family and live in `plugins/`. CLI entry points live in `cli/`.
 
-Nothing in this package modifies the legacy scripts (`run_one.py`,
-`run_one_og.py`, `run_matrix.py`, `run_matrix_round_robin.py`); they
-remain the source of truth for current behavior. The wind_matrix plugin
-delegates into them during the Phase-1 wrap.
+Nothing in this package modifies the standalone operator/campaign runners
+(`run_one.py`, `run_matrix.py`, `run_matrix_round_robin.py`) under
+`campaigns/wind_matrix/`. They are retained as the direct operator launch
+path (see `launch/launch.sh`), but the wind_matrix plugin no longer
+delegates into them: the staged strategy is the only supported attempt
+path and the legacy delegate has been retired.
 """
 
 from . import cli, core, plugins

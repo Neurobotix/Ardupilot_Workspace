@@ -1,14 +1,14 @@
 """Run an automated suite — round-robin scheduler.
 
-Mirrors the flag surface of `run_matrix_round_robin.py`, including
-bounded slot timing, analysis-required acceptance, focus-combo
+Mirrors the flag surface of the historical `run_matrix_round_robin.py`,
+including bounded slot timing, analysis-required acceptance, focus-combo
 filtering, and isolated SITL state for BIN selection. With `--plugin
-wind_matrix`, the default `--attempt-strategy legacy` body delegates
-through the legacy `run_one.run_one(...)` call path. The opt-in
-`--attempt-strategy staged` path uses extracted stage adapters but is
-not campaign-runtime parity evidence yet; a live SITL/Gazebo diff
-against the legacy round-robin runtime is still required before
-treating it as runtime-equivalent.
+wind_matrix`, the default `--attempt-strategy staged` body uses the
+extracted stage adapters. The `legacy` strategy (delegating to the retained
+`run_one` monolith) is being retired; staged became the default on the
+strength of the Phase 3F/3G single-combo live parity comparison. Campaign-
+scale round-robin staged-vs-legacy parity is not separately evidenced; see
+the retirement evidence report for the accepted-risk note.
 """
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ def _parse_int_list(text: str) -> list[int]:
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix")
-    p.add_argument("--attempt-strategy", choices=("legacy", "staged"),
-                   default="legacy")
+    p.add_argument("--attempt-strategy", choices=("staged",),
+                   default="staged")
     p.add_argument("--x-values", type=_parse_int_list, default=[0, 4, 8, 12])
     p.add_argument("--y-values", type=_parse_int_list, default=[0, 4, 8, 12])
     p.add_argument("--runs-per-combo", type=int, default=4)

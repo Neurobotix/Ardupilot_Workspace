@@ -14,20 +14,18 @@ from typing import Any
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS = ROOT / "src" / "sim_ard_gaw" / "compat_scripts"
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(SCRIPTS))
 
-import run_one  # noqa: E402
-from test_suite.core.analysis import Analyzer, AnalyzerChain  # noqa: E402
-from test_suite.core.attempt_runner import (  # noqa: E402
+from sim_ard_gaw.campaigns.wind_matrix import run_one  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.core.analysis import Analyzer, AnalyzerChain  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.core.attempt_runner import (  # noqa: E402
     AttemptRunner,
     LegacyDelegateStrategy,
     StagedStrategy,
 )
-from test_suite.core.control import ControlStrategy  # noqa: E402
-from test_suite.core.environment import EnvironmentAdapter  # noqa: E402
-from test_suite.core.models import (  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.core.control import ControlStrategy  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.core.environment import EnvironmentAdapter  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.core.models import (  # noqa: E402
     AnalysisResult,
     AttemptContext,
     AttemptRecord,
@@ -37,19 +35,18 @@ from test_suite.core.models import (  # noqa: E402
     Verdict,
     VerdictClass,
 )
-from test_suite.core.monitor import CompletionMonitor  # noqa: E402
-from test_suite.core.stimulus import StimulusAdapter  # noqa: E402
-from test_suite.plugins.wind_matrix import legacy  # noqa: E402
-from test_suite.plugins.wind_matrix import defaults  # noqa: E402
-from test_suite.plugins.wind_matrix.manifest import WindMatrixManifest  # noqa: E402
-from test_suite.plugins.wind_matrix.config import WindMatrixConfig  # noqa: E402
-from test_suite.plugins.wind_matrix.analyzers import WindMatrixAnalyzer  # noqa: E402
-from test_suite.plugins.wind_matrix.stimulus import WindMatrixStimulus  # noqa: E402
-from test_suite.plugins.wind_matrix.plugin import build_plugin  # noqa: E402
-from test_suite.plugins.wind_matrix.analyzers import WindMatrixVerdictPolicy  # noqa: E402
-from test_suite.cli import run_case as cli_run_case  # noqa: E402
-from test_suite.cli import run_round_robin as cli_run_round_robin  # noqa: E402
-from test_suite.cli import run_suite as cli_run_suite  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.core.monitor import CompletionMonitor  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.core.stimulus import StimulusAdapter  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import defaults  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.manifest import WindMatrixManifest  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.config import WindMatrixConfig  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers import WindMatrixAnalyzer  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.stimulus import WindMatrixStimulus  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.plugin import build_plugin  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers import WindMatrixVerdictPolicy  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.cli import run_case as cli_run_case  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.cli import run_round_robin as cli_run_round_robin  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.cli import run_suite as cli_run_suite  # noqa: E402
 
 
 class _FakeManifest:
@@ -228,7 +225,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
         events: list[str] = []
         runner, manifest = _runner(events)
         with patch(
-            "test_suite.core.attempt_runner._utc_now_iso",
+            "sim_ard_gaw.campaigns.test_suite.core.attempt_runner._utc_now_iso",
             side_effect=["2026-06-22T10:00:00Z", "2026-06-22T10:03:00Z"],
         ):
             runner.run(_case(), 1, 1, Path("/tmp/attempt"))
@@ -384,7 +381,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             self.assertIsInstance(strategy, StagedStrategy)
             self.assertNotIsInstance(strategy, LegacyDelegateStrategy)
             self.assertIn(
-                "test_suite.plugins.wind_matrix",
+                "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix",
                 type(strategy.stimulus).__module__,
             )
             env = os.environ.copy()
@@ -486,7 +483,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 artifact_root=root,
                 log=lambda _msg: None,
             )
-            owned_run_one = legacy.run_one_module()
+            owned_run_one = run_one
             with patch.object(
                 owned_run_one,
                 "run_one",
@@ -531,7 +528,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             )
             attempt_dir = defaults.attempt_dir(root, "wind_x_00_y_04", 1)
             events: list[str] = []
-            owned_run_one = legacy.run_one_module()
+            owned_run_one = run_one
             fake_master = object()
             source_bin = root / "source.BIN"
             source_bin.write_bytes(b"bin")
@@ -629,47 +626,47 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     side_effect=AssertionError("staged path called run_one.run_one"),
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.wind_injection.inject_wind",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.wind_injection.inject_wind",
                     side_effect=_inject_wind,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.wind_injection.preloaded_wind_artifact",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.wind_injection.preloaded_wind_artifact",
                     side_effect=_inject_wind,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.mavlink_control.wait_for_heartbeat",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.mavlink_control.wait_for_heartbeat",
                     side_effect=_wait_for_heartbeat,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.mavlink_control.wait_for_vehicle_ready",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.mavlink_control.wait_for_vehicle_ready",
                     side_effect=_wait_for_vehicle_ready,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.mavlink_control.upload_mission",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.mavlink_control.upload_mission",
                     side_effect=_upload_mission,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.mavlink_control.verify_mission",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.mavlink_control.verify_mission",
                     side_effect=_verify_mission,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.mavlink_control.arm_vehicle",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.mavlink_control.arm_vehicle",
                     side_effect=_arm_vehicle,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.mavlink_control.settle_after_arm_before_auto",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.mavlink_control.settle_after_arm_before_auto",
                     side_effect=_settle_after_arm,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.mavlink_control.set_auto_mode",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.mavlink_control.set_auto_mode",
                     side_effect=_set_auto_mode,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.mavlink_control.monitor_until_disarm",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.mavlink_control.monitor_until_disarm",
                     side_effect=_monitor_until_disarm,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.plugin.log",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.plugin.log",
                     side_effect=lambda _msg: None,
                 ))
                 _stack.enter_context(patch.object(
@@ -678,23 +675,23 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     return_value={"policy": "mock"},
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.analyzers.collect_bin_log",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.collect_bin_log",
                     side_effect=_collect_bin_log,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.analyzers.ensure_run_alias_link",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.ensure_run_alias_link",
                     side_effect=_ensure_run_alias_link,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.analyzers.run_analysis",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.run_analysis",
                     side_effect=_run_analysis,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.analyzers.build_run_summary",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.build_run_summary",
                     side_effect=_build_run_summary,
                 ))
                 _stack.enter_context(patch(
-                    "test_suite.plugins.wind_matrix.analyzers.time.sleep",
+                    "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.time.sleep",
                     side_effect=lambda _s: None,
                 ))
                 record = plugin.attempt_runner().run(
@@ -893,21 +890,16 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             )
             self.assertIn("exception: launch boom", saved[0]["notes"])
 
-    def test_legacy_delegate_path_remains_available(self) -> None:
+    def test_legacy_delegate_path_is_retired(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            plugin = build_plugin(
-                WindMatrixConfig(
-                    campaign_root=Path(temp_dir),
-                    launch_stack=False,
-                    attempt_strategy="legacy",
+            with self.assertRaises(ValueError):
+                build_plugin(
+                    WindMatrixConfig(
+                        campaign_root=Path(temp_dir),
+                        launch_stack=False,
+                        attempt_strategy="legacy",
+                    )
                 )
-            )
-
-            self.assertIsInstance(
-                plugin.attempt_runner()._strategy,  # noqa: SLF001
-                LegacyDelegateStrategy,
-            )
-            self.assertTrue(callable(plugin.legacy_body))
 
     def test_square_loiter_early_cleanup_and_flush_happen_before_bin_collection(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -942,13 +934,13 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             )
 
             with (
-                patch("test_suite.plugins.wind_matrix.analyzers.cleanup_stack_for_analysis", side_effect=lambda: events.append("cleanup")),
-                patch("test_suite.plugins.wind_matrix.analyzers.clamp_timeout_to_slot", side_effect=lambda *args, **kwargs: events.append("clamp") or 0.0),
-                patch("test_suite.plugins.wind_matrix.analyzers.time.sleep", side_effect=lambda _s: events.append("sleep")),
-                patch("test_suite.plugins.wind_matrix.analyzers.collect_bin_log", side_effect=lambda *args, **kwargs: events.append("collect") or source_bin),
-                patch("test_suite.plugins.wind_matrix.analyzers.run_analysis", side_effect=lambda *args, **kwargs: events.append("analysis")),
-                patch("test_suite.plugins.wind_matrix.analyzers.build_run_summary", return_value={}),
-                patch("test_suite.plugins.wind_matrix.analyzers.ensure_run_alias_link", side_effect=lambda *args, **kwargs: events.append("alias")),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.cleanup_stack_for_analysis", side_effect=lambda: events.append("cleanup")),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.clamp_timeout_to_slot", side_effect=lambda *args, **kwargs: events.append("clamp") or 0.0),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.time.sleep", side_effect=lambda _s: events.append("sleep")),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.collect_bin_log", side_effect=lambda *args, **kwargs: events.append("collect") or source_bin),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.run_analysis", side_effect=lambda *args, **kwargs: events.append("analysis")),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.build_run_summary", return_value={}),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.ensure_run_alias_link", side_effect=lambda *args, **kwargs: events.append("alias")),
             ):
                 result = analyzer.analyze(case, ctx)
 
@@ -999,9 +991,9 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 log=lambda _msg: None,
             )
             with (
-                patch("test_suite.plugins.wind_matrix.analyzers.clamp_timeout_to_slot", return_value=0.0),
-                patch("test_suite.plugins.wind_matrix.analyzers.time.sleep", return_value=None),
-                patch("test_suite.plugins.wind_matrix.analyzers.collect_bin_log", return_value=None),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.clamp_timeout_to_slot", return_value=0.0),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.time.sleep", return_value=None),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.collect_bin_log", return_value=None),
             ):
                 record = runner.run(
                     case=case,
@@ -1053,11 +1045,11 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             )
 
             with (
-                patch("test_suite.plugins.wind_matrix.analyzers.clamp_timeout_to_slot", return_value=0.0),
-                patch("test_suite.plugins.wind_matrix.analyzers.time.sleep", return_value=None),
-                patch("test_suite.plugins.wind_matrix.analyzers.collect_bin_log", return_value=source_bin),
-                patch("test_suite.plugins.wind_matrix.analyzers.ensure_run_alias_link", return_value=None),
-                patch("test_suite.plugins.wind_matrix.analyzers.run_analysis", side_effect=RuntimeError("analysis boom")),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.clamp_timeout_to_slot", return_value=0.0),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.time.sleep", return_value=None),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.collect_bin_log", return_value=source_bin),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.ensure_run_alias_link", return_value=None),
+                patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.analyzers.run_analysis", side_effect=RuntimeError("analysis boom")),
             ):
                 result = analyzer.analyze(case, ctx)
 
@@ -1322,7 +1314,17 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             "argv",
             ["run_case", "--x", "0", "--y", "4", "--rep", "1"],
         ):
-            self.assertEqual("legacy", cli_run_case._parse_args().attempt_strategy)
+            self.assertEqual("staged", cli_run_case._parse_args().attempt_strategy)
+
+        with patch.object(
+            sys,
+            "argv",
+            ["run_case", "--x", "0", "--y", "4", "--rep", "1",
+             "--attempt-strategy", "legacy"],
+        ):
+            # legacy is retired and no longer a valid CLI choice.
+            with self.assertRaises(SystemExit):
+                cli_run_case._parse_args()
 
         with patch.object(sys, "argv", ["run_suite", "--attempt-strategy", "staged"]):
             args = cli_run_suite._parse_args()
@@ -1440,7 +1442,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             row2["attempt_id"] = "wind_x_00_y_04__rep_02__attempt_002"
             run_one.save_manifest(root, {"campaign_root": str(root), "attempts": [row1, row2]})
 
-            with patch("test_suite.plugins.wind_matrix.manifest.defaults.run_alias", return_value="run_01"):
+            with patch("sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.manifest.defaults.run_alias", return_value="run_01"):
                 with self.assertRaisesRegex(RuntimeError, "Duplicate run_alias run_01 for combo wind_x_00_y_04"):
                     WindMatrixManifest(root).reconcile_bookkeeping()
 
@@ -1846,6 +1848,6 @@ class Phase3StagedAttemptTests(unittest.TestCase):
 
 if __name__ == "__main__":
     os.environ.setdefault(
-        "PYTHONPATH", os.pathsep.join([str(ROOT / "src"), str(SCRIPTS)])
+        "PYTHONPATH", os.pathsep.join([str(ROOT / "src")])
     )
     unittest.main()

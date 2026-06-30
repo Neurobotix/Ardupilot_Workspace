@@ -15,12 +15,10 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS = ROOT / "src" / "sim_ard_gaw" / "compat_scripts"
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(SCRIPTS))
 
-import run_one  # noqa: E402
-from test_suite.plugins.wind_matrix import analysis_helpers  # noqa: E402
+from sim_ard_gaw.campaigns.wind_matrix import run_one  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import analysis_helpers  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

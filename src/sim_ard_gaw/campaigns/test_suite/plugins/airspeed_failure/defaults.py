@@ -296,7 +296,6 @@ def runtime_env() -> dict[str, str]:
 
     python_parts = [
         str(WORKSPACE_ROOT / "src"),
-        str(WORKSPACE_ROOT / "src" / "sim_ard_gaw" / "compat_scripts"),
     ]
     for part in env.get("PYTHONPATH", "").split(":"):
         if part and part not in python_parts:

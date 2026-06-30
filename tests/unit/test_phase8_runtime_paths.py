@@ -9,10 +9,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = ROOT / "src" / "sim_ard_gaw"
-SCRIPTS = RUNTIME / "compat_scripts"
 WIND_MATRIX = RUNTIME / "campaigns" / "wind_matrix"
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(SCRIPTS))
 
 from sim_ard_gaw.campaigns.wind_matrix import run_matrix, run_one  # noqa: E402
 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.config import (  # noqa: E402
@@ -119,16 +117,6 @@ class Phase8RuntimePathTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(path.exists())
                 self.assertFalse(path.is_symlink())
-
-    def test_compatibility_scripts_are_thin_wrappers(self) -> None:
-        wrapper = (SCRIPTS / "run_one.py").read_text(encoding="utf-8")
-        suite_wrapper = (SCRIPTS / "test_suite" / "__init__.py").read_text(
-            encoding="utf-8"
-        )
-
-        self.assertIn("export_owned_module", wrapper)
-        self.assertIn("campaigns/wind_matrix/run_one.py", wrapper)
-        self.assertIn("campaigns/test_suite", suite_wrapper)
 
 
 if __name__ == "__main__":

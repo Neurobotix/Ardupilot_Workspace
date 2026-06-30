@@ -3,23 +3,19 @@ from __future__ import annotations
 # pyright: reportMissingImports=false
 
 import json
-import os
-import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS = ROOT / "src" / "sim_ard_gaw" / "compat_scripts"
 FIXTURES = ROOT / "tests" / "fixtures" / "campaigns"
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(SCRIPTS))
 
-import run_one  # noqa: E402
-from test_suite.core.models import AttemptContext, AttemptStatus, TestCase  # noqa: E402
-from test_suite.plugins.wind_matrix.manifest import WindMatrixManifest  # noqa: E402
-from test_suite.plugins.wind_matrix.plugin import _record_from_legacy  # noqa: E402
+from sim_ard_gaw.campaigns.wind_matrix import run_one  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.core.models import AttemptContext, AttemptStatus, TestCase  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.manifest import WindMatrixManifest  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.plugin import _record_from_legacy  # noqa: E402
 
 
 class Phase5WrapperManifestFlowTests(unittest.TestCase):
@@ -51,17 +47,6 @@ class Phase5WrapperManifestFlowTests(unittest.TestCase):
             saved = manifest.load()
             self.assertEqual("success_full", saved["attempts"][0]["status"])
             self.assertEqual("success", saved["attempts"][0]["terminal_status"])
-
-    def test_suite_cli_help_remains_available(self) -> None:
-        env = os.environ.copy()
-        env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "src"), str(SCRIPTS)])
-        output = subprocess.check_output(
-            [sys.executable, "-m", "test_suite.cli.run_suite", "--help"],
-            text=True,
-            env=env,
-        )
-        self.assertIn("--campaign-root", output)
-        self.assertIn("--wind-world-mode", output)
 
     def test_wrapper_marks_legacy_analysis_failures_as_failed(self) -> None:
         case = TestCase(
