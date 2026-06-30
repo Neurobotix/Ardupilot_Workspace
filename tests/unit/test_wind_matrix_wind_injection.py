@@ -10,14 +10,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS = ROOT / "src" / "sim_ard_gaw" / "compat_scripts"
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(SCRIPTS))
 
 from sim_ard_gaw.campaigns.wind_matrix import run_one as run_one_impl  # noqa: E402
 from sim_ard_gaw.campaigns.wind_world import write_world_wind  # noqa: E402
-from test_suite.plugins.wind_matrix import defaults  # noqa: E402
-from test_suite.plugins.wind_matrix import wind_injection  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import defaults  # noqa: E402
+from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import wind_injection  # noqa: E402
 
 
 class WindMatrixWindInjectionParityTests(unittest.TestCase):
