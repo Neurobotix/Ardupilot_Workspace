@@ -1,0 +1,81 @@
+# GPS Failure Lane
+
+The GPS failure lane deliberately degrades or corrupts the simulated GPS signal
+on a Mini Talon ArduPlane SITL + Gazebo stack, then records what the aircraft —
+and the EKF underneath it — does. The goal is **behavior characterization** —
+not safety certification and not recovery-controller design.
+
+This is the third `test_suite` plugin family, after the CTE wind-matrix lane
+(Lane 1) and the airspeed failure lane (Lane 2). The airspeed plugin is the
+structural template for this lane.
+
+GPS is the maximally different sensor at the fusion level: airspeed corrupts a
+control *input*, while GPS corrupts the vehicle's *belief about where it is*,
+which the EKF actively accepts or rejects through its own innovation gate. That
+gate makes GPS the sharpest available "knee" experiment.
+
+Current status:
+
+- Phase 0 (design lock): accepted 2026-07-06.
+- Phase 1 Chunk 1 no-SITL foundation: plugin skeleton, deterministic case
+  catalog, dry-run CLI, registry entry, and unit test exist.
+- No live run, mission asset, GPS parameter overlay, BIN analysis, or evidence
+  claim exists yet.
+
+## The Knee
+
+The central result is the **knee**: the boundary between the EKF fusing a
+corrupted GPS fix and rejecting it, measured on two tiers.
+
+- **Mechanism tier (primary):** the position innovation test ratio
+  `posTestRatio`. The knee is `posTestRatio` crossing `1.0` — ArduPilot's own
+  gate (`AP_NavEKF3_PosVelFusion.cpp`). Below `1.0` the fix is fused and the
+  belief moves toward the drifting fix; at/above `1.0` the fix is rejected.
+- **Behavior tier:** the believed-vs-truth horizontal position gap, attitude/
+  altitude band, and mode/failsafe changes.
+
+Accepted is not captured: an admitted fix can barely move the belief when the
+Kalman gain is small; only sustained cumulative drift walks the belief off. The
+truth-vs-belief gap is a mandatory logged field — it is the only signal that
+reveals a lie the filter itself believes is fine.
+
+## Fault Set
+
+| Fault | Knob(s) | Real-world case |
+| --- | --- | --- |
+| `slow_drift` | `SIM_GPS1_GLTCH_{X,Y}` growing ramp | GPS spoofing / slow position capture |
+| `step_glitch` | `SIM_GPS1_GLTCH_{X,Y}` fixed offset | multipath jump / sudden position pop |
+| `hard_denial` | `SIM_GPS1_ENABLE=0` | antenna/receiver loss, total denial |
+| `jamming` | `SIM_GPS1_JAM=1` | RF jamming (blackout + chaotic garbage) |
+
+`slow_drift` and `step_glitch` share the `GLTCH` knob; the only difference is
+onset rate, which isolates onset rate as the single independent variable in the
+knee experiment. Other `SIM_GPS1_*` knobs are documented-only (see the
+excluded-knob table in the runbook's `design_research.md`).
+
+## Behavior Vocabulary
+
+Seven bands, ordered by how much the system reacts, **not by danger**:
+`nominal`, `silent_drift`, `detected_rejected`, `reset_captured`,
+`autopilot_contained`, `loss_of_control`, `pre_injection_failure` (discard).
+
+Detection and danger are separate axes. `silent_drift` is behaviorally mild but
+strategically the worst outcome: the autopilot flies the aircraft off course
+while reporting healthy.
+
+## Verdict Model
+
+Characterize, not gate. A run is never PASS/FAIL. **Accepted** = measurement
+validity only; **behavior class** = which band it landed in. The knee is the
+result of the campaign, not a bar to clear.
+
+## Output Paths
+
+- Raw runtime output: `var/runs/gps_failure_behavior_*/` (not in git).
+- Curated evidence (Phase 4): `evidence/curated_logs/gps_failure_behavior_<date>/`.
+
+## References
+
+- Feature runbook: `governance/runbooks/features/gps_failure_behavior/`
+- Decisions: `governance/decisions/ADR-0017`..`ADR-0021`
+- Operations runbook: `docs/operations/gps_failure_runbook.md`
