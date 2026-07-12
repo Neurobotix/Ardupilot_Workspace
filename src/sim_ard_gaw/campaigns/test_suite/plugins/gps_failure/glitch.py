@@ -27,11 +27,12 @@ def meters_east_north_to_glitch_degrees(
     latitude_deg: float,
 ) -> dict[str, float]:
     """Convert local metre offsets to SITL SIM_GPS1_GLTCH degree payloads."""
+    east = _finite_float("east_m", east_m)
+    north = _finite_float("north_m", north_m)
     cos_latitude = _safe_cos_latitude(latitude_deg)
     return {
-        "SIM_GPS1_GLTCH_X": float(north_m) / METRES_PER_LATITUDE_DEGREE,
-        "SIM_GPS1_GLTCH_Y": float(east_m)
-        / (METRES_PER_LATITUDE_DEGREE * cos_latitude),
+        "SIM_GPS1_GLTCH_X": north / METRES_PER_LATITUDE_DEGREE,
+        "SIM_GPS1_GLTCH_Y": east / (METRES_PER_LATITUDE_DEGREE * cos_latitude),
         "SIM_GPS1_GLTCH_Z": 0.0,
     }
 
@@ -42,9 +43,10 @@ def step_glitch_payload(
     axis: str = "east",
 ) -> dict[str, float]:
     """Resolve a fixed metre-domain GPS step glitch to GLTCH degrees."""
-    if magnitude_m < 0:
+    magnitude = _finite_float("magnitude_m", magnitude_m)
+    if magnitude < 0:
         raise ValueError("magnitude_m must be >= 0")
-    east_m, north_m = _axis_offset(float(magnitude_m), axis)
+    east_m, north_m = _axis_offset(magnitude, axis)
     return meters_east_north_to_glitch_degrees(east_m, north_m, latitude_deg)
 
 
@@ -55,11 +57,13 @@ def slow_drift_payload(
     axis: str = "east",
 ) -> dict[str, float]:
     """Resolve a ramped GPS drift at elapsed time to GLTCH degrees."""
-    if rate_mps < 0:
+    rate = _finite_float("rate_mps", rate_mps)
+    elapsed = _finite_float("elapsed_s", elapsed_s)
+    if rate < 0:
         raise ValueError("rate_mps must be >= 0")
-    if elapsed_s < 0:
+    if elapsed < 0:
         raise ValueError("elapsed_s must be >= 0")
-    return step_glitch_payload(rate_mps * elapsed_s, latitude_deg, axis=axis)
+    return step_glitch_payload(rate * elapsed, latitude_deg, axis=axis)
 
 
 def glitch_recipe_metadata(
@@ -72,7 +76,10 @@ def glitch_recipe_metadata(
         "frame": GLITCH_FRAME,
         "sign_convention": GLITCH_SIGN_CONVENTION,
         "conversion": GLITCH_CONVERSION_RECIPE,
-        "example_reference_latitude_deg": float(example_reference_latitude_deg),
+        "example_reference_latitude_deg": _finite_float(
+            "example_reference_latitude_deg",
+            example_reference_latitude_deg,
+        ),
         "requires_live_resolution": bool(requires_live_resolution),
         "altitude_fault_axis": False,
     }
@@ -85,32 +92,37 @@ def preview_payload_from_recipe(
     elapsed_s: float,
 ) -> dict[str, Any] | None:
     """Resolve a dry-run payload preview for supported GLTCH recipes."""
+    latitude = _finite_float("latitude_deg", latitude_deg)
+    elapsed = _finite_float("elapsed_s", elapsed_s)
+    if elapsed < 0:
+        raise ValueError("elapsed_s must be >= 0")
     if not recipe:
         return None
     fault_type = recipe.get("fault_type")
     axis = str(recipe.get("axis", "east"))
     if fault_type == "step_glitch":
         return {
-            "latitude_deg": float(latitude_deg),
-            "elapsed_s": float(elapsed_s),
+            "latitude_deg": latitude,
+            "elapsed_s": elapsed,
             "elapsed_affects_payload": False,
             "payload": step_glitch_payload(
                 float(recipe["offset_magnitude_m"]),
-                latitude_deg,
+                latitude,
                 axis=axis,
             ),
             "not_live_payload": True,
         }
     if fault_type == "slow_drift" and "drift_rate_mps" in recipe:
+        drift_rate = _finite_float("drift_rate_mps", recipe["drift_rate_mps"])
         return {
-            "latitude_deg": float(latitude_deg),
-            "elapsed_s": float(elapsed_s),
+            "latitude_deg": latitude,
+            "elapsed_s": elapsed,
             "elapsed_affects_payload": True,
-            "offset_m": float(recipe["drift_rate_mps"]) * float(elapsed_s),
+            "offset_m": drift_rate * elapsed,
             "payload": slow_drift_payload(
-                float(recipe["drift_rate_mps"]),
-                elapsed_s,
-                latitude_deg,
+                drift_rate,
+                elapsed,
+                latitude,
                 axis=axis,
             ),
             "not_live_payload": True,
@@ -119,9 +131,7 @@ def preview_payload_from_recipe(
 
 
 def _safe_cos_latitude(latitude_deg: float) -> float:
-    latitude = float(latitude_deg)
-    if not math.isfinite(latitude):
-        raise ValueError("latitude_deg must be finite")
+    latitude = _finite_float("latitude_deg", latitude_deg)
     if latitude < -90.0 or latitude > 90.0:
         raise ValueError("latitude_deg must be within [-90, 90]")
     cos_latitude = math.cos(math.radians(latitude))
@@ -130,14 +140,25 @@ def _safe_cos_latitude(latitude_deg: float) -> float:
     return cos_latitude
 
 
+def _finite_float(name: str, value: object) -> float:
+    try:
+        parsed = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be finite") from None
+    if not math.isfinite(parsed):
+        raise ValueError(f"{name} must be finite")
+    return parsed
+
+
 def _axis_offset(magnitude_m: float, axis: str) -> tuple[float, float]:
+    magnitude = _finite_float("magnitude_m", magnitude_m)
     axis_name = axis.lower()
     if axis_name == "east":
-        return magnitude_m, 0.0
+        return magnitude, 0.0
     if axis_name == "west":
-        return -magnitude_m, 0.0
+        return -magnitude, 0.0
     if axis_name == "north":
-        return 0.0, magnitude_m
+        return 0.0, magnitude
     if axis_name == "south":
-        return 0.0, -magnitude_m
+        return 0.0, -magnitude
     raise ValueError("axis must be one of: east, west, north, south")

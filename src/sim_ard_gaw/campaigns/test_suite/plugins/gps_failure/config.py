@@ -1,7 +1,9 @@
 """Configuration for the gps_failure plugin."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+import math
 from pathlib import Path
 from typing import Sequence
 
@@ -11,8 +13,8 @@ from . import defaults
 @dataclass
 class GpsFailureConfig:
     drift_rates_mps: tuple[float, ...] = defaults.DRIFT_RATES_MPS
-    glitch_magnitudes_m: tuple[int, ...] = defaults.GLITCH_MAGNITUDES_M
-    denial_durations_s: tuple[int, ...] = defaults.DENIAL_DURATIONS_S
+    glitch_magnitudes_m: tuple[float, ...] = defaults.GLITCH_MAGNITUDES_M
+    denial_durations_s: tuple[float, ...] = defaults.DENIAL_DURATIONS_S
     jamming_repeats: int = defaults.JAMMING_REPEAT_COUNT
     jamming_duration_s: float = defaults.JAMMING_DURATION_S
     runs_per_case: int = 1
@@ -23,24 +25,104 @@ class GpsFailureConfig:
     launch_stack: bool = False
 
     def __post_init__(self) -> None:
-        if self.runs_per_case < 1:
-            raise ValueError("runs_per_case must be >= 1")
-        if self.jamming_repeats < 1:
-            raise ValueError("jamming_repeats must be >= 1")
-        if self.jamming_duration_s <= 0:
-            raise ValueError("jamming_duration_s must be > 0")
-        for rate in self.drift_rates_mps:
-            if rate <= 0:
-                raise ValueError("drift_rates_mps values must be > 0")
-        for magnitude in self.glitch_magnitudes_m:
-            if magnitude <= 0:
-                raise ValueError("glitch_magnitudes_m values must be > 0")
-        for duration in self.denial_durations_s:
-            if duration <= 0:
-                raise ValueError("denial_durations_s values must be > 0")
+        self.runs_per_case = _positive_int("runs_per_case", self.runs_per_case, minimum=1)
+        self.jamming_repeats = _positive_int(
+            "jamming_repeats",
+            self.jamming_repeats,
+            minimum=defaults.JAMMING_REPEAT_COUNT,
+        )
+        self.jamming_duration_s = _positive_finite(
+            "jamming_duration_s",
+            self.jamming_duration_s,
+        )
+        self.drift_rates_mps = _positive_ladder(
+            "drift_rates_mps",
+            self.drift_rates_mps,
+            drift_rate_token,
+        )
+        self.glitch_magnitudes_m = _positive_ladder(
+            "glitch_magnitudes_m",
+            self.glitch_magnitudes_m,
+            glitch_magnitude_token,
+        )
+        self.denial_durations_s = _positive_ladder(
+            "denial_durations_s",
+            self.denial_durations_s,
+            denial_duration_token,
+        )
 
     @property
     def effective_param_stack(self) -> list[Path]:
         if self.param_file_stack is None:
             return defaults.phase1_param_files()
         return [Path(path) for path in self.param_file_stack]
+
+
+def _positive_int(name: str, value: object, *, minimum: int) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be an integer >= {minimum}")
+    try:
+        numeric = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be an integer >= {minimum}") from None
+    if not math.isfinite(numeric) or not numeric.is_integer():
+        raise ValueError(f"{name} must be an integer >= {minimum}")
+    parsed = int(numeric)
+    if parsed < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+    return parsed
+
+
+def _positive_ladder(
+    name: str,
+    values: Sequence[float],
+    token_func: Callable[[float], str],
+) -> tuple[float, ...]:
+    normalized = tuple(_positive_finite(f"{name} value", value) for value in values)
+    if not normalized:
+        raise ValueError(f"{name} must not be empty")
+    seen: dict[str, float] = {}
+    for value in normalized:
+        token = token_func(value)
+        if token in seen:
+            raise ValueError(
+                f"{name} contains duplicate/colliding value {value} "
+                f"for canonical token {token}"
+            )
+        seen[token] = value
+    return normalized
+
+
+def _positive_finite(name: str, value: object) -> float:
+    try:
+        parsed = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be a finite number > 0") from None
+    if not math.isfinite(parsed):
+        raise ValueError(f"{name} must be finite")
+    if parsed <= 0:
+        raise ValueError(f"{name} must be > 0")
+    return parsed
+
+
+def _format_number_token(value: float) -> str:
+    raw = f"{value:.12g}"
+    return raw.replace("-", "m").replace(".", "p")
+
+
+def drift_rate_token(value: float) -> str:
+    if value in defaults.DRIFT_RATES_MPS:
+        return f"{value:.1f}".replace(".", "p")
+    return _format_number_token(value)
+
+
+def glitch_magnitude_token(value: float) -> str:
+    if value in defaults.GLITCH_MAGNITUDES_M:
+        return f"{int(value):03d}"
+    return _format_number_token(value)
+
+
+def denial_duration_token(value: float) -> str:
+    if value in defaults.DENIAL_DURATIONS_S:
+        return f"{int(value):02d}"
+    return _format_number_token(value)

@@ -70,10 +70,17 @@ def classify_observation(observation: dict[str, Any]) -> dict[str, Any]:
         return _result(ANALYSIS_STATE_CLASS, "insufficient_post_injection_window", False)
     if not observation.get("required_artifacts_present", False):
         return _result(ANALYSIS_STATE_CLASS, "missing_required_artifacts", False)
-
-    if observation.get("mechanism_fields_present") is False:
+    if not _explicit_evidence_present(
+        observation,
+        primary="mechanism_evidence",
+        legacy="mechanism_fields_present",
+    ):
         return _result(ANALYSIS_STATE_CLASS, "missing_mechanism_fields", False)
-    if observation.get("behavior_fields_present") is False:
+    if not _explicit_evidence_present(
+        observation,
+        primary="behavior_evidence",
+        legacy="behavior_fields_present",
+    ):
         return _result(ANALYSIS_STATE_CLASS, "missing_behavior_fields", False)
 
     if observation.get("loss_of_control") or observation.get("timeout"):
@@ -95,6 +102,19 @@ def classify_observation(observation: dict[str, Any]) -> dict[str, Any]:
 
 def _window_met(observation: dict[str, Any]) -> bool:
     return float(observation.get("post_injection_s", 0.0) or 0.0) >= defaults.MIN_POST_INJECTION_S
+
+
+def _explicit_evidence_present(
+    observation: dict[str, Any],
+    *,
+    primary: str,
+    legacy: str,
+) -> bool:
+    if primary in observation:
+        return observation.get(primary) is True
+    if legacy in observation:
+        return observation.get(legacy) is True
+    return False
 
 
 def _result(
@@ -136,8 +156,8 @@ class GpsFailureVerdictPolicy(VerdictPolicy):
         monitor_result: MonitorResult,
         analysis_results: Sequence[AnalysisResult],
     ) -> Verdict:
-        accepted = any(
-            result.summary.get("accepted_observation") is True
+        accepted = bool(analysis_results) and all(
+            result.ok and result.summary.get("accepted_observation") is True
             for result in analysis_results
         )
         behavior = next(

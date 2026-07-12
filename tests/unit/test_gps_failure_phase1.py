@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.abc
 import json
+import math
 import os
 import subprocess
 import sys
@@ -37,6 +38,7 @@ from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.config import (  # noq
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.manifest import (  # noqa: E402
     GpsFailureManifest,
+    accepted_observation_from_attempt,
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.monitor import (  # noqa: E402
     first_seq4_edge_after_armed_auto_front_half,
@@ -45,6 +47,9 @@ from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.monitor import (  # no
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.plugin import (  # noqa: E402
     build_plugin,
+)
+from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.stimulus import (  # noqa: E402
+    compare_readback,
 )
 
 
@@ -64,12 +69,208 @@ EXPECTED_SOURCE_DEFAULTS = {
     "SIM_GPS1_JAM": 0.0,
 }
 
+EXPECTED_PARAM_STACK = [
+    ROOT / "config/vehicles/plane_base.parm",
+    ROOT / "config/overlays/plane_gps.parm",
+]
+
+
+def _mission_rows(path: Path) -> tuple[str, list[list[str]]]:
+    lines = [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    return lines[0], [line.split() for line in lines[1:]]
+
+
+def _distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius_m = 6_371_000.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    a = (
+        math.sin(delta_phi / 2.0) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
+    )
+    return radius_m * 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+
+
+def _parse_param_file(path: Path) -> dict[str, float]:
+    parsed: dict[str, float] = {}
+    for line_number, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
+        content = raw_line.split("#", 1)[0].strip()
+        if not content:
+            continue
+        fields = content.split()
+        if len(fields) != 2:
+            raise ValueError(f"{path}:{line_number}: expected name and numeric value")
+        name, raw_value = fields
+        if name in parsed:
+            raise ValueError(f"{path}:{line_number}: duplicate parameter {name}")
+        parsed[name] = float(raw_value)
+    return parsed
+
 
 def _cases(config: GpsFailureConfig | None = None):
     return list(GpsFailureCaseGenerator(config or GpsFailureConfig()).iter_cases())
 
 
+def _valid_observation(**updates: Any) -> dict[str, Any]:
+    observation: dict[str, Any] = {
+        "injection_triggered": True,
+        "injection_readback_ok": True,
+        "post_injection_s": 90.0,
+        "required_artifacts_present": True,
+        "mechanism_evidence": True,
+        "behavior_evidence": True,
+    }
+    observation.update(updates)
+    return observation
+
+
+def _accepted_attempt(**updates: Any) -> dict[str, Any]:
+    attempt: dict[str, Any] = {
+        "verdict": {
+            "class": "success",
+            "reason": "loss_of_control",
+            "metadata": {"accepted_observation": True},
+        },
+        "analysis_results": [
+            {
+                "ok": True,
+                "summary": {
+                    "accepted_observation": True,
+                    "behavior_class": "loss_of_control",
+                    "observation_quality_class": "valid_bad_behavior",
+                },
+            }
+        ],
+    }
+    attempt.update(updates)
+    return attempt
+
+
 class GpsFailurePhase1Tests(unittest.TestCase):
+    def test_mission_asset_matches_locked_five_item_geometry(self) -> None:
+        mission_path = ROOT / "assets/missions/gps_failure_behavior_mission.waypoints"
+        self.assertTrue(mission_path.is_file())
+        header, rows = _mission_rows(mission_path)
+        self.assertEqual("QGC WPL 110", header)
+        self.assertTrue(all(len(row) == 12 for row in rows))
+        self.assertEqual(list(range(5)), [int(row[0]) for row in rows])
+
+        template_path = (
+            ROOT
+            / "assets/missions/airspeed_failure_eastbound_long_speed_15_mission.waypoints"
+        )
+        _, template_rows = _mission_rows(template_path)
+        self.assertEqual(template_rows[1:], rows[1:])
+
+        by_seq = {int(row[0]): row for row in rows}
+        self.assertEqual(22, int(by_seq[1][3]))
+        self.assertEqual(178, int(by_seq[2][3]))
+        self.assertEqual(15.0, float(by_seq[2][5]))
+        self.assertEqual(16, int(by_seq[3][3]))
+        self.assertEqual(16, int(by_seq[4][3]))
+        self.assertNotIn(20, [int(row[3]) for row in rows])
+
+        seq3 = by_seq[3]
+        seq4 = by_seq[4]
+        leg_distance_m = _distance_m(
+            float(seq3[8]),
+            float(seq3[9]),
+            float(seq4[8]),
+            float(seq4[9]),
+        )
+        self.assertGreaterEqual(leg_distance_m, 35_000.0)
+        self.assertLessEqual(leg_distance_m, 37_000.0)
+        self.assertGreater(float(seq4[9]), float(seq3[9]))
+        self.assertEqual(4, max(by_seq))
+
+    def test_defaults_and_generated_cases_use_gps_mission_asset(self) -> None:
+        expected = ROOT / "assets/missions/gps_failure_behavior_mission.waypoints"
+        self.assertEqual(expected, defaults.MISSION_FILE)
+        self.assertTrue(all(case.mission_file == expected for case in _cases()))
+
+    def test_gps_overlay_contains_locked_values_without_airspeed_params(self) -> None:
+        overlay = ROOT / "config/overlays/plane_gps.parm"
+        self.assertTrue(overlay.is_file())
+        params = _parse_param_file(overlay)
+        self.assertEqual(
+            {
+                "EK3_POS_I_GATE": 500.0,
+                "EK3_GLITCH_RAD": 25.0,
+                "FS_EKF_THRESH": 0.8,
+                "EK3_GPS_CHECK": 31.0,
+            },
+            {
+                name: params[name]
+                for name in (
+                    "EK3_POS_I_GATE",
+                    "EK3_GLITCH_RAD",
+                    "FS_EKF_THRESH",
+                    "EK3_GPS_CHECK",
+                )
+            },
+        )
+        self.assertEqual(
+            {
+                "EK3_SRC1_POSXY": 3.0,
+                "EK3_SRC1_VELXY": 3.0,
+                "EK3_SRC1_POSZ": 1.0,
+                "EK3_SRC1_VELZ": 3.0,
+                "EK3_SRC1_YAW": 1.0,
+            },
+            {
+                name: params[name]
+                for name in (
+                    "EK3_SRC1_POSXY",
+                    "EK3_SRC1_VELXY",
+                    "EK3_SRC1_POSZ",
+                    "EK3_SRC1_VELZ",
+                    "EK3_SRC1_YAW",
+                )
+            },
+        )
+        self.assertEqual(
+            {
+                "SIM_WIND_SPD": 0.0,
+                "SIM_WIND_DIR": 180.0,
+                "SIM_WIND_TURB": 0.0,
+            },
+            {
+                name: params[name]
+                for name in ("SIM_WIND_SPD", "SIM_WIND_DIR", "SIM_WIND_TURB")
+            },
+        )
+        self.assertFalse(
+            any(name.startswith(("ARSPD_", "AIRSPEED_")) for name in params)
+        )
+
+    def test_param_parser_rejects_duplicate_names(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "duplicate.parm"
+            path.write_text(
+                "EK3_POS_I_GATE 500\nEK3_POS_I_GATE 500\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "duplicate parameter"):
+                _parse_param_file(path)
+
+    def test_default_param_stack_and_explicit_override(self) -> None:
+        config = GpsFailureConfig()
+        self.assertEqual(EXPECTED_PARAM_STACK, config.effective_param_stack)
+        override = [Path("/tmp/custom_base.parm"), Path("/tmp/custom_overlay.parm")]
+        self.assertEqual(
+            override,
+            GpsFailureConfig(param_file_stack=override).effective_param_stack,
+        )
+
     def test_case_list_includes_locked_catalog(self) -> None:
         case_ids = [case.case_id for case in _cases()]
         self.assertEqual("nominal", case_ids[0])
@@ -119,6 +320,8 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             {"nominal", "slow_drift", "step_glitch", "hard_denial", "jamming"},
             {case.parameters["fault_type"] for case in _cases()},
         )
+        self.assertEqual(23, len(case_ids))
+        self.assertEqual(len(case_ids), len(set(case_ids)))
 
     def test_dry_run_prints_phase1_no_launch_json(self) -> None:
         env = dict(os.environ)
@@ -143,6 +346,81 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertTrue(data["plugin_constructed"])
         self.assertFalse(data["launch_performed"])
         self.assertEqual("hard_denial", data["case"]["parameters"]["fault_type"])
+        self.assertEqual(
+            [str(path) for path in EXPECTED_PARAM_STACK],
+            data["effective_param_stack"],
+        )
+        self.assertEqual(
+            [str(path) for path in EXPECTED_PARAM_STACK],
+            data["parameter_schema"]["phase1_param_stack"],
+        )
+
+    def test_probe_schema_reports_two_file_default_stack(self) -> None:
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(SRC)
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure",
+                "--probe-schema",
+            ],
+            cwd=ROOT,
+            env=env,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        schema = json.loads(proc.stdout)
+        self.assertEqual(
+            [str(path) for path in EXPECTED_PARAM_STACK],
+            schema["phase1_param_stack"],
+        )
+
+    def test_cli_list_cases_outputs_case_ids_only(self) -> None:
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(SRC)
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure",
+                "--list-cases",
+            ],
+            cwd=ROOT,
+            env=env,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        lines = proc.stdout.splitlines()
+        self.assertEqual([case.case_id for case in _cases()], lines)
+        self.assertNotIn("{", proc.stdout)
+
+    def test_cli_action_conflicts_exit_nonzero(self) -> None:
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(SRC)
+        base = [
+            sys.executable,
+            "-m",
+            "sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure",
+        ]
+        for args in (
+            ["--list-cases", "--probe-schema"],
+            ["--dry-run", "--case", "nominal", "--list-cases"],
+            ["--probe-schema", "--case", "nominal"],
+            ["--list-cases", "--preview-elapsed-s", "90"],
+        ):
+            with self.subTest(args=args):
+                proc = subprocess.run(
+                    [*base, *args],
+                    cwd=ROOT,
+                    env=env,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertNotEqual(0, proc.returncode)
+                self.assertEqual("", proc.stdout)
 
     def test_glitch_conversion_maps_metres_to_degrees_with_signs(self) -> None:
         north = glitch.meters_east_north_to_glitch_degrees(
@@ -178,6 +456,20 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertGreater(signed["SIM_GPS1_GLTCH_Y"], 0.0)
         with self.assertRaisesRegex(ValueError, "too close to a pole"):
             glitch.meters_east_north_to_glitch_degrees(1.0, 0.0, 90.0)
+
+    def test_glitch_helpers_reject_nan_and_infinity(self) -> None:
+        with self.assertRaisesRegex(ValueError, "latitude_deg must be finite"):
+            glitch.meters_east_north_to_glitch_degrees(0.0, 0.0, math.nan)
+        with self.assertRaisesRegex(ValueError, "latitude_deg must be finite"):
+            glitch.meters_east_north_to_glitch_degrees(0.0, 0.0, math.inf)
+        with self.assertRaisesRegex(ValueError, "east_m must be finite"):
+            glitch.meters_east_north_to_glitch_degrees(math.nan, 0.0, 0.0)
+        with self.assertRaisesRegex(ValueError, "north_m must be finite"):
+            glitch.meters_east_north_to_glitch_degrees(0.0, math.nan, 0.0)
+        with self.assertRaisesRegex(ValueError, "rate_mps must be finite"):
+            glitch.slow_drift_payload(math.nan, 90.0, 0.0)
+        with self.assertRaisesRegex(ValueError, "elapsed_s must be finite"):
+            glitch.slow_drift_payload(0.5, math.nan, 0.0)
 
     def test_step_glitch_recipe_and_payload_preview_are_degrees(self) -> None:
         payload = glitch.step_glitch_payload(100.0, latitude_deg=0.0)
@@ -242,6 +534,34 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             places=12,
         )
 
+    def test_dry_run_preview_rejects_nan_inputs_without_nan_json(self) -> None:
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(SRC)
+        base_cmd = [
+            sys.executable,
+            "-m",
+            "sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure",
+            "--dry-run",
+            "--case",
+            "slow_drift_0p5_mps",
+        ]
+        for args in (
+            ["--reference-latitude-deg", "nan", "--preview-elapsed-s", "90"],
+            ["--reference-latitude-deg", "0", "--preview-elapsed-s", "nan"],
+        ):
+            with self.subTest(args=args):
+                proc = subprocess.run(
+                    [*base_cmd, *args],
+                    cwd=ROOT,
+                    env=env,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertNotEqual(0, proc.returncode)
+                self.assertEqual("", proc.stdout)
+                self.assertNotIn("NaN", proc.stdout)
+                self.assertNotIn("Infinity", proc.stdout)
+
     def test_continuous_accumulation_case_is_metadata_only_no_reset(self) -> None:
         case = GpsFailureCaseGenerator(GpsFailureConfig()).get_case(
             "slow_drift_accumulation_ramp"
@@ -284,8 +604,11 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertEqual(EXPECTED_SOURCE_DEFAULTS, schema["source_defaults"])
         self.assertEqual(["analysis_incomplete"], schema["analysis_state_classes"])
         self.assertNotIn("analysis_incomplete", schema["behavior_classes"])
-        self.assertIn("plane_gps.parm", schema["planned_param_stack"][1])
-        self.assertEqual(1, len(schema["phase1_param_stack"]))
+        self.assertNotIn("planned_param_stack", schema)
+        self.assertEqual(
+            [str(path) for path in EXPECTED_PARAM_STACK],
+            schema["phase1_param_stack"],
+        )
         defaults.validate_required_param_names(schema["required_names"])
         with self.assertRaisesRegex(ValueError, "Missing required"):
             defaults.validate_required_param_names(["SIM_GPS1_ENABLE"])
@@ -294,6 +617,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             self.assertEqual(EXPECTED_SOURCE_DEFAULTS, case.parameters["reset_payload"])
 
         self.assertEqual(90.0, defaults.MIN_POST_INJECTION_S)
+        self.assertIsNot(defaults.PARAMETER_METADATA, schema["metadata"])
         hard_denial = GpsFailureCaseGenerator(GpsFailureConfig()).get_case(
             "hard_denial_15s"
         )
@@ -325,11 +649,25 @@ class GpsFailurePhase1Tests(unittest.TestCase):
     def test_structured_trigger_requires_armed_auto_front_half_before_seq4(self) -> None:
         good = [
             {"seq": 1, "armed": True, "mode": "AUTO"},
+            {"seq": 1, "armed": True, "mode": "AUTO"},
             {"seq": 2, "armed": True, "mode": "AUTO"},
             {"seq": 3, "armed": True, "mode": "AUTO"},
             {"seq": 4, "armed": True, "mode": "AUTO"},
+            {"seq": 4, "armed": True, "mode": "AUTO"},
         ]
         self.assertTrue(first_seq4_edge_after_armed_auto_front_half(good))
+        self.assertFalse(first_seq4_edge_after_armed_auto_front_half(["bad"]))
+        self.assertFalse(first_seq4_edge_after_armed_auto_front_half([{}]))
+        self.assertFalse(
+            first_seq4_edge_after_armed_auto_front_half(
+                [{"seq": "bad", "armed": True, "mode": "AUTO"}]
+            )
+        )
+        self.assertFalse(
+            first_seq4_edge_after_armed_auto_front_half(
+                [{"seq": 4, "armed": True, "mode": "AUTO"}]
+            )
+        )
         self.assertFalse(
             first_seq4_edge_after_armed_auto_front_half(
                 [
@@ -428,12 +766,11 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             self.assertEqual(1, manifest.accepted_count(case))
 
     def test_behavior_class_is_characterized_not_gated(self) -> None:
-        base = {
-            "injection_triggered": True,
-            "injection_readback_ok": True,
-            "post_injection_s": 90.0,
-            "required_artifacts_present": True,
-        }
+        base = _valid_observation()
+        nominal = classify_observation(base)
+        self.assertTrue(nominal["accepted_observation"])
+        self.assertEqual("nominal", nominal["behavior_class"])
+
         result = classify_observation({**base, "loss_of_control": True})
         self.assertTrue(result["accepted_observation"])
         self.assertEqual("loss_of_control", result["behavior_class"])
@@ -479,17 +816,43 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             missing_artifacts["observation_quality_class"],
         )
 
-        missing_fields = classify_observation(
+        missing_mechanism = classify_observation(
             {
                 "injection_triggered": True,
                 "injection_readback_ok": True,
                 "post_injection_s": 90.0,
                 "required_artifacts_present": True,
-                "mechanism_fields_present": False,
+                "behavior_evidence": True,
             }
         )
-        self.assertFalse(missing_fields["accepted_observation"])
-        self.assertEqual("analysis_incomplete", missing_fields["behavior_class"])
+        self.assertFalse(missing_mechanism["accepted_observation"])
+        self.assertEqual("analysis_incomplete", missing_mechanism["behavior_class"])
+        self.assertEqual("missing_mechanism_fields", missing_mechanism["reason"])
+
+        explicit_mechanism_false = classify_observation(
+            _valid_observation(mechanism_evidence=False)
+        )
+        self.assertFalse(explicit_mechanism_false["accepted_observation"])
+        self.assertEqual("analysis_incomplete", explicit_mechanism_false["behavior_class"])
+
+        missing_behavior = classify_observation(
+            {
+                "injection_triggered": True,
+                "injection_readback_ok": True,
+                "post_injection_s": 90.0,
+                "required_artifacts_present": True,
+                "mechanism_evidence": True,
+            }
+        )
+        self.assertFalse(missing_behavior["accepted_observation"])
+        self.assertEqual("analysis_incomplete", missing_behavior["behavior_class"])
+        self.assertEqual("missing_behavior_fields", missing_behavior["reason"])
+
+        explicit_behavior_false = classify_observation(
+            _valid_observation(behavior_evidence=False)
+        )
+        self.assertFalse(explicit_behavior_false["accepted_observation"])
+        self.assertEqual("analysis_incomplete", explicit_behavior_false["behavior_class"])
 
         terminal_short = classify_observation(
             {
@@ -498,11 +861,179 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                 "post_injection_s": 30.0,
                 "terminal_state_reached": True,
                 "required_artifacts_present": True,
+                "mechanism_evidence": True,
+                "behavior_evidence": True,
                 "loss_of_control": True,
             }
         )
         self.assertFalse(terminal_short["accepted_observation"])
         self.assertEqual("analysis_incomplete", terminal_short["behavior_class"])
+
+    def test_manifest_acceptance_fails_closed_for_contradictions(self) -> None:
+        self.assertTrue(accepted_observation_from_attempt(_accepted_attempt()))
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(
+                    verdict={
+                        "class": "failed_analysis",
+                        "reason": "failed_analysis",
+                        "metadata": {"accepted_observation": True},
+                    }
+                )
+            )
+        )
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(
+                    analysis_results=[
+                        {
+                            "ok": True,
+                            "summary": {
+                                "accepted_observation": True,
+                                "behavior_class": "analysis_incomplete",
+                            },
+                        }
+                    ]
+                )
+            )
+        )
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(accepted_observation=True, analysis_results=[])
+            )
+        )
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(accepted_observation=False)
+            )
+        )
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(status="failed", accepted_observation=True)
+            )
+        )
+        for terminal in ("pending", "running", "partial", "failed_analysis"):
+            with self.subTest(terminal=terminal):
+                self.assertFalse(
+                    accepted_observation_from_attempt(
+                        _accepted_attempt(status=terminal, accepted_observation=True)
+                    )
+                )
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(
+                    verdict={
+                        "class": "success",
+                        "reason": "loss_of_control",
+                        "metadata": {"accepted_observation": False},
+                    }
+                )
+            )
+        )
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(verdict=None, status="success")
+            )
+        )
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                {
+                    "analysis_results": [
+                        {
+                            "ok": True,
+                            "summary": {
+                                "accepted_observation": True,
+                                "behavior_class": "loss_of_control",
+                            },
+                        }
+                    ]
+                }
+            )
+        )
+        self.assertTrue(
+            accepted_observation_from_attempt(
+                _accepted_attempt(
+                    verdict={
+                        "class": "success",
+                        "reason": "detected_rejected",
+                        "metadata": {"accepted_observation": True},
+                    },
+                    analysis_results=[
+                        {
+                            "ok": True,
+                            "summary": {
+                                "accepted_observation": True,
+                                "behavior_class": "detected_rejected",
+                                "observation_quality_class": "valid_detected_rejection",
+                            },
+                        }
+                    ],
+                )
+            )
+        )
+
+    def test_config_rejects_invalid_ladders_and_repeat_contracts(self) -> None:
+        with self.assertRaisesRegex(ValueError, "jamming_repeats must be >= 5"):
+            GpsFailureConfig(jamming_repeats=1)
+
+        with self.assertRaisesRegex(ValueError, "drift_rates_mps must not be empty"):
+            GpsFailureConfig(drift_rates_mps=())
+        with self.assertRaisesRegex(ValueError, "glitch_magnitudes_m must not be empty"):
+            GpsFailureConfig(glitch_magnitudes_m=())
+        with self.assertRaisesRegex(ValueError, "denial_durations_s must not be empty"):
+            GpsFailureConfig(denial_durations_s=())
+
+        with self.assertRaisesRegex(ValueError, "drift_rates_mps contains duplicate"):
+            GpsFailureConfig(drift_rates_mps=(0.2, 0.20))
+        with self.assertRaisesRegex(ValueError, "glitch_magnitudes_m contains duplicate"):
+            GpsFailureConfig(glitch_magnitudes_m=(10, 10.0))
+        with self.assertRaisesRegex(ValueError, "denial_durations_s contains duplicate"):
+            GpsFailureConfig(denial_durations_s=(5, 5.0))
+
+        with self.assertRaisesRegex(ValueError, "drift_rates_mps value must be finite"):
+            GpsFailureConfig(drift_rates_mps=(math.nan,))
+        with self.assertRaisesRegex(ValueError, "drift_rates_mps value must be finite"):
+            GpsFailureConfig(drift_rates_mps=(math.inf,))
+        with self.assertRaisesRegex(ValueError, "glitch_magnitudes_m value must be finite"):
+            GpsFailureConfig(glitch_magnitudes_m=(math.nan,))
+        with self.assertRaisesRegex(ValueError, "denial_durations_s value must be finite"):
+            GpsFailureConfig(denial_durations_s=(math.inf,))
+
+        with self.assertRaisesRegex(ValueError, "drift_rates_mps value must be > 0"):
+            GpsFailureConfig(drift_rates_mps=(0.0,))
+        with self.assertRaisesRegex(ValueError, "glitch_magnitudes_m value must be > 0"):
+            GpsFailureConfig(glitch_magnitudes_m=(-1.0,))
+        with self.assertRaisesRegex(ValueError, "denial_durations_s value must be > 0"):
+            GpsFailureConfig(denial_durations_s=(0.0,))
+
+    def test_custom_drift_values_generate_distinct_collision_free_ids(self) -> None:
+        cases = _cases(GpsFailureConfig(drift_rates_mps=(0.21, 0.24)))
+        case_ids = [case.case_id for case in cases]
+        self.assertIn("slow_drift_0p21_mps", case_ids)
+        self.assertIn("slow_drift_0p24_mps", case_ids)
+        self.assertEqual(len(case_ids), len(set(case_ids)))
+
+    def test_readback_comparison_rejects_non_finite_values(self) -> None:
+        with self.assertRaisesRegex(ValueError, "expected must be finite"):
+            compare_readback({"SIM_GPS1_ENABLE": math.nan}, {"SIM_GPS1_ENABLE": 1.0})
+        with self.assertRaisesRegex(ValueError, "actual must be finite"):
+            compare_readback({"SIM_GPS1_ENABLE": 1.0}, {"SIM_GPS1_ENABLE": math.nan})
+
+    def test_case_and_schema_metadata_are_isolated(self) -> None:
+        first, second = _cases()[:2]
+        first.parameters["parameter_metadata"]["SIM_GPS1_ENABLE"]["units"] = "mutated"
+        self.assertEqual(
+            "enum 0/1",
+            second.parameters["parameter_metadata"]["SIM_GPS1_ENABLE"]["units"],
+        )
+        schema = defaults.parameter_schema()
+        schema["metadata"]["SIM_GPS1_ENABLE"]["units"] = "schema_mutated"
+        fresh = GpsFailureCaseGenerator(GpsFailureConfig()).get_case("nominal")
+        self.assertEqual(
+            "enum 0/1",
+            fresh.parameters["parameter_metadata"]["SIM_GPS1_ENABLE"]["units"],
+        )
+        self.assertEqual("enum 0/1", defaults.PARAMETER_METADATA["SIM_GPS1_ENABLE"]["units"])
 
     def test_cli_invalid_case_fails_before_launch(self) -> None:
         env = dict(os.environ)

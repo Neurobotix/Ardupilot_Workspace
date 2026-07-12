@@ -1,7 +1,9 @@
 """GPS fault stimulus metadata for the Phase-1 no-SITL plugin."""
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
+import math
 from typing import Any
 
 from ...core.models import AttemptContext, TestCase
@@ -35,13 +37,13 @@ def build_injection_artifact(case: TestCase) -> dict[str, Any]:
     return {
         "case_id": case.case_id,
         "fault_type": case.parameters["fault_type"],
-        "requested_payload": dict(case.parameters["injection_payload"]),
-        "injection_schedule": list(case.parameters.get("injection_schedule", [])),
-        "fault_recipe": fault_recipe,
+        "requested_payload": copy.deepcopy(case.parameters["injection_payload"]),
+        "injection_schedule": copy.deepcopy(case.parameters.get("injection_schedule", [])),
+        "fault_recipe": copy.deepcopy(fault_recipe),
         "payload_resolution": payload_resolution_status(fault_recipe),
-        "reset_payload": dict(case.parameters["reset_payload"]),
-        "trigger": dict(case.parameters["trigger"]),
-        "readback_rules": dict(case.parameters["readback_rules"]),
+        "reset_payload": copy.deepcopy(case.parameters["reset_payload"]),
+        "trigger": copy.deepcopy(case.parameters["trigger"]),
+        "readback_rules": copy.deepcopy(case.parameters["readback_rules"]),
         "readback_status_shape": {
             "injection": "pending_phase2",
             "reset": "pending_phase2",
@@ -67,19 +69,35 @@ def compare_readback(
     actual_readback: dict[str, float],
 ) -> dict[str, Any]:
     mismatches: list[dict[str, Any]] = []
-    for name, expected in expected_payload.items():
+    for name, expected_raw in expected_payload.items():
+        expected = _finite_float(f"{name} expected", expected_raw)
         if name not in actual_readback:
             mismatches.append({"param": name, "reason": "missing"})
             continue
-        tolerance = float(defaults.PARAMETER_METADATA[name]["readback_tolerance"])
-        actual = float(actual_readback[name])
-        if abs(actual - float(expected)) > tolerance:
+        tolerance = _finite_float(
+            f"{name} tolerance",
+            defaults.PARAMETER_METADATA[name]["readback_tolerance"],
+        )
+        if tolerance < 0:
+            raise ValueError(f"{name} tolerance must be >= 0")
+        actual = _finite_float(f"{name} actual", actual_readback[name])
+        if abs(actual - expected) > tolerance:
             mismatches.append(
                 {
                     "param": name,
-                    "expected": float(expected),
+                    "expected": expected,
                     "actual": actual,
                     "tolerance": tolerance,
                 }
             )
     return {"ok": not mismatches, "mismatches": mismatches}
+
+
+def _finite_float(name: str, value: object) -> float:
+    try:
+        parsed = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be finite") from None
+    if not math.isfinite(parsed):
+        raise ValueError(f"{name} must be finite")
+    return parsed

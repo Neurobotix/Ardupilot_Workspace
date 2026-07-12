@@ -1,12 +1,19 @@
 """Case generator for the gps_failure plugin."""
 from __future__ import annotations
 
+import copy
+import math
 from typing import Any, Iterable
 
 from ...core.case_generator import CaseGenerator
 from ...core.models import TestCase
 from . import defaults, glitch
-from .config import GpsFailureConfig
+from .config import (
+    GpsFailureConfig,
+    denial_duration_token,
+    drift_rate_token,
+    glitch_magnitude_token,
+)
 
 
 class GpsFailureCaseGenerator(CaseGenerator):
@@ -92,9 +99,9 @@ class GpsFailureCaseGenerator(CaseGenerator):
             tags=("gps", "slow_drift", "accumulation", "no_sitl_phase1"),
         )
 
-    def _step_glitch_case(self, magnitude_m: int) -> TestCase:
+    def _step_glitch_case(self, magnitude_m: float) -> TestCase:
         return self._case(
-            case_id=f"step_glitch_{int(magnitude_m):03d}m",
+            case_id=f"step_glitch_{glitch_magnitude_token(float(magnitude_m))}m",
             fault_type="step_glitch",
             stimulus_name="sim_gps_glitch_step",
             injection_payload={},
@@ -102,7 +109,7 @@ class GpsFailureCaseGenerator(CaseGenerator):
                 **glitch.glitch_recipe_metadata(requires_live_resolution=True),
                 "fault_type": "step_glitch",
                 "independent_variable": "offset_magnitude_m",
-                "offset_magnitude_m": int(magnitude_m),
+                "offset_magnitude_m": float(magnitude_m),
                 "axis": "east",
                 "glitch_params": ["SIM_GPS1_GLTCH_X", "SIM_GPS1_GLTCH_Y"],
                 "example_resolved_payload": glitch.step_glitch_payload(
@@ -115,7 +122,7 @@ class GpsFailureCaseGenerator(CaseGenerator):
             tags=("gps", "step_glitch", "no_sitl_phase1"),
         )
 
-    def _hard_denial_case(self, duration_s: int) -> TestCase:
+    def _hard_denial_case(self, duration_s: float) -> TestCase:
         schedule = [
             {
                 "event_index": 1,
@@ -133,7 +140,7 @@ class GpsFailureCaseGenerator(CaseGenerator):
             },
         ]
         return self._case(
-            case_id=f"hard_denial_{int(duration_s):02d}s",
+            case_id=f"hard_denial_{denial_duration_token(float(duration_s))}s",
             fault_type="hard_denial",
             stimulus_name="sim_gps_hard_denial",
             injection_payload={"SIM_GPS1_ENABLE": 0.0},
@@ -141,7 +148,7 @@ class GpsFailureCaseGenerator(CaseGenerator):
             fault_recipe={
                 "fault_type": "hard_denial",
                 "independent_variable": "denial_duration_s",
-                "denial_duration_s": int(duration_s),
+                "denial_duration_s": float(duration_s),
                 "restore_payload": {"SIM_GPS1_ENABLE": 1.0},
             },
             tags=("gps", "hard_denial", "no_sitl_phase1"),
@@ -194,7 +201,7 @@ class GpsFailureCaseGenerator(CaseGenerator):
 
 
 def rate_token(rate_mps: float) -> str:
-    return f"{rate_mps:.1f}".replace(".", "p")
+    return drift_rate_token(_finite_float("rate_mps", rate_mps))
 
 
 def case_metadata(
@@ -206,7 +213,8 @@ def case_metadata(
     injection_schedule: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
     validate_payload(injection_payload)
-    for step in injection_schedule or []:
+    schedule = copy.deepcopy(injection_schedule or [])
+    for step in schedule:
         payload = step.get("payload")
         if not isinstance(payload, dict):
             raise ValueError("injection_schedule step missing payload")
@@ -214,13 +222,13 @@ def case_metadata(
     return {
         "case_id": case_id,
         "fault_type": fault_type,
-        "injection_payload": dict(injection_payload),
-        "injection_schedule": list(injection_schedule or []),
-        "fault_recipe": fault_recipe,
-        "reset_payload": dict(defaults.SOURCE_DEFAULTS),
-        "parameter_metadata": defaults.PARAMETER_METADATA,
+        "injection_payload": copy.deepcopy(injection_payload),
+        "injection_schedule": schedule,
+        "fault_recipe": copy.deepcopy(fault_recipe),
+        "reset_payload": copy.deepcopy(defaults.SOURCE_DEFAULTS),
+        "parameter_metadata": copy.deepcopy(defaults.PARAMETER_METADATA),
         "readback_rules": readback_rules(injection_payload),
-        "trigger": dict(defaults.INJECTION_TRIGGER),
+        "trigger": copy.deepcopy(defaults.INJECTION_TRIGGER),
         "acceptance_requirements": {
             "injection_readback_required": fault_type != "nominal",
             "measurement_validity_only": True,
@@ -242,6 +250,8 @@ def validate_payload(payload: dict[str, float]) -> None:
     unknown = [name for name in payload if name not in defaults.REQUIRED_SIM_GPS_PARAMS]
     if unknown:
         raise ValueError(f"Unknown SIM_GPS payload names: {unknown}")
+    for name, value in payload.items():
+        _finite_float(name, value)
 
 
 def schema_validation_payload() -> dict[str, Any]:
@@ -251,10 +261,24 @@ def schema_validation_payload() -> dict[str, Any]:
 
 def readback_rules(payload: dict[str, float]) -> dict[str, dict[str, float]]:
     names = set(payload) | set(defaults.SOURCE_DEFAULTS)
-    return {
-        name: {
-            "expected": float(payload.get(name, defaults.SOURCE_DEFAULTS[name])),
-            "tolerance": float(defaults.PARAMETER_METADATA[name]["readback_tolerance"]),
-        }
-        for name in sorted(names)
-    }
+    rules: dict[str, dict[str, float]] = {}
+    for name in sorted(names):
+        expected = _finite_float(name, payload.get(name, defaults.SOURCE_DEFAULTS[name]))
+        tolerance = _finite_float(
+            f"{name} readback_tolerance",
+            defaults.PARAMETER_METADATA[name]["readback_tolerance"],
+        )
+        if tolerance < 0:
+            raise ValueError(f"{name} readback_tolerance must be >= 0")
+        rules[name] = {"expected": expected, "tolerance": tolerance}
+    return rules
+
+
+def _finite_float(name: str, value: object) -> float:
+    try:
+        parsed = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be finite") from None
+    if not math.isfinite(parsed):
+        raise ValueError(f"{name} must be finite")
+    return parsed
