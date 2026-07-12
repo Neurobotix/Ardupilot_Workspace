@@ -34,6 +34,12 @@ Active waypoint missions live directly in this directory.
   `DO_CHANGE_SPEED`, so the selected overlay's `AIRSPEED_CRUISE` is the sole
   cruise-speed source. Seq numbering and the seq-4 injection contract match
   the speed-15 variant.
+- `gps_failure_behavior_mission.waypoints`
+  Purpose: active GPS failure behavior mission. It preserves the locked
+  seq-1..4 front half and explicit `DO_CHANGE_SPEED=15`, injects on the first
+  seq-4 edge, then provides an approximately 36 km one-way Eastbound
+  measurement leg with no reciprocal leg, RTL, or landing sequence. Static
+  structure is validated; realized flight duration remains a Phase-2 item.
 - `lidar_staircase_mission.waypoints`
   Purpose: LiDAR overpass mission for the staircase world.
 - `quad_star_showcase_mission.waypoints`

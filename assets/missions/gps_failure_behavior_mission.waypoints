@@ -1,0 +1,12 @@
+QGC WPL 110
+# GPS FAILURE BEHAVIOR MISSION
+# Speed source: explicit DO_CHANGE_SPEED=15 m/s.
+# Seq 1-4 and the seq-4 injection edge are preserved from the locked long template.
+# WP3->WP4 is the approximately 36 km one-way Eastbound measurement leg.
+# The monitor stops after the schedule; there is no reciprocal leg, RTL, or landing sequence.
+# Straight-leg flight duration has not been live-validated; that remains a Phase-2 item.
+0	1	0	16	0	0	0	0	-35.3632620	149.1652370	584.00	1
+1	0	3	22	15.0	0	0	0	-35.3632620	149.1784556	100.00	1
+2	0	0	178	0	15.0	0	0	0	0	0	1
+3	0	3	16	0	0	0	0	-35.3632620	149.1872680	100.00	1
+4	0	3	16	0	0	0	0	-35.3632620	149.5842712	100.00	1
