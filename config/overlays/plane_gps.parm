@@ -1,0 +1,26 @@
+# ArduPlane Parameters - Mini Talon GPS Failure Overlay
+# Apply after config/vehicles/plane_base.parm for the gps_failure lane.
+#
+# The four EKF knee parameters below are pinned to the checked-in firmware
+# defaults for reproducibility. Live readback remains a Phase-2 requirement.
+# This static file does not prove the empirical knee.
+
+# EKF innovation gate and GPS health checks.
+EK3_POS_I_GATE 500
+EK3_GLITCH_RAD 25
+FS_EKF_THRESH 0.8
+EK3_GPS_CHECK 31
+
+# Complete primary EKF source set:
+# horizontal position/velocity = GPS, vertical position = barometer,
+# vertical velocity = GPS, yaw = compass.
+EK3_SRC1_POSXY 3
+EK3_SRC1_VELXY 3
+EK3_SRC1_POSZ 1
+EK3_SRC1_VELZ 3
+EK3_SRC1_YAW 1
+
+# Calm SITL wind; GPS failure is the independent variable.
+SIM_WIND_SPD 0
+SIM_WIND_DIR 180
+SIM_WIND_TURB 0

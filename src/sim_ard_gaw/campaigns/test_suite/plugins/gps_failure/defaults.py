@@ -1,6 +1,7 @@
 """Defaults for the gps_failure test-suite plugin."""
 from __future__ import annotations
 
+import copy
 import json
 import os
 import sys
@@ -143,12 +144,8 @@ def attempt_dir(root: Path, case_id: str, attempt_index: int) -> Path:
     return root / case_id / "runs" / f"attempt_{attempt_index:03d}"
 
 
-def planned_param_files() -> list[Path]:
-    return [PLANE_BASE_PARAM_FILE, PLANE_GPS_PARAM_FILE]
-
-
 def phase1_param_files() -> list[Path]:
-    return [PLANE_BASE_PARAM_FILE]
+    return [PLANE_BASE_PARAM_FILE, PLANE_GPS_PARAM_FILE]
 
 
 def validate_required_param_names(names: Iterable[str]) -> None:
@@ -162,12 +159,14 @@ def parameter_schema() -> dict[str, Any]:
     return {
         "required_names": list(REQUIRED_SIM_GPS_PARAMS),
         "source_defaults": dict(SOURCE_DEFAULTS),
-        "metadata": PARAMETER_METADATA,
+        "metadata": copy.deepcopy(PARAMETER_METADATA),
         "fault_types": list(FAULT_TYPES),
         "behavior_classes": list(BEHAVIOR_CLASSES),
         "analysis_state_classes": list(ANALYSIS_STATE_CLASSES),
-        "planned_param_stack": [str(path) for path in planned_param_files()],
         "phase1_param_stack": [str(path) for path in phase1_param_files()],
         "phase1_probe_mode": "name-existence validation only; live SITL probe is Phase 2",
-        "overlay_status": "plane_gps.parm planned by ADR-0021; not created in Phase 1 no-SITL chunks",
+        "overlay_status": (
+            "plane_gps.parm is checked in and statically validated; "
+            "live parameter readback remains Phase 2"
+        ),
     }
