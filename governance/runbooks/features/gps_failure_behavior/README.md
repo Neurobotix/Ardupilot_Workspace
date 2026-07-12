@@ -4,8 +4,12 @@ Start here to understand the feature, find any file, or pick up work at any
 phase.
 
 Feature slug: `gps_failure_behavior`
-Current status: Phase 0 (design lock) accepted 2026-07-06. No plugin, no live
-run, no evidence yet. Phases 1–4 are open.
+Current status: Phase 0 design is locked. Phase 1 no-SITL foundation Chunks
+1-2 are implemented and this branch is undergoing foundation hardening. Phase 1
+Chunk 3 mission/overlay integration is implemented pending review. Full Phase 1
+remains open. No live SITL/runtime, live parameter readback, MAVLink,
+mechanism-gate extraction, BIN parsing, campaign execution, or scientific
+evidence claim exists.
 
 ## Read Order for New Work
 
@@ -15,8 +19,8 @@ run, no evidence yet. Phases 1–4 are open.
    `posTestRatio` gate and SIM_GPS fault application), and the excluded-knob
    reasoning.
 3. `design_adrs.md` — full draft reasoning behind the five Proposed ADRs.
-4. `implementation.md` — code homes and Phase 1 build plan (stub until Phase 1).
-5. `review.md` — phase acceptance records and smoke ledger (stub until Phase 2).
+4. `implementation.md` — code homes, Phase 1 no-SITL module map, and pending live gates.
+5. `review.md` — phase acceptance records, repair status, and future smoke ledger.
 6. `evidence.md` — evidence pointers (stub until Phase 4).
 
 ## This Bundle
@@ -44,7 +48,7 @@ through live Phase-2 measurement.
 | [ADR-0020](../../../decisions/ADR-0020-gps-failure-mission-and-trigger.md) | Long one-way mission and seq-4 injection trigger |
 | [ADR-0021](../../../decisions/ADR-0021-gps-failure-parameter-overlay.md) | `plane_gps.parm` overlay pinning the four knee params |
 
-## Code Paths (planned; created in Phase 1)
+## Code Paths
 
 | Path | Purpose |
 | --- | --- |
@@ -53,7 +57,7 @@ through live Phase-2 measurement.
 | `src/sim_ard_gaw/campaigns/test_suite/cli/_registry.py` | Registry key `gps_failure` |
 | `tests/unit/test_gps_failure_phase1.py` | No-SITL unit tests |
 
-## Mission and Config (planned; created in Phase 1)
+## Mission and Config
 
 | Path | Purpose |
 | --- | --- |
@@ -66,7 +70,7 @@ through live Phase-2 measurement.
 | Path | Purpose |
 | --- | --- |
 | `docs/architecture/gps_failure_lane.md` | Lane description, fault set, behavior vocabulary, the knee, ADR cross-links |
-| `docs/operations/gps_failure_runbook.md` | Verified CLI commands, stack, output paths, live-run gate (stub until Phase 1) |
+| `docs/operations/gps_failure_runbook.md` | Verified no-SITL CLI commands, planned stack, output paths, live-run gate |
 
 ## Evidence Paths (future)
 

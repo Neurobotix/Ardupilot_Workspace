@@ -1,6 +1,6 @@
 # GPS Failure Behavior — Implementation
 
-Status: Phase 1 Chunk 2 no-SITL payload semantics exist; full Phase 1 remains open.
+Status: Phase 1 Chunk 3 is implemented pending review; full Phase 1 remains open.
 
 ## Implemented In Phase 1 Chunk 1
 
@@ -19,6 +19,16 @@ Status: Phase 1 Chunk 2 no-SITL payload semantics exist; full Phase 1 remains op
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/case_generator.py` | GLTCH cases now carry explicit frame/sign/conversion recipes, example reference-latitude payloads, and the ADR-0019 continuous slow-drift accumulation metadata case. |
 | `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | Dry-run accepts `--reference-latitude-deg` and `--preview-elapsed-s` to emit preview-only resolved payloads without launching SITL. |
 | `tests/unit/test_gps_failure_phase1.py` | No-SITL tests cover GLTCH unit/frame/sign behavior, dry-run preview behavior, accumulation metadata, and denial/jamming payload regressions. |
+
+## Implemented In Phase 1 Chunk 3
+
+| Path | Responsibility |
+| --- | --- |
+| `assets/missions/gps_failure_behavior_mission.waypoints` | Locked QGC WPL 110 five-item GPS mission: seq-4 injection edge, explicit 15 m/s command, approximately 36 km one-way Eastbound leg, and no reciprocal/RTL/landing items. |
+| `config/overlays/plane_gps.parm` | Dedicated overlay applied after `plane_base.parm`; pins the four EKF knee inputs, complete primary EKF source set, and calm SITL wind without airspeed tuning. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/defaults.py` | Two-file Phase-1 default parameter stack and current overlay schema status. |
+| `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | Dry-run output exposes the effective two-file parameter stack. |
+| `tests/unit/test_gps_failure_phase1.py` | Deterministic no-SITL parsers and structural tests for mission geometry, parsed parameter values/uniqueness, stack order/override, generated case mission paths, and CLI schema output. |
 
 ## Current No-SITL Semantics
 
@@ -48,14 +58,17 @@ Status: Phase 1 Chunk 2 no-SITL payload semantics exist; full Phase 1 remains op
   `gps_injection.json`, `gps_behavior_summary.json`,
   `ekf_innovation_metrics.json`, `truth_vs_belief.json`, `mode_timeline.json`,
   and `attitude_altitude_envelope.json`.
+- The static default parameter stack is
+  `config/vehicles/plane_base.parm` followed by
+  `config/overlays/plane_gps.parm`; an explicit caller stack still overrides
+  that default.
+- The checked-in mission and overlay have static/no-SITL contract coverage.
+  No live mission timing or parameter readback is implied.
 
 ## Still Open
 
 The following are deliberately not implemented in Phase 1 no-SITL chunks:
 
-- `assets/missions/gps_failure_behavior_mission.waypoints`.
-- `config/overlays/plane_gps.parm` and any asset/config index updates for that
-  future file.
 - Trigger-time live resolution of GLTCH payloads from the actual vehicle
   latitude/time. The pure conversion and dry-run preview contract exist, but no
   MAVLink/runtime injector exists in this chunk.

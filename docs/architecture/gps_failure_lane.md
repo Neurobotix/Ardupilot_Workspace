@@ -17,10 +17,15 @@ gate makes GPS the sharpest available "knee" experiment.
 Current status:
 
 - Phase 0 (design lock): accepted 2026-07-06.
-- Phase 1 Chunk 1 no-SITL foundation: plugin skeleton, deterministic case
-  catalog, dry-run CLI, registry entry, and unit test exist.
-- No live run, mission asset, GPS parameter overlay, BIN analysis, or evidence
-  claim exists yet.
+- Phase 1 Chunks 1–2 no-SITL foundation: plugin skeleton, deterministic case
+  catalog, payload conversion/previews, dry-run CLI, registry entry, and unit
+  tests exist.
+- Phase 1 Chunk 3 is implemented pending review: the locked five-item,
+  approximately 36 km one-way mission, dedicated GPS parameter overlay,
+  default-stack integration, and static/no-SITL contract tests exist.
+- Full Phase 1 remains open. No live run or parameter readback has occurred;
+  realized straight-leg duration, BIN analysis, and evidence claims remain
+  open.
 
 ## The Knee
 

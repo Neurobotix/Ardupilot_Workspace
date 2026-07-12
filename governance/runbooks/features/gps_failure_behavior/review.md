@@ -1,13 +1,14 @@
 # GPS Failure Behavior — Review
 
-Status: **stub.** Records phase acceptance as it happens.
+Status: Phase 1 Chunk 3 is **implemented pending review**. Full Phase 1 remains
+open.
 
 ## Phase Acceptance Ledger
 
 | Phase | Status | Date | Notes |
 | --- | --- | --- | --- |
 | Phase 0 — design lock | Accepted | 2026-07-06 | Full brainstorm; four faults, two-tier knee, seven bands, characterize-not-gate; five Proposed ADRs (0017–0021). |
-| Phase 1 — no-SITL plugin foundation | Open | — | Chunks 1-2 exist: scaffold plus GLTCH conversion primitives, payload recipes/previews, and accumulation-case metadata. Full Phase 1 remains open for mission/overlay/runtime/mechanism-gate work. |
+| Phase 1 — no-SITL plugin foundation | Open | — | Chunks 1–3 exist: scaffold, payload semantics, and static mission/parameter-stack integration. Chunk 3 is implemented pending review; runtime and mechanism-gate work remain open. |
 | Phase 2 — live smoke | Open | — | — |
 | Phase 3 — full v1 campaign | Open | — | — |
 | Phase 4 — evidence curation | Open | — | — |
@@ -16,18 +17,27 @@ Status: **stub.** Records phase acceptance as it happens.
 
 Phase 1 Chunk 1 is a scaffold, not full Phase 1 acceptance. It includes the
 no-SITL plugin skeleton, deterministic case catalog, dry-run CLI, registry
-construction, and unit tests. It does not include the GPS mission,
-`plane_gps.parm`, runtime/MAVLink, live monitoring, BIN mechanism-gate
-extraction, or any evidence claim.
+construction, and unit tests. At the Chunk 1 boundary it did not include the
+GPS mission, `plane_gps.parm`, runtime/MAVLink, live monitoring, BIN
+mechanism-gate extraction, or any evidence claim.
 
 ## Phase 1 Chunk 2 Review Note
 
 Phase 1 Chunk 2 is implemented pending review. It adds pure GLTCH
 metre-to-degree conversion helpers, resolved `slow_drift`/`step_glitch` preview
 payloads from a reference latitude, and the locked continuous slow-drift
-accumulation metadata case. This remains no-SITL Phase 1 work: live
-trigger-time payload resolution, mission assets, `plane_gps.parm`, runtime
-MAVLink injection, and the mechanism gate are still open.
+accumulation metadata case. At the Chunk 2 boundary, live trigger-time payload
+resolution, mission assets, `plane_gps.parm`, runtime MAVLink injection, and
+the mechanism gate were still open.
+
+## Phase 1 Chunk 3 Review Note
+
+Phase 1 Chunk 3 is implemented pending review. It adds the locked GPS mission,
+dedicated `plane_gps.parm`, base-then-overlay default-stack integration, and
+static/no-SITL structural tests. No live SITL/Gazebo run or parameter readback
+has occurred, and the realized straight-leg duration remains a Phase-2
+validation item. Full Phase 1 remains open; this chunk is not accepted and does
+not establish scientific validity.
 
 ## Phase 0 Baseline
 
@@ -39,7 +49,8 @@ Phase 0.
 
 - The knee bracket (`0.2–8.0 m/s`) is a design guess; the empirical knee is a
   Phase-2 result. Extend the rate list if it lands outside the bracket.
-- The four pinned EKF params must be chosen and read back live.
+- The four pinned EKF params are fixed in the checked-in overlay and must still
+  be read back live.
 - The GPS mission's realized straight-leg duration must be confirmed sufficient
   for the slowest drift rate.
 

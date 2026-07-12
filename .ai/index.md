@@ -43,8 +43,10 @@
   two-attempt P130 pulse interpretation recorded through 2026-06-23):
   `governance/runbooks/features/airspeed_failure_behavior/`
 - GPS failure behavior feature runbook (Phase 0 design lock accepted 2026-07-06;
-  four faults — drift/glitch/denial/jamming — two-tier EKF innovation-gate knee;
-  plugin and live runs open):
+  Phase 1 no-SITL foundation Chunks 1-2 implemented and under repair/hardening;
+  Chunk 3 mission/overlay integration is implemented pending review; full
+  Phase 1 remains open; no live SITL, readback, mechanism gate, BIN parsing,
+  campaign execution, or evidence claim exists):
   `governance/runbooks/features/gps_failure_behavior/`
 - GPS failure behavior design decisions (Proposed 2026-07-06; full reasoning in
   `governance/runbooks/features/gps_failure_behavior/design_adrs.md` and
@@ -127,10 +129,10 @@
 - Troubleshooting guide: `docs/operations/troubleshooting.md`
 - Simulation lanes and flight modes: `docs/architecture/simulation_lanes.md`
 - Airspeed failure behavior lane (behavior characterization; Phase 2 measurement smoke accepted 2026-06-06; Phase 4A ratio/ramp/pulse characterization accepted 2026-06-14; fixed-case Phase 4B remains open): `docs/architecture/airspeed_failure_lane.md`
-- GPS failure behavior lane (behavior characterization under degraded/corrupted GPS; EKF innovation-gate "knee"; Phase 0 design lock accepted 2026-07-06; plugin/live runs open): `docs/architecture/gps_failure_lane.md`
+- GPS failure behavior lane (behavior characterization under degraded/corrupted GPS; EKF innovation-gate "knee"; Phase 0 design lock accepted 2026-07-06; Chunk 3 implemented pending review; full Phase 1 open; live runs deferred): `docs/architecture/gps_failure_lane.md`
 - Launch target status: `docs/operations/launch_targets.md`
 - Airspeed failure behavior — verified no-SITL commands, stack, output paths, live-run gate: `docs/operations/airspeed_failure_runbook.md`
-- GPS failure behavior — planned stack/CLI and live-run gate (stub; Phase 0): `docs/operations/gps_failure_runbook.md`
+- GPS failure behavior — no-SITL stack/CLI and live-run gate; live validation deferred: `docs/operations/gps_failure_runbook.md`
 - SITL/Gazebo runtime notes: `docs/operations/sitl_gazebo_runtime.md`
 - Vehicle status: `docs/vehicles/status.md`
 - Wind matrix campaign status: `docs/campaigns/wind_matrix.md`
