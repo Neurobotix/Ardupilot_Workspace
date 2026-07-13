@@ -141,6 +141,47 @@ acceptance is still pending the remaining review findings** (the Chunks 4–6
 review's HIGH/MEDIUM/LOW items and the code-review sign-off item below). This
 note does not itself close Phase 1.
 
+## Phase 1 Strict-Review Second Pass (2026-07-13)
+
+A second adversarial review pass found four more BLOCKERs and one HIGH left open
+by the first pass. All are now resolved no-SITL with regression tests; probes
+that previously executed a write or forged acceptance now fail closed.
+
+- **Trigger evidence accepted duplicate/regressive mission-current traces.**
+  `monitor.first_seq4_edge_after_armed_auto_front_half` now requires a clean,
+  ordered seq 1->2->3->4 progression: it rejects any regression to a lower seq
+  and any skipped front-half seq, while still allowing benign repeated
+  `MISSION_CURRENT` events for the current seq. `1,2,3,2,4` and skip traces now
+  fail closed.
+- **Public plan construction could forge authorization.** Execution no longer
+  trusts a plain `TriggerEvidence.validated` flag. `validate_trigger_trace` mints
+  an internal authorization token (not exported) and stores the source trace;
+  `TriggerEvidence.is_authorized()` re-checks the token by identity *and* replays
+  the stored trace through the canonical validator, so a directly-constructed
+  plan with `validated=True` cannot authorize a write.
+- **Analyzer accepted forged mechanism markers and raised on malformed input.**
+  Mechanism-accepted markers must now be a strict boolean `True` (the string
+  `"true"` or `1` no longer become accepted), and the observation-window/metric
+  coercion fails closed with a deterministic reason instead of raising on
+  non-numeric input (`post_injection_s="bad"` -> `analysis_incomplete`).
+- **Manifest accepted malformed top-level acceptance and unknown quality.** A
+  top-level `accepted_observation`, when present, must be a strict boolean `True`
+  (`"true"`/`1` fail closed), and an observation-quality class, when present,
+  must be one of the known-good accepted classes (an `unknown_quality` fails
+  closed) rather than merely not a known-bad string.
+- **MAVLink rule validation leaked `KeyError`/`TypeError` (HIGH).**
+  `normalize_readback_rules` now raises `ValueError` for a rule missing
+  `expected`/`tolerance` or for a non-mapping rule object, keeping the public
+  fail-closed batch contract consistent; atomicity (zero writes on failure) is
+  preserved.
+
+Checks re-run for this pass (all exit 0): GPS unit suite (130 passed), airspeed
+regression (41 passed), `pyright` 0 errors over the GPS plugin/CLI/four test
+files, `run_gps_failure` all four no-SITL actions, `git diff --check`, and
+`make doctor`. No live SITL/Gazebo run, real MAVLink connection, live readback,
+BIN/log parsing, or evidence claim was performed. Phase 1 acceptance remains
+pending any further review findings.
+
 ## Phase 1 Acceptance Checklist (final gate for closing Phase 1)
 
 Phase 1 closes to Accepted only when every item below is checked. This is a

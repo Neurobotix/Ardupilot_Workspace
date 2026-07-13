@@ -222,6 +222,48 @@ class GpsMechanismGateTests(unittest.TestCase):
         self.assertEqual("analysis_incomplete", result["behavior_class"])
         self.assertEqual("missing_mechanism_fields", result["reason"])
 
+    def test_string_mechanism_marker_is_not_accepted(self) -> None:
+        # A truthy non-bool mechanism-accepted marker must NOT become accepted.
+        for marker in ("true", 1, "1", [1]):
+            with self.subTest(marker=marker):
+                observation = {
+                    "injection_triggered": True,
+                    "injection_readback_ok": True,
+                    "post_injection_s": 90.0,
+                    "required_artifacts_present": True,
+                    "mechanism_gate_result": {
+                        "accepted_evidence": marker,
+                        "mechanism_state": "fused_below_gate",
+                    },
+                    "horizontal_gap_m": 0.5,
+                    "gap_growing": False,
+                    "attitude_in_band": True,
+                }
+                result = classify_observation(observation)
+                self.assertFalse(result["accepted_observation"])
+                self.assertEqual("analysis_incomplete", result["behavior_class"])
+                self.assertEqual("missing_mechanism_fields", result["reason"])
+
+    def test_malformed_post_injection_duration_fails_closed_without_raising(self) -> None:
+        for bad in ("bad", None, [1.0], "90"):
+            with self.subTest(bad=bad):
+                observation = {
+                    "injection_triggered": True,
+                    "injection_readback_ok": True,
+                    "post_injection_s": bad,
+                    "required_artifacts_present": True,
+                    "mechanism_evidence": True,
+                    "horizontal_gap_m": 0.5,
+                    "gap_growing": False,
+                    "attitude_in_band": True,
+                }
+                result = classify_observation(observation)
+                self.assertFalse(result["accepted_observation"])
+                self.assertEqual("analysis_incomplete", result["behavior_class"])
+                self.assertEqual(
+                    "invalid_behavior_field_post_injection_s", result["reason"]
+                )
+
     def test_no_sitl_gazebo_or_mavlink_command_is_invoked(self) -> None:
         with mock.patch.object(subprocess, "run", side_effect=AssertionError):
             result = evaluate_mechanism_records(_records(0.2, 1.2))

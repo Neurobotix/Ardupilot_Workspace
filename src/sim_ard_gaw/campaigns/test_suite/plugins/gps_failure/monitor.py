@@ -48,11 +48,23 @@ def first_seq4_edge_after_front_half(sequences: Iterable[int]) -> bool:
 def first_seq4_edge_after_armed_auto_front_half(
     events: Iterable[Any],
 ) -> bool:
-    """Validate ADR-0020 trigger preconditions from no-SITL event records."""
-    seen_front_half: set[int] = set()
-    required = set(defaults.INJECTION_TRIGGER["front_half_required_sequences"])
+    """Validate ADR-0020 trigger preconditions from no-SITL event records.
+
+    Fails closed for malformed events and for any mission-current evidence that
+    is not a clean, monotonic seq 1->2->3->4 progression. A regression to a lower
+    seq or a skipped front-half seq is rejected. Repeated ``MISSION_CURRENT``
+    events for the *current* seq are benign telemetry and allowed (the stream
+    reports the same seq repeatedly), but every front-half seq must be observed
+    in order, armed and in AUTO, before the first seq-4 edge.
+    """
+    expected_order = list(
+        defaults.INJECTION_TRIGGER["front_half_required_sequences"]
+    )
     trigger_seq = int(defaults.INJECTION_TRIGGER["seq"])
     trigger_mode = defaults.INJECTION_TRIGGER["mode"]
+    next_required_index = 0
+    last_seq: int | None = None
+
     for event in events:
         if not isinstance(event, dict):
             return False
@@ -61,10 +73,34 @@ def first_seq4_edge_after_armed_auto_front_half(
             return False
         armed = event.get("armed") is True
         mode = event.get("mode") == trigger_mode
+
+        if last_seq is not None and seq < last_seq:
+            # Any regression to a lower mission-current seq is invalid evidence.
+            return False
+
+        if seq == last_seq:
+            # A repeat of the current seq is benign telemetry, not progression.
+            continue
+
         if seq == trigger_seq:
-            return required.issubset(seen_front_half) and armed and mode
-        if seq in required and armed and mode:
-            seen_front_half.add(seq)
+            # The seq-4 edge is valid only once the full ordered front half has
+            # been observed and this event is itself armed and in AUTO.
+            return next_required_index == len(expected_order) and armed and mode
+
+        if (
+            next_required_index < len(expected_order)
+            and seq == expected_order[next_required_index]
+        ):
+            if not (armed and mode):
+                return False
+            next_required_index += 1
+            last_seq = seq
+            continue
+
+        # Any other seq (a skip ahead, an out-of-contract value, or a jump past
+        # the next required front-half seq) invalidates the trace.
+        return False
+
     return False
 
 

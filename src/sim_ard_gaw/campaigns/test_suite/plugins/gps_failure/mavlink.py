@@ -249,9 +249,17 @@ def normalize_readback_rules(
         if isinstance(rule, ReadbackRule):
             expected = rule.expected
             tolerance = rule.tolerance
-        else:
+        elif isinstance(rule, Mapping):
+            if "expected" not in rule or "tolerance" not in rule:
+                raise ValueError(
+                    f"{name} readback rule must define both expected and tolerance"
+                )
             expected = rule["expected"]
             tolerance = rule["tolerance"]
+        else:
+            # A non-mapping, non-ReadbackRule rule object is malformed: fail
+            # closed with ValueError so the public batch contract is consistent.
+            raise ValueError(f"{name} readback rule is malformed")
         expected_value = finite_float(f"{name} expected", expected)
         tolerance_value = finite_float(f"{name} tolerance", tolerance)
         if tolerance_value < 0:

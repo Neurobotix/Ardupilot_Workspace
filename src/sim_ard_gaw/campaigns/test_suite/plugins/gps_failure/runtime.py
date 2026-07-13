@@ -17,26 +17,51 @@ from .mavlink import (
 from .monitor import first_seq4_edge_after_armed_auto_front_half
 
 
+# Module-private authorization sentinel. Only ``validate_trigger_trace`` stamps
+# a TriggerEvidence with this exact object, and execution checks it by identity.
+# It is deliberately not exported; combined with provenance revalidation at
+# execution, a directly-constructed evidence object cannot forge authorization.
+_AUTHORIZATION_TOKEN = object()
+
+
 @dataclass(frozen=True)
 class TriggerEvidence:
     """Validated proof that the ADR-0020 injection trigger actually occurred.
 
-    A live injection plan is authorized only when it carries one of these. It is
-    produced from a structured monitor trace (the seq/armed/mode event records
-    the monitor observes), validated through the canonical monitor helper
+    A live injection plan is authorized only when it carries one of these,
+    minted by :func:`validate_trigger_trace`. It is produced from a structured
+    monitor trace (the seq/armed/mode event records the monitor observes),
+    validated through the canonical monitor helper
     ``first_seq4_edge_after_armed_auto_front_half`` — never a second trigger
     definition. The seq-4 edge event also supplies the trigger-time latitude and
     elapsed time used to resolve GLTCH degree payloads.
+
+    Authorization is not a plain ``validated=True`` flag a caller can set: it is
+    an internal token stamped only by the validator, and it is re-checked by
+    replaying the stored source trace through the canonical validator at
+    execution time (see :func:`is_authorized`). A hand-built evidence object with
+    ``validated=True`` therefore cannot authorize a write.
     """
 
     validated: bool
     reason: str
     seq4_event: dict[str, Any] = field(default_factory=dict)
     front_half_sequences: list[int] = field(default_factory=list)
+    source_trace: tuple[Any, ...] = ()
+    _token: object | None = None
+
+    def is_authorized(self) -> bool:
+        """Re-verify provenance: the token identity AND a replay of the trace."""
+        if not self.validated or self._token is not _AUTHORIZATION_TOKEN:
+            return False
+        # Revalidate the stored source trace through the canonical validator so a
+        # forged flag/token without a genuinely valid trace still fails closed.
+        return first_seq4_edge_after_armed_auto_front_half(list(self.source_trace))
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "validated": self.validated,
+            "authorized": self.is_authorized(),
             "reason": self.reason,
             "seq4_event": _json_safe(self.seq4_event),
             "front_half_sequences": list(self.front_half_sequences),
@@ -47,9 +72,11 @@ class TriggerEvidence:
 def validate_trigger_trace(trace: Any) -> TriggerEvidence:
     """Validate a structured monitor trace into deterministic trigger evidence.
 
-    Fails closed (``validated=False``) for empty, missing, malformed, unarmed,
-    wrong-mode, or out-of-order traces without raising. Uses only the canonical
-    monitor helper for the seq-1..3-then-seq-4 armed/AUTO contract.
+    Fails closed (``validated=False``, no token) for empty, missing, malformed,
+    unarmed, wrong-mode, duplicate, regressive, or out-of-order traces without
+    raising. Uses only the canonical monitor helper for the ordered
+    seq-1->2->3->4 armed/AUTO contract. Only this function stamps the internal
+    authorization token.
     """
 
     if not isinstance(trace, (list, tuple)) or not trace:
@@ -76,6 +103,8 @@ def validate_trigger_trace(trace: Any) -> TriggerEvidence:
         reason="validated_seq4_edge_armed_auto",
         seq4_event=seq4_event,
         front_half_sequences=sorted(front_half),
+        source_trace=tuple(events),
+        _token=_AUTHORIZATION_TOKEN,
     )
 
 
@@ -137,7 +166,13 @@ class GpsInjectionPlan:
 
     @property
     def execution_authorized(self) -> bool:
-        """True only when the plan may be executed as a live injection."""
+        """True only when the plan may be executed as a live injection.
+
+        For a parameter-writing plan this requires trigger evidence whose
+        provenance still validates (token identity plus a replay of the source
+        trace), so neither a preview nor a hand-built ``validated=True`` object
+        can authorize a write.
+        """
         if not self.ready_to_inject:
             return False
         if not self.requires_trigger_authorization:
@@ -146,7 +181,7 @@ class GpsInjectionPlan:
         if self.preview_only:
             return False
         evidence = self.trigger_evidence
-        return evidence is not None and evidence.validated
+        return evidence is not None and evidence.is_authorized()
 
     def as_dict(self) -> dict[str, Any]:
         return {

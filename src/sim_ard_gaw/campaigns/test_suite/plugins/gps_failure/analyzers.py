@@ -104,7 +104,11 @@ def classify_observation(observation: dict[str, Any]) -> dict[str, Any]:
         return _result("pre_injection_failure", "pre_injection", False)
     if not observation.get("injection_readback_ok", False):
         return _result("pre_injection_failure", "failed_readback", False)
-    if not _window_met(observation):
+    window_s, window_error = _finite_number("post_injection_s", observation.get("post_injection_s"))
+    if window_error is not None:
+        # A malformed / non-finite observation window fails closed, never raises.
+        return _result(ANALYSIS_STATE_CLASS, window_error, False)
+    if window_s < defaults.MIN_POST_INJECTION_S:
         return _result(ANALYSIS_STATE_CLASS, "insufficient_post_injection_window", False)
     if not observation.get("required_artifacts_present", False):
         return _result(ANALYSIS_STATE_CLASS, "missing_required_artifacts", False)
@@ -294,7 +298,11 @@ def _finite_metric(
     observation: dict[str, Any],
     field: str,
 ) -> tuple[float, str | None]:
-    value = observation.get(field)
+    return _finite_number(field, observation.get(field))
+
+
+def _finite_number(field: str, value: Any) -> tuple[float, str | None]:
+    """Coerce a numeric field, failing closed (never raising) on bad input."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return 0.0, f"invalid_behavior_field_{field}"
     numeric = float(value)
@@ -308,9 +316,12 @@ def _with_mechanism_result(observation: dict[str, Any]) -> dict[str, Any]:
     if result is None:
         return observation
     normalized = dict(observation)
-    accepted = bool(
-        result.get("accepted_evidence")
-        or result.get("mechanism_evidence_accepted")
+    # The mechanism-accepted markers must be a strict boolean True. A truthy
+    # non-bool (e.g. the string "true", or 1) is malformed evidence and must not
+    # become an accepted mechanism.
+    accepted = (
+        result.get("accepted_evidence") is True
+        or result.get("mechanism_evidence_accepted") is True
     )
     normalized.setdefault("mechanism_evidence", accepted)
     state = result.get("mechanism_state") or result.get("mechanism_class")
@@ -331,10 +342,6 @@ def _mechanism_result_dict(observation: dict[str, Any]) -> dict[str, Any] | None
         if isinstance(value, dict):
             return value
     return None
-
-
-def _window_met(observation: dict[str, Any]) -> bool:
-    return float(observation.get("post_injection_s", 0.0) or 0.0) >= defaults.MIN_POST_INJECTION_S
 
 
 def _explicit_evidence_present(

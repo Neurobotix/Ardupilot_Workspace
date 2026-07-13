@@ -734,6 +734,37 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             )
         )
 
+    def test_trigger_rejects_regressive_and_skipped_sequences(self) -> None:
+        armed = lambda seq: {"seq": seq, "armed": True, "mode": "AUTO"}
+        # A regression to a lower mission-current seq (1,2,3,2,4) is invalid.
+        self.assertFalse(
+            first_seq4_edge_after_armed_auto_front_half(
+                [armed(1), armed(2), armed(3), armed(2), armed(4)]
+            )
+        )
+        # A skipped front-half seq (1,3,4) is invalid.
+        self.assertFalse(
+            first_seq4_edge_after_armed_auto_front_half([armed(1), armed(3), armed(4)])
+        )
+        # Jumping straight past the next required seq (1,2,4) is invalid.
+        self.assertFalse(
+            first_seq4_edge_after_armed_auto_front_half([armed(1), armed(2), armed(4)])
+        )
+        # A repeated MISSION_CURRENT for the *current* seq is benign telemetry
+        # and still validates (the stream reports the same seq repeatedly).
+        self.assertTrue(
+            first_seq4_edge_after_armed_auto_front_half(
+                [armed(1), armed(1), armed(2), armed(2), armed(3), armed(4)]
+            )
+        )
+        # A duplicate that regresses after progress (1,2,3,4 then back to 2) is
+        # caught before it can re-open the front half.
+        self.assertFalse(
+            first_seq4_edge_after_armed_auto_front_half(
+                [armed(1), armed(2), armed(2), armed(3), armed(2), armed(4)]
+            )
+        )
+
     def test_artifact_schema_uses_locked_gps_names(self) -> None:
         schemas = artifact_schema()
         self.assertIn("gps_behavior_summary.json", schemas)
@@ -1266,6 +1297,55 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                         )
                     )
                 )
+
+    def test_manifest_rejects_malformed_acceptance_and_unknown_quality(self) -> None:
+        # A truthy non-bool top-level accepted_observation is malformed.
+        for bad in ("true", 1, "1", [True]):
+            with self.subTest(top_level=bad):
+                self.assertFalse(
+                    accepted_observation_from_attempt(
+                        _accepted_attempt(accepted_observation=bad)
+                    )
+                )
+        # A strict True top-level flag with everything in agreement is accepted.
+        self.assertTrue(
+            accepted_observation_from_attempt(_accepted_attempt(accepted_observation=True))
+        )
+        # An unknown observation-quality class fails closed even with agreeing
+        # behavior classes.
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(
+                    analysis_results=[
+                        {
+                            "ok": True,
+                            "summary": {
+                                "accepted_observation": True,
+                                "behavior_class": "loss_of_control",
+                                "observation_quality_class": "unknown_quality",
+                            },
+                        }
+                    ]
+                )
+            )
+        )
+        # A known-good quality class is accepted.
+        self.assertTrue(
+            accepted_observation_from_attempt(
+                _accepted_attempt(
+                    analysis_results=[
+                        {
+                            "ok": True,
+                            "summary": {
+                                "accepted_observation": True,
+                                "behavior_class": "loss_of_control",
+                                "observation_quality_class": "valid_bad_behavior",
+                            },
+                        }
+                    ]
+                )
+            )
+        )
 
     def test_config_rejects_invalid_ladders_and_repeat_contracts(self) -> None:
         with self.assertRaisesRegex(ValueError, "jamming_repeats must be >= 5"):

@@ -34,6 +34,21 @@ _ACCEPTABLE_BEHAVIOR_CLASSES = frozenset(
     }
 )
 
+# The exact observation-quality classes the analyzer emits for an accepted
+# observation. Acceptance requires the summary quality class to be one of these
+# known-good values; an unknown quality class fails closed (it is not enough to
+# merely not be a known-bad string).
+_ACCEPTED_QUALITY_CLASSES = frozenset(
+    {
+        "valid_nominal",
+        "valid_silent_drift",
+        "valid_detected_rejection",
+        "valid_reset_behavior",
+        "valid_contained_behavior",
+        "valid_bad_behavior",
+    }
+)
+
 
 class GpsFailureManifest(Manifest):
     def __init__(self, campaign_root: Path) -> None:
@@ -103,7 +118,10 @@ def accepted_observation_from_attempt(attempt: dict[str, Any]) -> bool:
     """
     if not _top_level_status_valid_if_present(attempt):
         return False
-    if attempt.get("accepted_observation") is False:
+    # A top-level accepted_observation, when present, must be a strict boolean.
+    # A truthy non-bool (the string "true", the int 1, ...) is malformed and
+    # fails closed rather than being read as acceptance.
+    if "accepted_observation" in attempt and attempt.get("accepted_observation") is not True:
         return False
 
     verdict = attempt.get("verdict")
@@ -137,6 +155,11 @@ def accepted_observation_from_attempt(attempt: dict[str, Any]) -> bool:
             return False
         behavior = summary.get("behavior_class")
         if not isinstance(behavior, str) or behavior not in _ACCEPTABLE_BEHAVIOR_CLASSES:
+            return False
+        # When an observation-quality class is present it must strictly be one of
+        # the known-good accepted classes; an unknown quality fails closed.
+        quality = summary.get("observation_quality_class")
+        if quality is not None and quality not in _ACCEPTED_QUALITY_CLASSES:
             return False
         analysis_behavior_classes.add(behavior)
 

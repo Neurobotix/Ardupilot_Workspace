@@ -33,6 +33,8 @@ from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.mavlink import (  # no
     set_one_parameter,
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.runtime import (  # noqa: E402
+    GpsInjectionPlan,
+    TriggerEvidence,
     build_authorized_injection_plan,
     build_live_injection_plan,
     execute_injection_plan,
@@ -291,15 +293,26 @@ class GpsFailureBatchPreflightTests(unittest.TestCase):
                     )
                 self._assert_no_connection_calls(fake)
 
-    def test_malformed_rule_mapping_writes_nothing(self) -> None:
-        fake = _FakeParamConnection()
-        with self.assertRaises((ValueError, KeyError, TypeError)):
-            set_and_read_back_parameters(
-                fake,
-                {"SIM_GPS1_ENABLE": 0.0},
-                readback_rules={"SIM_GPS1_ENABLE": {"expected": 0.0}},
-            )
-        self._assert_no_connection_calls(fake)
+    def test_malformed_rule_objects_fail_closed_with_value_error(self) -> None:
+        # Every malformed rule shape must fail closed with ValueError (not a
+        # leaked KeyError/TypeError) and perform zero connection calls.
+        malformed_rules = [
+            {"SIM_GPS1_ENABLE": {"expected": 0.0}},           # missing tolerance
+            {"SIM_GPS1_ENABLE": {"tolerance": 0.0}},          # missing expected
+            {"SIM_GPS1_ENABLE": 5.0},                         # non-mapping rule
+            {"SIM_GPS1_ENABLE": "bad"},                       # non-mapping rule
+            {"SIM_GPS1_ENABLE": None},                        # non-mapping rule
+        ]
+        for rules in malformed_rules:
+            with self.subTest(rules=rules):
+                fake = _FakeParamConnection()
+                with self.assertRaises(ValueError):
+                    set_and_read_back_parameters(
+                        fake,
+                        {"SIM_GPS1_ENABLE": 0.0},
+                        readback_rules=rules,
+                    )
+                self._assert_no_connection_calls(fake)
 
     def test_non_mapping_payload_writes_nothing(self) -> None:
         fake = _FakeParamConnection()
@@ -632,6 +645,63 @@ class GpsFailureTriggerAuthorizationTests(unittest.TestCase):
         result = execute_injection_plan(plan, None)
         self.assertTrue(result.success)
         self.assertEqual("no_injection_writes", result.reason)
+
+    def test_regressive_or_duplicate_trigger_trace_does_not_authorize(self) -> None:
+        armed = lambda seq: {"seq": seq, "armed": True, "mode": "AUTO"}
+        for trace in (
+            [armed(1), armed(2), armed(3), armed(2), armed(4)],  # regression
+            [armed(1), armed(3), armed(4)],                       # skip
+            [armed(1), armed(2), armed(4)],                       # jump past 3
+        ):
+            with self.subTest(trace=trace):
+                plan = build_authorized_injection_plan(_case("jamming_repeat_01"), trace)
+                self.assertFalse(plan.execution_authorized)
+                fake = _FakeParamConnection()
+                result = execute_injection_plan(plan, fake)
+                self.assertFalse(result.success)
+                self._assert_no_connection_calls(fake)
+
+    def test_directly_constructed_plan_cannot_forge_authorization(self) -> None:
+        # A hand-built plan with a forged TriggerEvidence(validated=True) must not
+        # be able to execute a write: authorization requires the internal token
+        # AND a replay of a genuinely valid source trace.
+        case = _case("jamming_repeat_01")
+        forgeries = [
+            TriggerEvidence(validated=True, reason="forged"),
+            TriggerEvidence(
+                validated=True,
+                reason="forged",
+                source_trace=({"seq": 4, "armed": True, "mode": "AUTO"},),
+            ),
+        ]
+        for evidence in forgeries:
+            with self.subTest(evidence=evidence.reason):
+                forged = GpsInjectionPlan(
+                    case_id=case.case_id,
+                    fault_type="jamming",
+                    trigger={},
+                    trigger_event={},
+                    injection_payload={"SIM_GPS1_JAM": 1.0},
+                    readback_rules={"SIM_GPS1_JAM": ReadbackRule(1.0, 0.0)},
+                    preview_only=False,
+                    trigger_evidence=evidence,
+                )
+                self.assertFalse(forged.execution_authorized)
+                fake = _FakeParamConnection()
+                result = execute_injection_plan(forged, fake)
+                self.assertFalse(result.success)
+                self.assertEqual("trigger_authorization_missing", result.reason)
+                self._assert_no_connection_calls(fake)
+
+    def test_validated_evidence_reports_authorized_true(self) -> None:
+        evidence = validate_trigger_trace(_valid_trace())
+        self.assertTrue(evidence.validated)
+        self.assertTrue(evidence.is_authorized())
+        self.assertTrue(evidence.as_dict()["authorized"])
+        # A rejected trace is neither validated nor authorized.
+        rejected = validate_trigger_trace(["bad"])
+        self.assertFalse(rejected.validated)
+        self.assertFalse(rejected.is_authorized())
 
 
 if __name__ == "__main__":
