@@ -310,6 +310,32 @@ Acceptance state: the three original HIGH findings are now closed. Phase 1
 acceptance still remains pending the remaining MEDIUM/LOW review findings and the
 code-review sign-off item below; this note does not itself close Phase 1.
 
+## Phase 1 Strict-Review MEDIUM-Finding Resolution (2026-07-13)
+
+- **MEDIUM — duplicate failure reporting in the MAVLink batch result
+  (fixed).** In `mavlink.read_back_injected_parameters` and
+  `mavlink.set_and_read_back_parameters`, a parameter whose read/write errored
+  was reported twice in `missing_parameters`: once from the transport
+  read/write-failure list and once from `compare_readbacks`, because a failed
+  transport leaves the value out of the observed set so the comparison also
+  flags it missing. Both paths returned
+  `missing_parameters=['SIM_GPS1_JAM', 'SIM_GPS1_JAM']`. Fix: a shared
+  `_merge_missing` helper deduplicates the comparison-missing names with the
+  transport-error param names into a single deterministic sorted list, so each
+  failed parameter appears exactly once in `missing_parameters` while its error
+  reason still appears once in `tolerance_failures`. `success` semantics and the
+  reported error detail are unchanged; genuinely-missing (non-error) parameters
+  are still reported. Regression tests added to
+  `GpsFailureBatchPreflightTests` in `tests/unit/test_gps_failure_mavlink.py`
+  (failed write reported once; failed read reported once; mixed
+  failed/successful parameters deduped and sorted).
+
+Checks re-run for this MEDIUM fix (all exit 0): GPS unit suite 153 passed,
+airspeed regression 41 passed, focused `pyright` 0 errors/0 warnings,
+`run_gps_failure` all four no-SITL actions, `git diff --check`, and `make
+doctor`. No live SITL/Gazebo run, real MAVLink connection, live readback,
+BIN/log parsing, or evidence claim was performed.
+
 ## Phase 1 Acceptance Checklist (final gate for closing Phase 1)
 
 Phase 1 closes to Accepted only when every item below is checked. This is a
@@ -333,10 +359,12 @@ no-SITL acceptance: it gates the plugin foundation, not any live result.
   `test_gps_failure_readiness`).
 - [~] Code review of Chunks 4–6 recorded and findings resolved. The six
   confirmed BLOCKERs are resolved (see "Phase 1 Strict-Review Blocker Resolution
-  (2026-07-13)" above) and the three HIGH findings are now closed (see "Phase 1
-  Strict-Review HIGH-Finding Resolution (2026-07-13)" above); any remaining
-  MEDIUM/LOW review findings and the formal review sign-off still gate acceptance
-  and are not yet cleared.
+  (2026-07-13)" above), the three HIGH findings are now closed (see "Phase 1
+  Strict-Review HIGH-Finding Resolution (2026-07-13)" above), and the MEDIUM
+  duplicate-failure-reporting finding is fixed (see "Phase 1 Strict-Review
+  MEDIUM-Finding Resolution (2026-07-13)" above). Any remaining LOW review
+  findings and the formal review sign-off still gate acceptance and are not yet
+  cleared, so this item stays open and Phase 1 is not marked Accepted.
 - [x] Docs/index status lines reconciled to the implemented no-SITL behavior
   (trigger-gated executable plans, substantive behavior evidence,
   contradiction-safe manifest, complete artifact schema, atomic MAVLink batch);

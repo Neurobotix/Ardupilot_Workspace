@@ -342,10 +342,11 @@ def read_back_injected_parameters(
     return ParameterBatchResult(
         writes_attempted=[],
         readbacks_observed=comparison.readbacks_observed,
-        missing_parameters=[
-            *comparison.missing_parameters,
-            *[failure.param for failure in read_errors],
-        ],
+        # A read that errored is reported once, via ``read_errors`` in
+        # ``tolerance_failures``. It is absent from ``observed`` so
+        # ``compare_readbacks`` also lists it as missing; drop that duplicate so
+        # each failed parameter appears exactly once in ``missing_parameters``.
+        missing_parameters=_merge_missing(comparison.missing_parameters, read_errors),
         tolerance_failures=[*comparison.tolerance_failures, *read_errors],
         success=comparison.success and not read_errors,
     )
@@ -425,10 +426,11 @@ def set_and_read_back_parameters(
     return ParameterBatchResult(
         writes_attempted=writes,
         readbacks_observed=comparison.readbacks_observed,
-        missing_parameters=[
-            *comparison.missing_parameters,
-            *[failure.param for failure in write_failures],
-        ],
+        # A write that errored is reported once, via ``write_failures`` in
+        # ``tolerance_failures``. Its value never reaches ``observed`` so
+        # ``compare_readbacks`` also lists it as missing; drop that duplicate so
+        # each failed parameter appears exactly once in ``missing_parameters``.
+        missing_parameters=_merge_missing(comparison.missing_parameters, write_failures),
         tolerance_failures=[*comparison.tolerance_failures, *write_failures],
         success=comparison.success and not write_failures,
     )
@@ -447,6 +449,23 @@ def finite_float(name: str, value: object) -> float:
 def _require_mapping(name: str, value: object) -> None:
     if not isinstance(value, Mapping):
         raise ValueError(f"{name} must be a mapping")
+
+
+def _merge_missing(
+    missing_from_comparison: list[str],
+    errors: list[ReadbackFailure],
+) -> list[str]:
+    """Merge comparison-missing names with transport-error param names once each.
+
+    A read/write that errored is already reported in ``tolerance_failures`` and,
+    because its value never reached the observed set, also shows up in the
+    comparison's ``missing_parameters``. Deduplicate so each parameter name
+    appears exactly once, preserving deterministic sorted order.
+    """
+
+    names = set(missing_from_comparison)
+    names.update(failure.param for failure in errors)
+    return sorted(names)
 
 
 def _call_set(

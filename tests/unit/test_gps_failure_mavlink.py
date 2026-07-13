@@ -407,6 +407,64 @@ class GpsFailureBatchPreflightTests(unittest.TestCase):
         self.assertEqual({"SIM_GPS1_JAM": 1.0}, payload)
         self.assertEqual({"SIM_GPS1_JAM"}, set(rules))
 
+    def test_failed_write_reports_parameter_in_missing_only_once(self) -> None:
+        # A write that errors must appear exactly once in missing_parameters
+        # (not duplicated by both the write-failure list and the readback-missing
+        # comparison), with its error reason recorded in tolerance_failures.
+        class _FailingWriteConnection(_FakeParamConnection):
+            def set_parameter(self, name: str, value: float) -> float:
+                raise RuntimeError("transport down")
+
+        result = set_and_read_back_parameters(
+            _FailingWriteConnection(),
+            {"SIM_GPS1_JAM": 1.0},
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(["SIM_GPS1_JAM"], result.missing_parameters)
+        self.assertEqual(
+            [("SIM_GPS1_JAM", "transport down")],
+            [(f.param, f.reason) for f in result.tolerance_failures],
+        )
+
+    def test_failed_read_reports_parameter_in_missing_only_once(self) -> None:
+        class _FailingReadConnection(_FakeParamConnection):
+            def read_parameter(self, name: str) -> float:
+                raise TimeoutError(name)
+
+        rules = readback_rules_for_payload({"SIM_GPS1_JAM": 1.0})
+        result = read_back_injected_parameters(_FailingReadConnection(), rules)
+        self.assertFalse(result.success)
+        self.assertEqual(["SIM_GPS1_JAM"], result.missing_parameters)
+        self.assertEqual(
+            ["SIM_GPS1_JAM"], [f.param for f in result.tolerance_failures]
+        )
+
+    def test_mixed_failed_and_missing_params_deduped_and_sorted(self) -> None:
+        # One parameter's read errors (transport failure), the other two succeed.
+        # The failing name must appear exactly once, deterministically sorted, and
+        # the successful ones must be absent from missing_parameters.
+        class _FailOneReadConnection(_FakeParamConnection):
+            def read_parameter(self, name: str) -> float:
+                if name == "SIM_GPS1_JAM":
+                    raise TimeoutError(name)
+                return self.values.get(name, 0.0)
+
+        rules = readback_rules_for_payload(
+            {"SIM_GPS1_JAM": 1.0, "SIM_GPS1_ENABLE": 0.0, "SIM_GPS1_GLTCH_Y": 0.0}
+        )
+        result = read_back_injected_parameters(
+            _FailOneReadConnection(
+                {"SIM_GPS1_ENABLE": 0.0, "SIM_GPS1_GLTCH_Y": 0.0}
+            ),
+            rules,
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(["SIM_GPS1_JAM"], result.missing_parameters)
+        self.assertEqual(
+            sorted(set(result.missing_parameters)), result.missing_parameters
+        )
+        self.assertEqual(1, result.missing_parameters.count("SIM_GPS1_JAM"))
+
 
 class GpsFailureRuntimePlanTests(unittest.TestCase):
     def test_nominal_produces_no_writes_and_no_launch(self) -> None:
