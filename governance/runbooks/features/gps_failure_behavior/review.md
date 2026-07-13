@@ -1,15 +1,15 @@
 # GPS Failure Behavior — Review
 
-Status: Phase 1 Chunk 6 (integration readiness) is **implemented pending
-review**. Full Phase 1 remains open until the checklist below is signed off.
+Status: Phase 1 no-SITL foundation is **Accepted** (2026-07-13, final no-SITL
+review). Phase 2 live smoke is next and remains unverified.
 
 ## Phase Acceptance Ledger
 
 | Phase | Status | Date | Notes |
 | --- | --- | --- | --- |
 | Phase 0 — design lock | Accepted | 2026-07-06 | Full brainstorm; four faults, two-tier knee, seven bands, characterize-not-gate; five Proposed ADRs (0017–0021). |
-| Phase 1 — no-SITL plugin foundation | Open | — | Chunks 1–6 exist: scaffold, payload semantics, static mission/parameter-stack integration, synthetic mechanism-gate evaluation, runtime/MAVLink contract helpers, and integration-readiness wiring. Chunk 6 is implemented pending review; the Phase 1 acceptance checklist below is not yet signed off. Live connection, mission execution, and BIN/log extraction remain open. |
-| Phase 2 — live smoke | Open | — | — |
+| Phase 1 — no-SITL plugin foundation | Accepted | 2026-07-13 | Chunks 1–6: scaffold, payload semantics, static mission/parameter-stack integration, synthetic mechanism-gate evaluation, runtime/MAVLink contract helpers, and integration-readiness wiring. All prior BLOCKER/HIGH/MEDIUM findings resolved and verified in code; a final no-SITL review (2026-07-13) found no new BLOCKER/HIGH/MEDIUM/substantiated-LOW issue. No-SITL acceptance of the plugin foundation only — no live result. Live connection, mission execution, and BIN/log extraction remain Phase 2. |
+| Phase 2 — live smoke | Open (unverified) | — | Next phase; no live SITL/Gazebo run, real parameter readback, real mission timing, BIN extraction, empirical knee, or scientific evidence exists. |
 | Phase 3 — full v1 campaign | Open | — | — |
 | Phase 4 — evidence curation | Open | — | — |
 
@@ -385,14 +385,15 @@ no-SITL acceptance: it gates the plugin foundation, not any live result.
 - [x] No-SITL unit suite green (`test_gps_failure_phase1`,
   `test_gps_mechanism_gate`, `test_gps_failure_mavlink`,
   `test_gps_failure_readiness`).
-- [~] Code review of Chunks 4–6 recorded and findings resolved. The six
+- [x] Code review of Chunks 4–6 recorded and findings resolved. The six
   confirmed BLOCKERs are resolved (see "Phase 1 Strict-Review Blocker Resolution
   (2026-07-13)" above), the three HIGH findings are now closed (see "Phase 1
   Strict-Review HIGH-Finding Resolution (2026-07-13)" above), and the MEDIUM
   duplicate-failure-reporting finding is fixed (see "Phase 1 Strict-Review
-  MEDIUM-Finding Resolution (2026-07-13)" above). Any remaining LOW review
-  findings and the formal review sign-off still gate acceptance and are not yet
-  cleared, so this item stays open and Phase 1 is not marked Accepted.
+  MEDIUM-Finding Resolution (2026-07-13)" above). The final no-SITL review
+  (2026-07-13, "Phase 1 Final No-SITL Review Acceptance" below) re-verified every
+  prior finding in code and found no new BLOCKER/HIGH/MEDIUM/substantiated-LOW
+  issue, closing the formal review sign-off.
 - [x] Docs/index status lines reconciled to the implemented no-SITL behavior
   (trigger-gated executable plans, substantive behavior evidence,
   contradiction-safe manifest, complete artifact schema, atomic MAVLink batch);
@@ -400,10 +401,69 @@ no-SITL acceptance: it gates the plugin foundation, not any live result.
 - [x] Working tree committed on `feature/gps-failure-behavior` (the scoped
   blocker-fix commit).
 
-Phase 1 is not marked Accepted by this work: the strict-review blockers are
-resolved, but acceptance remains pending the remaining review findings. No live
-SITL/Gazebo run, real parameter readback, or evidence claim is part of Phase 1
-acceptance; those are Phase 2.
+Phase 1 is Accepted as a no-SITL foundation by the 2026-07-13 final review
+(below). No live SITL/Gazebo run, real parameter readback, or evidence claim is
+part of Phase 1 acceptance; those are Phase 2 and remain unverified.
+
+## Phase 1 Final No-SITL Review Acceptance (2026-07-13)
+
+An independent final no-SITL review re-verified the whole Phase 1 foundation and
+**accepts it**. This is a no-SITL acceptance of the plugin foundation only; it
+makes no live claim.
+
+Every previously reported finding was re-verified as resolved in the current
+committed code (not merely claimed in prose):
+
+- Former BLOCKERs: runtime injection requires a validated seq 1→2→3→4 trigger
+  trace before any write (`runtime.py`, `monitor.py`); preview plans are never
+  execution-authorized; the analyzer requires substantive finite behavior-tier
+  evidence, not a marker boolean (`analyzers.py`); missing/contradictory evidence
+  cannot become nominal/accepted; the manifest fails closed on contradictory
+  classifications (`manifest.py`); `gps_injection.json` is in the artifact schema
+  and reported by readiness; MAVLink batch writes are atomically prevalidated
+  with zero writes on any invalid entry (`mavlink.preflight_batch`); Chunks 4–6
+  are committed and the worktree is clean.
+- Former HIGH: malformed recipes return structured failures instead of a leaked
+  `KeyError`/`TypeError` (`runtime._required_recipe_float`, `_as_event_mapping`,
+  `_resolve_case_trigger`; `mavlink.normalize_readback_rules` raises `ValueError`);
+  focused Pyright passes (0 errors); `.ai` and governance status match the
+  committed code.
+- Former MEDIUM: failed reads/writes do not duplicate parameters in
+  `missing_parameters` (`mavlink._merge_missing`); failure reporting stays
+  deterministic and preserves the error detail once in `tolerance_failures`.
+
+Dedicated launch paths verified structurally: `plane-gps` builds
+`plane_base.parm -> plane_gps.parm` only via `build_plane_gps_param_args()`
+(no airspeed overlay, local override excluded unconditionally and printed, wipes
+EEPROM, dedicated `var/runs/sitl/plane-gps` identity, `udp:127.0.0.1:14551`);
+`gazebo-plane-gps` reuses the sensor-neutral base `mini_talon_runway.sdf`
+(`$PLANE_WORLD`) by reference with no CTE/wind world path and a dedicated
+identity. The plugin `defaults.py`, docs, and readiness all use the dedicated
+GPS targets; GPS docs do not route live work through `plane-cte`; airspeed and
+wind-matrix paths still use `plane-cte`; no document claims the GPS targets were
+live-tested.
+
+Checks actually run for this review (all exit 0):
+
+- `bash -n src/sim_ard_gaw/launch/launch.sh`, `bash -n scripts/ops/launch.sh`,
+  `scripts/ops/launch.sh help` — no launch target invoked.
+- `pytest test_gps_failure_phase1 test_gps_mechanism_gate test_gps_failure_mavlink
+  test_gps_failure_readiness` → **153 passed, 178 subtests**; plus discovered
+  `test_gps_launch_targets` → **10 passed** (163 GPS tests total).
+- Airspeed regression `pytest test_airspeed_failure_phase1
+  test_airspeed_mechanism_gate` → **41 passed**.
+- Focused `pyright` over the GPS plugin, CLI, and four test files →
+  **0 errors, 0 warnings, 0 informations**.
+- `run_gps_failure --list-cases | --probe-schema | --preflight |
+  --dry-run --case nominal` → all exit 0; `--preflight` reports
+  `ready_for_live_run=false`.
+- `git diff --check` and `make doctor` → pass; worktree clean.
+
+No SITL, Gazebo, or MAVLink activity occurred; no mission was executed. Phase 2
+live smoke is next and remains unverified: no live SITL/Gazebo GPS smoke, real
+parameter readback, real mission timing, BIN extraction, empirical-knee result,
+or scientific-evidence claim exists. `ready_for_live_run=false` remains correct
+because the live adapters are not implemented yet.
 
 ## Phase 0 Baseline
 

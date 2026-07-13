@@ -1,8 +1,10 @@
 # GPS Failure Behavior — Implementation
 
-Status: Phase 1 Chunk 6 is implemented pending review; it wires the lane into the
-shared suite path and adds a no-SITL integration-readiness report. Full Phase 1
-remains open (no live SITL/Gazebo run or evidence claim).
+Status: Phase 1 no-SITL foundation (Chunks 1–6) is **Accepted** (2026-07-13,
+final no-SITL review): the lane is wired into the shared suite path with a
+no-SITL integration-readiness report, and all prior findings are resolved and
+verified in code. Phase 2 live smoke is next and remains unverified (no live
+SITL/Gazebo run, real parameter readback, or evidence claim).
 
 ## Implemented In Phase 1 Chunk 1
 

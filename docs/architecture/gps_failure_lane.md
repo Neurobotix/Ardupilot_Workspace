@@ -16,6 +16,8 @@ gate makes GPS the sharpest available "knee" experiment.
 
 Current status:
 
+- Phase 1 no-SITL foundation accepted 2026-07-13; Phase 2 live smoke is next and
+  remains unverified.
 - Phase 0 (design lock): accepted 2026-07-06.
 - Phase 1 Chunks 1–2 no-SITL foundation: plugin skeleton, deterministic case
   catalog, payload conversion/previews, dry-run CLI, registry entry, and unit
@@ -44,11 +46,13 @@ Current status:
   incorrect use of the CTE/airspeed targets, which loaded the airspeed overlay
   and the local override. See the Launch Identities section below and ADR-0021's
   amendment. No live smoke of these targets has occurred.
-- Full Phase 1 remains open (see the acceptance checklist in the feature
-  runbook's `review.md`); the strict-review blockers are resolved but acceptance
-  is still pending remaining review findings. No live run or parameter readback
-  has occurred; realized straight-leg duration, BIN/log analysis, and evidence
-  claims remain open.
+- Phase 1 no-SITL foundation is **Accepted** (2026-07-13, final no-SITL review):
+  all prior BLOCKER/HIGH/MEDIUM findings are resolved and verified in code, and
+  the final review found no new BLOCKER/HIGH/MEDIUM/substantiated-LOW issue. This
+  is a no-SITL acceptance of the plugin foundation only. Phase 2 live smoke is
+  next and remains unverified: no live run or parameter readback has occurred;
+  realized straight-leg duration, BIN/log analysis, and evidence claims remain
+  open.
 
 ## The Knee
 

@@ -170,10 +170,17 @@ override excluded unconditionally, wipes EEPROM), and `gazebo-plane-gps` reuses
 the sensor-neutral base `mini_talon_runway.sdf` world by reference (GPS/NavSat,
 calm; no world duplication). Covered by no-SITL structural tests
 (`tests/unit/test_gps_launch_targets.py`) and recorded in ADR-0021's 2026-07-13
-amendment; existing CTE/airspeed targets are unchanged. No live SITL/Gazebo run,
-real parameter readback, BIN/log parsing, or evidence claim exists — including no
-live smoke of the new targets; Phase 1 acceptance remains pending the remaining
-review findings. See `governance/runbooks/features/gps_failure_behavior/`.
+amendment; existing CTE/airspeed targets are unchanged. On 2026-07-13 a final
+no-SITL review re-verified every prior finding in code and found no new
+BLOCKER/HIGH/MEDIUM/substantiated-LOW issue, and the **Phase 1 no-SITL
+foundation was accepted** (163 GPS tests + 41 airspeed regressions passed,
+pyright 0 errors, `make doctor` pass, worktree clean). This is a no-SITL
+acceptance of the plugin foundation only. Phase 2 live smoke is next and remains
+unverified: no live SITL/Gazebo run, real parameter readback, real mission
+timing, BIN/log parsing, empirical-knee result, or evidence claim exists —
+including no live smoke of the new targets; `ready_for_live_run=false` remains
+correct because the live adapters are not implemented yet. See
+`governance/runbooks/features/gps_failure_behavior/`.
 
 Additional active feature work: the `test_suite` migration completed its Phase 3 sequence
 (3A–3G) on 2026-06-01. The staged `wind_matrix` plugin is fully zero-legacy

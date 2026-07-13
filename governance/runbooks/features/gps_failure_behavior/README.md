@@ -4,12 +4,13 @@ Start here to understand the feature, find any file, or pick up work at any
 phase.
 
 Feature slug: `gps_failure_behavior`
-Current status: Phase 0 design is locked. Phase 1 no-SITL foundation Chunks
-1-6 are implemented pending review: scaffold, payload semantics, static
-mission/parameter-stack integration, synthetic mechanism-gate evaluation, a
-fake-testable runtime/MAVLink parameter contract, and integration-readiness
-wiring into the shared suite path (a `--preflight` readiness report). Full
-Phase 1 remains open (see the acceptance checklist in `review.md`). No live
+Current status: Phase 0 design is locked. Phase 1 no-SITL foundation (Chunks
+1-6) is **Accepted** (2026-07-13, final no-SITL review): scaffold, payload
+semantics, static mission/parameter-stack integration, synthetic mechanism-gate
+evaluation, a fake-testable runtime/MAVLink parameter contract, and
+integration-readiness wiring into the shared suite path (a `--preflight`
+readiness report). All prior findings are resolved and verified in code (see
+`review.md`). Phase 2 live smoke is next and remains unverified: no live
 SITL/runtime execution, real parameter readback, live MAVLink connection,
 BIN/log mechanism extraction, campaign execution, or scientific evidence claim
 exists.

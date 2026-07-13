@@ -1,12 +1,13 @@
 # GPS Failure Runbook
 
-Status: Phase 1 Chunk 6 is implemented pending review. The GPS failure lane has
-the no-SITL plugin foundation, locked static mission and GPS parameter overlay,
-structural tests, a synthetic no-SITL mechanism gate, a fake-testable
-runtime/MAVLink parameter contract, and integration-readiness wiring into the
-shared suite path (a `--preflight` readiness report). Full Phase 1 remains open.
-No live SITL/Gazebo GPS failure run, real parameter readback, BIN/log parsing,
-or curated evidence claim exists.
+Status: Phase 1 no-SITL foundation is **Accepted** (2026-07-13, final no-SITL
+review). The GPS failure lane has the no-SITL plugin foundation, locked static
+mission and GPS parameter overlay, structural tests, a synthetic no-SITL
+mechanism gate, a fake-testable runtime/MAVLink parameter contract, and
+integration-readiness wiring into the shared suite path (a `--preflight`
+readiness report). Phase 2 live smoke is next and remains unverified: no live
+SITL/Gazebo GPS failure run, real parameter readback, real mission timing,
+BIN/log parsing, or curated evidence claim exists.
 
 ## Current State
 
