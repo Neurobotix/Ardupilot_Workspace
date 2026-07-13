@@ -182,6 +182,28 @@ files, `run_gps_failure` all four no-SITL actions, `git diff --check`, and
 BIN/log parsing, or evidence claim was performed. Phase 1 acceptance remains
 pending any further review findings.
 
+## Phase 1 Strict-Review Third Pass (2026-07-13)
+
+A third review pass found one more BLOCKER left open by the earlier passes; it is
+now resolved no-SITL with regression tests.
+
+- **A failed mechanism result could be overridden by a stale
+  `mechanism_evidence=True` marker.** `analyzers._with_mechanism_result` used
+  `setdefault`, so when a caller supplied both `mechanism_evidence=True` and a
+  failed/unverified `mechanism_result`, the failed result did not override the
+  stale marker and the observation could classify as accepted `nominal`. A
+  supplied mechanism result is now authoritative: it *overwrites*
+  `mechanism_evidence` (a failed result forces `mechanism_evidence=False` →
+  `missing_mechanism_fields`), and the derived mechanism-tier flags
+  (`reset_event`, `pos_test_ratio_rejected`, `fused`) are cleared and re-set only
+  from the accepted result, so a caller cannot pre-seed them to mask a rejection.
+
+Checks re-run (all exit 0): GPS unit suite 132 passed, airspeed regression 41
+passed, `pyright` 0 errors, `run_gps_failure` all four no-SITL actions,
+`git diff --check`, and `make doctor`. No live SITL/Gazebo run, real MAVLink
+connection, live readback, BIN/log parsing, or evidence claim was performed.
+Phase 1 acceptance remains pending any further review findings.
+
 ## Phase 1 Acceptance Checklist (final gate for closing Phase 1)
 
 Phase 1 closes to Accepted only when every item below is checked. This is a

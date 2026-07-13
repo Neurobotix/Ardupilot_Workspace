@@ -316,21 +316,28 @@ def _with_mechanism_result(observation: dict[str, Any]) -> dict[str, Any]:
     if result is None:
         return observation
     normalized = dict(observation)
-    # The mechanism-accepted markers must be a strict boolean True. A truthy
-    # non-bool (e.g. the string "true", or 1) is malformed evidence and must not
-    # become an accepted mechanism.
+    # When a mechanism result is supplied it is authoritative and OVERRIDES any
+    # caller-supplied marker: a failed result must not be overridden by a stale
+    # mechanism_evidence=True. The mechanism-accepted markers must also be a
+    # strict boolean True; a truthy non-bool (e.g. "true", 1) is malformed
+    # evidence and must not become an accepted mechanism.
     accepted = (
         result.get("accepted_evidence") is True
         or result.get("mechanism_evidence_accepted") is True
     )
-    normalized.setdefault("mechanism_evidence", accepted)
+    normalized["mechanism_evidence"] = accepted
     state = result.get("mechanism_state") or result.get("mechanism_class")
+    # The mechanism result is the sole source of truth for the derived
+    # mechanism-tier flags, so a caller cannot pre-seed them either. Clear any
+    # stale caller values, then set from the (accepted) result.
+    for stale in ("reset_event", "pos_test_ratio_rejected", "fused"):
+        normalized.pop(stale, None)
     if accepted and state == "reset_detected":
-        normalized.setdefault("reset_event", True)
+        normalized["reset_event"] = True
     elif accepted and state == "rejected_above_gate":
-        normalized.setdefault("pos_test_ratio_rejected", True)
+        normalized["pos_test_ratio_rejected"] = True
     elif accepted and state == "fused_below_gate":
-        normalized.setdefault("fused", True)
+        normalized["fused"] = True
     return normalized
 
 

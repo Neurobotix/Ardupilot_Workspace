@@ -222,6 +222,55 @@ class GpsMechanismGateTests(unittest.TestCase):
         self.assertEqual("analysis_incomplete", result["behavior_class"])
         self.assertEqual("missing_mechanism_fields", result["reason"])
 
+    def test_failed_mechanism_result_overrides_stale_evidence_marker(self) -> None:
+        # A supplied mechanism result is authoritative: a failed/unverified
+        # result must OVERRIDE a caller-supplied mechanism_evidence=True (and any
+        # caller-forged mechanism-tier flags) rather than defer to it.
+        observation = {
+            "injection_triggered": True,
+            "injection_readback_ok": True,
+            "post_injection_s": 90.0,
+            "required_artifacts_present": True,
+            "mechanism_evidence": True,  # stale caller marker
+            "mechanism_result": {
+                "accepted_evidence": False,
+                "mechanism_state": "mechanism_unverified",
+            },
+            "horizontal_gap_m": 0.0,
+            "gap_growing": False,
+            "attitude_in_band": True,
+            "fused": True,  # stale caller-forged mechanism flag
+            "gap_within_nominal_band": True,
+        }
+
+        result = classify_observation(observation)
+
+        self.assertFalse(result["accepted_observation"])
+        self.assertEqual("analysis_incomplete", result["behavior_class"])
+        self.assertEqual("missing_mechanism_fields", result["reason"])
+
+    def test_rejected_result_overrides_caller_forged_fused_flag(self) -> None:
+        # A caller cannot pre-seed fused=True to mask a rejected mechanism.
+        mechanism = evaluate_mechanism_records([{"time_s": 0.0, "posTestRatio": 1.5}])
+        observation = {
+            "injection_triggered": True,
+            "injection_readback_ok": True,
+            "post_injection_s": 90.0,
+            "required_artifacts_present": True,
+            "mechanism_gate_result": mechanism,
+            "fused": True,  # stale caller-forged flag
+            "horizontal_gap_m": 90.0,
+            "gap_growing": True,
+            "attitude_in_band": True,
+        }
+
+        result = classify_observation(observation)
+
+        # The rejected result governs; the run is a valid detected rejection,
+        # not a forged silent_drift/nominal.
+        self.assertEqual("detected_rejected", result["behavior_class"])
+        self.assertTrue(result["accepted_observation"])
+
     def test_string_mechanism_marker_is_not_accepted(self) -> None:
         # A truthy non-bool mechanism-accepted marker must NOT become accepted.
         for marker in ("true", 1, "1", [1]):
