@@ -18,6 +18,9 @@ from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure import glitch  # noqa:
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.case_generator import (  # noqa: E402
     GpsFailureCaseGenerator,
 )
+from sim_ard_gaw.campaigns.test_suite.core.models import (  # noqa: E402
+    TestCase as _SuiteTestCase,  # aliased so pytest does not try to collect it
+)
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.config import (  # noqa: E402
     GpsFailureConfig,
 )
@@ -94,6 +97,51 @@ class _FakeParamConnection:
 
 def _case(case_id: str):
     return GpsFailureCaseGenerator(GpsFailureConfig()).get_case(case_id)
+
+
+_UNSET = object()
+
+
+def _case_with_recipe(
+    case_id: str,
+    *,
+    set_fields: dict[str, Any] | None = None,
+    drop_fields: tuple[str, ...] = (),
+    replace_recipe: Any = _UNSET,
+    replace_param: dict[str, Any] | None = None,
+    drop_param: tuple[str, ...] = (),
+) -> _SuiteTestCase:
+    """Return a copy of a generated case with a mutated fault_recipe/params.
+
+    Lets a test build a malformed public ``TestCase`` (missing/invalid recipe
+    fields, or a non-mapping recipe/trigger) without editing the case generator.
+    """
+
+    base = _case(case_id)
+    params = dict(base.parameters)
+    if replace_recipe is not _UNSET:
+        params["fault_recipe"] = replace_recipe
+    else:
+        recipe = dict(params.get("fault_recipe") or {})
+        for field_name in drop_fields:
+            recipe.pop(field_name, None)
+        for field_name, value in (set_fields or {}).items():
+            recipe[field_name] = value
+        params["fault_recipe"] = recipe
+    for key, value in (replace_param or {}).items():
+        params[key] = value
+    for key in drop_param:
+        params.pop(key, None)
+    return _SuiteTestCase(
+        suite_name=base.suite_name,
+        case_id=base.case_id,
+        parameters=params,
+        scenario_name=base.scenario_name,
+        stimulus_name=base.stimulus_name,
+        mission_file=base.mission_file,
+        acceptance_target_runs=base.acceptance_target_runs,
+        tags=base.tags,
+    )
 
 
 class GpsFailureMavlinkHelperTests(unittest.TestCase):
@@ -702,6 +750,231 @@ class GpsFailureTriggerAuthorizationTests(unittest.TestCase):
         rejected = validate_trigger_trace(["bad"])
         self.assertFalse(rejected.validated)
         self.assertFalse(rejected.is_authorized())
+
+
+class GpsFailureMalformedRecipeFailClosedTests(unittest.TestCase):
+    """H1: malformed public recipes/triggers must fail closed, never crash.
+
+    A malformed TestCase/recipe/trigger must produce a structured not-ready plan
+    (empty payload, empty readback rules, no restore steps, deterministic
+    ``plan_resolution_failed`` info) instead of escaping as an uncaught
+    KeyError/TypeError, and executing such a plan must make zero connection
+    calls.
+    """
+
+    def _assert_no_connection_calls(self, fake: _FakeParamConnection) -> None:
+        self.assertEqual([], fake.set_order)
+        self.assertEqual([], fake.read_order)
+
+    def _assert_structured_failure(self, plan: GpsInjectionPlan) -> None:
+        self.assertFalse(plan.ready_to_inject, plan.as_dict())
+        self.assertEqual({}, plan.injection_payload)
+        self.assertEqual({}, plan.readback_rules)
+        self.assertEqual([], plan.restore_plan)
+        self.assertFalse(plan.execution_authorized)
+        self.assertTrue(plan.failures)
+        self.assertEqual("plan_resolution_failed", plan.failures[0]["reason"])
+        detail = plan.failures[0]["detail"]
+        self.assertIsInstance(detail, str)
+        # The message is a deterministic domain string, not raw KeyError repr.
+        self.assertNotIn("KeyError", detail)
+        self.assertNotIn("'offset_magnitude_m'", detail)
+        # The whole plan must remain JSON-safe / NaN-free.
+        json.dumps(plan.as_dict(), allow_nan=False)
+
+    def _event(self) -> dict[str, Any]:
+        return {"trigger_latitude_deg": 0.0, "trigger_time_s": 100.0}
+
+    def test_step_glitch_missing_offset_magnitude_fails_closed(self) -> None:
+        case = _case_with_recipe("step_glitch_100m", drop_fields=("offset_magnitude_m",))
+        plan = build_live_injection_plan(case, self._event())
+        self._assert_structured_failure(plan)
+        self.assertIn("missing required recipe value", plan.failures[0]["detail"])
+        self.assertIn("offset_magnitude_m", plan.failures[0]["detail"])
+
+    def test_step_glitch_offset_none_fails_closed(self) -> None:
+        case = _case_with_recipe("step_glitch_100m", set_fields={"offset_magnitude_m": None})
+        plan = build_live_injection_plan(case, self._event())
+        self._assert_structured_failure(plan)
+        self.assertIn("must be finite", plan.failures[0]["detail"])
+
+    def test_step_glitch_offset_non_numeric_string_fails_closed(self) -> None:
+        case = _case_with_recipe("step_glitch_100m", set_fields={"offset_magnitude_m": "big"})
+        plan = build_live_injection_plan(case, self._event())
+        self._assert_structured_failure(plan)
+        self.assertIn("must be finite", plan.failures[0]["detail"])
+
+    def test_step_glitch_offset_nan_and_infinities_fail_closed(self) -> None:
+        for value in (math.nan, math.inf, -math.inf):
+            with self.subTest(value=value):
+                case = _case_with_recipe(
+                    "step_glitch_100m", set_fields={"offset_magnitude_m": value}
+                )
+                plan = build_live_injection_plan(case, self._event())
+                self._assert_structured_failure(plan)
+                self.assertIn("must be finite", plan.failures[0]["detail"])
+
+    def test_fault_recipe_as_list_string_number_fails_closed(self) -> None:
+        for recipe in ([1, 2, 3], "not-a-recipe", 5):
+            with self.subTest(recipe=recipe):
+                case = _case_with_recipe("step_glitch_100m", replace_recipe=recipe)
+                plan = build_live_injection_plan(case, self._event())
+                self._assert_structured_failure(plan)
+                self.assertIn("fault_recipe must be a mapping", plan.failures[0]["detail"])
+
+    def test_malformed_trigger_in_case_parameters_fails_closed(self) -> None:
+        for trigger in (["a", "b"], "trig", 7):
+            with self.subTest(trigger=trigger):
+                case = _case_with_recipe(
+                    "step_glitch_100m", replace_param={"trigger": trigger}
+                )
+                plan = build_live_injection_plan(case, self._event())
+                self._assert_structured_failure(plan)
+                self.assertIn("trigger must be a mapping", plan.failures[0]["detail"])
+
+    def test_missing_or_empty_trigger_metadata_for_fault_case_fails_closed(self) -> None:
+        # A fault-writing case MUST carry the populated ADR-0020 trigger. A
+        # None / missing / empty trigger is malformed public input: preview and
+        # authorized plans must fail closed and execute zero connection calls.
+        fault_case_ids = (
+            "step_glitch_100m",
+            "slow_drift_0p5_mps",
+            "hard_denial_15s",
+            "jamming_repeat_01",
+        )
+        # (label, kwargs to _case_with_recipe) for each malformed trigger shape.
+        malformations = (
+            ("none", {"replace_param": {"trigger": None}}),
+            ("empty", {"replace_param": {"trigger": {}}}),
+            ("missing", {"drop_param": ("trigger",)}),
+        )
+        for case_id in fault_case_ids:
+            for label, kwargs in malformations:
+                with self.subTest(case_id=case_id, trigger=label):
+                    case = _case_with_recipe(case_id, **kwargs)  # type: ignore[arg-type]
+                    preview = build_live_injection_plan(case, self._event())
+                    self._assert_structured_failure(preview)
+                    self.assertIn(
+                        "missing required trigger metadata for fault case",
+                        preview.failures[0]["detail"],
+                    )
+                    # A genuinely valid monitor trace must NOT rescue a malformed
+                    # case: the plan still fails closed and writes nothing.
+                    authorized = build_authorized_injection_plan(case, _valid_trace())
+                    self._assert_structured_failure(authorized)
+                    fake = _FakeParamConnection()
+                    result = execute_injection_plan(authorized, fake)
+                    self.assertFalse(result.success)
+                    self._assert_no_connection_calls(fake)
+
+    def test_missing_trigger_metadata_for_nominal_case_stays_ready(self) -> None:
+        # Nominal is a no-write case and does not require trigger metadata.
+        case = _case_with_recipe("nominal", drop_param=("trigger",))
+        plan = build_live_injection_plan(case, {})
+        self.assertTrue(plan.ready_to_inject, plan.as_dict())
+        self.assertEqual({}, plan.injection_payload)
+        self.assertFalse(plan.requires_trigger_authorization)
+        self.assertTrue(plan.execution_authorized)
+
+    def test_malformed_trigger_event_fails_closed(self) -> None:
+        for event in ([("trigger_latitude_deg", 0.0)], "event", 3):
+            with self.subTest(event=event):
+                plan = build_live_injection_plan(_case("step_glitch_100m"), event)  # type: ignore[arg-type]
+                self._assert_structured_failure(plan)
+                self.assertIn("trigger_event must be a mapping", plan.failures[0]["detail"])
+
+    def test_preview_builder_returns_structured_failure(self) -> None:
+        case = _case_with_recipe("step_glitch_100m", drop_fields=("offset_magnitude_m",))
+        plan = build_live_injection_plan(case, self._event())
+        self.assertTrue(plan.preview_only)
+        self._assert_structured_failure(plan)
+
+    def test_authorized_builder_returns_structured_failure_after_valid_trace(self) -> None:
+        case = _case_with_recipe("step_glitch_100m", drop_fields=("offset_magnitude_m",))
+        plan = build_authorized_injection_plan(case, _valid_trace())
+        # The trigger trace itself was valid ...
+        self.assertIsNotNone(plan.trigger_evidence)
+        assert plan.trigger_evidence is not None
+        self.assertTrue(plan.trigger_evidence.validated)
+        # ... but the malformed recipe still fails plan resolution closed.
+        self.assertFalse(plan.preview_only)
+        self._assert_structured_failure(plan)
+
+    def test_failed_plan_execution_makes_zero_connection_calls(self) -> None:
+        case = _case_with_recipe("step_glitch_100m", drop_fields=("offset_magnitude_m",))
+        for plan in (
+            build_live_injection_plan(case, self._event()),
+            build_authorized_injection_plan(case, _valid_trace()),
+        ):
+            with self.subTest(preview_only=plan.preview_only):
+                fake = _FakeParamConnection()
+                result = execute_injection_plan(plan, fake)
+                self.assertFalse(result.success)
+                self._assert_no_connection_calls(fake)
+
+    def test_valid_step_glitch_output_remains_correct(self) -> None:
+        plan = build_live_injection_plan(_case("step_glitch_100m"), self._event())
+        self.assertTrue(plan.ready_to_inject, plan.as_dict())
+        self.assertEqual(glitch.step_glitch_payload(100.0, 0.0), plan.injection_payload)
+        self.assertEqual(set(plan.injection_payload), set(plan.readback_rules))
+
+    def test_valid_slow_drift_output_remains_correct(self) -> None:
+        plan = build_live_injection_plan(
+            _case("slow_drift_0p5_mps"),
+            {
+                "trigger_latitude_deg": 0.0,
+                "trigger_time_s": 100.0,
+                "elapsed_since_trigger_s": 90.0,
+            },
+        )
+        self.assertTrue(plan.ready_to_inject, plan.as_dict())
+        self.assertEqual(glitch.slow_drift_payload(0.5, 90.0, 0.0), plan.injection_payload)
+
+    def test_valid_denial_and_jamming_restore_behavior_remains_correct(self) -> None:
+        denial = build_live_injection_plan(_case("hard_denial_15s"), {})
+        self.assertTrue(denial.ready_to_inject, denial.as_dict())
+        self.assertEqual({"SIM_GPS1_ENABLE": 0.0}, denial.injection_payload)
+        self.assertEqual(1, len(denial.restore_plan))
+        self.assertEqual({"SIM_GPS1_ENABLE": 1.0}, denial.restore_plan[0].payload)
+
+        jamming = build_live_injection_plan(_case("jamming_repeat_01"), {})
+        self.assertTrue(jamming.ready_to_inject, jamming.as_dict())
+        self.assertEqual({"SIM_GPS1_JAM": 1.0}, jamming.injection_payload)
+        self.assertEqual(1, len(jamming.restore_plan))
+        self.assertEqual({"SIM_GPS1_JAM": 0.0}, jamming.restore_plan[0].payload)
+
+    def test_optional_restore_duration_absent_means_no_restore_step(self) -> None:
+        # Missing optional denial duration keeps the documented "no restore step"
+        # semantics rather than raising or forcing a required field.
+        case = _case_with_recipe("hard_denial_15s", drop_fields=("denial_duration_s",))
+        plan = build_live_injection_plan(case, {})
+        self.assertTrue(plan.ready_to_inject, plan.as_dict())
+        self.assertEqual({"SIM_GPS1_ENABLE": 0.0}, plan.injection_payload)
+        self.assertEqual([], plan.restore_plan)
+
+    def test_authorized_builder_with_bad_trigger_and_invalid_trace_fails_closed(self) -> None:
+        # The not-validated return path must not crash on a malformed `trigger`
+        # when the trace is also invalid; it normalizes fail-closed to {}.
+        case = _case_with_recipe("step_glitch_100m", replace_param={"trigger": "bad"})
+        plan = build_authorized_injection_plan(case, ["invalid-trace"])
+        self.assertFalse(plan.ready_to_inject, plan.as_dict())
+        self.assertEqual({}, plan.trigger)
+        self.assertEqual({}, plan.injection_payload)
+        self.assertFalse(plan.execution_authorized)
+        self.assertEqual("trigger_not_validated", plan.failures[0]["reason"])
+        json.dumps(plan.as_dict(), allow_nan=False)
+        fake = _FakeParamConnection()
+        result = execute_injection_plan(plan, fake)
+        self.assertFalse(result.success)
+        self._assert_no_connection_calls(fake)
+
+    def test_unsupported_fault_type_still_fails_closed(self) -> None:
+        case = _case_with_recipe(
+            "step_glitch_100m", replace_param={"fault_type": "meteor_strike"}
+        )
+        plan = build_live_injection_plan(case, self._event())
+        self._assert_structured_failure(plan)
+        self.assertIn("Unsupported gps_failure fault_type", plan.failures[0]["detail"])
 
 
 if __name__ == "__main__":

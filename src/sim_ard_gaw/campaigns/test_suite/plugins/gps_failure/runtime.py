@@ -243,12 +243,23 @@ def _build_plan(
     preview_only: bool,
     trigger_evidence: TriggerEvidence | None,
 ) -> GpsInjectionPlan:
-    event = dict(trigger_event or {})
     fault_type = str(case.parameters.get("fault_type", ""))
-    trigger = dict(case.parameters.get("trigger", {}))
     failures: list[dict[str, Any]] = []
+    # ``event`` and ``trigger`` may be malformed public inputs. Normalize them
+    # inside the fail-closed path (as ValueError, not a raw dict()/TypeError)
+    # so a malformed TestCase, trigger, or trigger_event returns a structured
+    # not-ready plan instead of escaping as an uncaught exception.
+    event: dict[str, Any] = {}
+    trigger: dict[str, Any] = {}
 
     try:
+        event = _as_event_mapping("trigger_event", trigger_event)
+        # The trigger metadata is required, non-empty mapping input for any
+        # fault-writing case (every generated fault case carries the populated
+        # ADR-0020 trigger). A missing / None / empty / non-mapping trigger on a
+        # fault case is malformed public input and must fail closed; nominal
+        # no-write cases do not require a trigger.
+        trigger = _resolve_case_trigger(fault_type, case.parameters.get("trigger"))
         injection_payload, restore_plan = _resolve_payload_and_restore(case, event)
         readback_rules = readback_rules_for_payload(injection_payload)
     except ValueError as exc:
@@ -309,10 +320,13 @@ def build_authorized_injection_plan(
 
     evidence = validate_trigger_trace(trigger_trace)
     if not evidence.validated:
+        # A malformed public ``trigger`` must not crash this not-ready return on a
+        # bare ``dict()`` TypeError/ValueError; normalize it fail-closed to {}.
+        trigger = case.parameters.get("trigger", {})
         return GpsInjectionPlan(
             case_id=case.case_id,
             fault_type=str(case.parameters.get("fault_type", "")),
-            trigger=dict(case.parameters.get("trigger", {})),
+            trigger=dict(trigger) if isinstance(trigger, Mapping) else {},
             trigger_event=dict(evidence.seq4_event),
             injection_payload={},
             readback_rules={},
@@ -490,7 +504,7 @@ def _resolve_step_glitch_payload(
         "trigger_latitude_deg",
         aliases=("latitude_deg", "lat_deg"),
     )
-    magnitude_m = finite_float("offset_magnitude_m", recipe["offset_magnitude_m"])
+    magnitude_m = _required_recipe_float(recipe, "offset_magnitude_m")
     return glitch.step_glitch_payload(
         magnitude_m,
         latitude_deg,
@@ -531,6 +545,60 @@ def _required_event_float(
             return finite_float(key, event[key])
     alias_text = ", ".join((name, *aliases))
     raise ValueError(f"missing required trigger event value: {alias_text}")
+
+
+def _required_recipe_float(recipe: Mapping[str, Any], name: str) -> float:
+    """Read a required numeric recipe field, failing closed as ``ValueError``.
+
+    The recipe equivalent of :func:`_required_event_float`: a missing field is a
+    deterministic ``ValueError`` (never a leaked ``KeyError``), and a present but
+    non-numeric / non-finite value (``None``, a non-numeric string, ``NaN``,
+    ``+inf``, ``-inf``) fails closed through :func:`finite_float`.
+    """
+
+    if name not in recipe:
+        raise ValueError(f"missing required recipe value: {name}")
+    return finite_float(name, recipe[name])
+
+
+def _as_event_mapping(name: str, value: Any) -> dict[str, Any]:
+    """Coerce a public trigger_event input to a dict, failing closed.
+
+    ``None`` becomes an empty mapping (a benign "no event yet" preview). A genuine
+    mapping is copied. Anything else (a list, string, or number posing as a
+    trigger_event) is a malformed public input and raises ``ValueError`` so the
+    caller returns a structured not-ready plan rather than crashing on a bare
+    ``dict()`` ``TypeError``.
+
+    Note: the case ``trigger`` *metadata* is stricter — see
+    :func:`_resolve_case_trigger`. ``trigger_event`` may legitimately be empty for
+    a preview; the required trigger metadata may not be for a fault case.
+    """
+
+    if value is None:
+        return {}
+    if isinstance(value, Mapping):
+        return dict(value)
+    raise ValueError(f"{name} must be a mapping")
+
+
+def _resolve_case_trigger(fault_type: str, value: Any) -> dict[str, Any]:
+    """Validate the case ``trigger`` metadata, failing closed for fault cases.
+
+    Every generated fault case carries the populated ADR-0020 injection trigger.
+    For any parameter-writing fault (anything other than ``nominal``) a missing,
+    ``None``, empty, or non-mapping trigger is malformed public input and raises
+    ``ValueError`` — so a malformed ``TestCase`` cannot resolve a payload or
+    execute a write. A nominal no-write case does not require a trigger, so an
+    absent/empty trigger there normalizes to ``{}``.
+    """
+
+    if value is not None and not isinstance(value, Mapping):
+        raise ValueError("trigger must be a mapping")
+    trigger = dict(value) if isinstance(value, Mapping) else {}
+    if fault_type not in ("", "nominal") and not trigger:
+        raise ValueError("missing required trigger metadata for fault case")
+    return trigger
 
 
 def _validate_optional_finite_event_value(

@@ -204,6 +204,112 @@ passed, `pyright` 0 errors, `run_gps_failure` all four no-SITL actions,
 connection, live readback, BIN/log parsing, or evidence claim was performed.
 Phase 1 acceptance remains pending any further review findings.
 
+## Phase 1 Strict-Review HIGH-Finding Resolution (2026-07-13)
+
+The three original HIGH findings from the strict Chunks 4–6 review are now
+closed. Two were verified already-resolved on the current branch (no code change
+manufactured); one required a code fix with regression tests. All work is
+no-SITL: no live SITL/Gazebo run, real MAVLink connection, live parameter
+readback, BIN/log parsing, or evidence claim was performed.
+
+- **H1 — malformed runtime recipes could escape as uncaught exceptions
+  (fixed).** `runtime._resolve_step_glitch_payload` indexed
+  `recipe["offset_magnitude_m"]` directly, so a `step_glitch` recipe missing that
+  field raised `KeyError`; `_build_plan` caught only `ValueError`, so the
+  exception escaped instead of returning a structured not-ready plan. Added
+  `_required_recipe_float` (the recipe equivalent of `_required_event_float`,
+  raising `ValueError` on a missing or non-finite field) and used it for
+  `offset_magnitude_m`. The `trigger_event` normalization also moved
+  into the fail-closed path via `_as_event_mapping`, which raises `ValueError`
+  for a non-mapping trigger_event instead of crashing on a bare `dict()`
+  `TypeError`. The case `trigger` *metadata* is validated more strictly by
+  `_resolve_case_trigger`: every generated fault case carries the populated
+  ADR-0020 trigger, so a missing / `None` / empty / non-mapping trigger on any
+  parameter-writing (non-nominal) case is malformed public input and fails closed
+  with `missing required trigger metadata for fault case` (or
+  `trigger must be a mapping`); a nominal no-write case does not require a
+  trigger. A malformed public `TestCase`/recipe/trigger now returns
+  `ready_to_inject=False` with an empty payload, empty readback rules, no restore
+  steps, and deterministic `plan_resolution_failed` detail (no raw `KeyError`
+  text); executing such a plan — even with a genuinely valid monitor trace —
+  makes zero connection calls. Intentional
+  semantics are preserved: slow-drift keeps its documented event-based rate
+  fallback, and a missing optional restore duration still means no restore step.
+  The whole planner is *not* wrapped in `except Exception`; only expected
+  malformed-input errors are converted, so internal programming errors stay
+  visible. Regression tests added to `tests/unit/test_gps_failure_mavlink.py`
+  (`GpsFailureMalformedRecipeFailClosedTests`): missing `offset_magnitude_m`,
+  `None`, non-numeric string, `NaN`/±inf; `fault_recipe` as list/string/number;
+  malformed `trigger`/`trigger_event` (including the authorized-builder
+  not-validated branch with a malformed `trigger` and an invalid trace);
+  missing / `None` / empty trigger metadata on each fault case failing closed for
+  both preview and authorized (valid-trace) builders while nominal stays ready;
+  preview
+  and authorized builders both returning structured failures; failed-plan
+  execution making zero connection calls; unchanged valid
+  step-glitch/slow-drift/denial/jamming output; unchanged optional-duration
+  behavior; and unsupported fault type failing closed.
+- **H2 — focused Pyright previously failed in the MAVLink adapter (verified
+  resolved).** The exact focused Pyright command was run before any edit and
+  reported **0 errors, 0 warnings, 0 informations**. No production type edit,
+  `type: ignore`, or configuration change was manufactured. Pyright was rerun
+  after the H1 changes and still reports 0 errors, 0 warnings. The dynamically
+  discovered fake convenience methods and the protocol-based MAVLink transport
+  path retain their runtime behavior; invalid connection values still fail closed
+  through `finite_float`.
+- **H3 — committed `.ai` and governance status previously lagged the
+  implementation (verified and reconciled).** Committed `.ai/current.md`,
+  `.ai/index.md`, the feature runbook, `docs/architecture/gps_failure_lane.md`,
+  and `docs/operations/gps_failure_runbook.md` were audited against the
+  required-truth contract: Chunks 1–6 implemented, six blockers resolved no-SITL,
+  no live run / real readback / BIN-log / empirical-knee claim, Phase 2 deferred,
+  active GPS work routed to this feature runbook, and no claim that Chunks 4–6 or
+  live adapters are present. They already satisfied that contract; the only
+  reconciliation needed was recording this HIGH-finding resolution (this note and
+  the checklist line below).
+
+Checks actually run for this HIGH-finding work (all exit 0):
+
+- `pytest tests/unit/test_gps_failure_phase1.py tests/unit/test_gps_mechanism_gate.py
+  tests/unit/test_gps_failure_mavlink.py tests/unit/test_gps_failure_readiness.py`
+  → **150 passed, 178 subtests passed** (132 → 150 with the new H1
+  regression tests, including the trigger-metadata follow-up below).
+- Airspeed regression `pytest tests/unit/test_airspeed_failure_phase1.py
+  tests/unit/test_airspeed_mechanism_gate.py` → **41 passed**.
+- Focused `pyright` over the GPS plugin, CLI, and four test files →
+  **0 errors, 0 warnings, 0 informations** (a new-pyright-version notice is not a
+  code failure).
+- `run_gps_failure --list-cases | --probe-schema | --preflight |
+  --dry-run --case nominal` → all exit 0.
+- `git diff --check` and `make doctor` → pass.
+
+Previously resolved blocker contracts were re-checked and did not regress:
+trigger authorization, preview isolation, substantive analyzer evidence,
+contradiction-safe manifest accounting, the `gps_injection.json` artifact schema,
+and atomic MAVLink batch prevalidation all retain their tests and pass.
+
+### H1 follow-up: missing trigger metadata (found in HIGH-finding re-review)
+
+A re-review of the first H1 commit found the fail-closed contract still open for
+one input class: a fault-writing `TestCase` with `parameters["trigger"] = None`
+(or missing/empty) was accepted as ready and, with a valid monitor trace,
+executed parameter writes (`SIM_GPS1_GLTCH_X/Y/Z`). The first fix normalized the
+`trigger` through `_as_event_mapping`, which maps `None -> {}`; that is correct
+for a `trigger_event` preview but wrong for the required trigger *metadata* of a
+fault case. Fix: `_resolve_case_trigger` now treats a missing / `None` / empty /
+non-mapping trigger on any non-nominal case as malformed public input and fails
+closed (`missing required trigger metadata for fault case`), while nominal
+no-write cases still need no trigger. Verified on the current branch: `trigger`
+`None`/missing/empty on `step_glitch`/`slow_drift`/`hard_denial`/`jamming` now
+return `ready_to_inject=False`, empty payload/rules, no restore, and zero
+connection calls even with a valid trace; no generated case is affected (every
+fault case carries the populated ADR-0020 trigger). Regression coverage added to
+`GpsFailureMalformedRecipeFailClosedTests`.
+
+Acceptance state: the three original HIGH findings are now closed. Phase 1
+acceptance still remains pending the remaining MEDIUM/LOW review findings and the
+code-review sign-off item below; this note does not itself close Phase 1.
+
 ## Phase 1 Acceptance Checklist (final gate for closing Phase 1)
 
 Phase 1 closes to Accepted only when every item below is checked. This is a
@@ -227,8 +333,10 @@ no-SITL acceptance: it gates the plugin foundation, not any live result.
   `test_gps_failure_readiness`).
 - [~] Code review of Chunks 4–6 recorded and findings resolved. The six
   confirmed BLOCKERs are resolved (see "Phase 1 Strict-Review Blocker Resolution
-  (2026-07-13)" above); any remaining HIGH/MEDIUM/LOW review findings still gate
-  acceptance and are not yet cleared.
+  (2026-07-13)" above) and the three HIGH findings are now closed (see "Phase 1
+  Strict-Review HIGH-Finding Resolution (2026-07-13)" above); any remaining
+  MEDIUM/LOW review findings and the formal review sign-off still gate acceptance
+  and are not yet cleared.
 - [x] Docs/index status lines reconciled to the implemented no-SITL behavior
   (trigger-gated executable plans, substantive behavior evidence,
   contradiction-safe manifest, complete artifact schema, atomic MAVLink batch);
