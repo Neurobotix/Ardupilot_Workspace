@@ -29,6 +29,8 @@ from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure import defaults, glitc
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.analyzers import (  # noqa: E402
     artifact_schema,
     classify_observation,
+    required_attempt_artifacts,
+    validate_artifact_against_schema,
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.case_generator import (  # noqa: E402
     GpsFailureCaseGenerator,
@@ -49,6 +51,8 @@ from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.plugin import (  # noq
     build_plugin,
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.stimulus import (  # noqa: E402
+    build_injection_artifact,
+    build_live_plan_preview,
     compare_readback,
 )
 
@@ -121,13 +125,25 @@ def _cases(config: GpsFailureConfig | None = None):
 
 
 def _valid_observation(**updates: Any) -> dict[str, Any]:
+    """A cleanly measured nominal observation with substantive behavior evidence.
+
+    Nominal must be established by positive evidence (fused, gap within band, no
+    growth, attitude in band, no failsafe/mode change) — never by the absence of
+    an adverse flag.
+    """
     observation: dict[str, Any] = {
         "injection_triggered": True,
         "injection_readback_ok": True,
         "post_injection_s": 90.0,
         "required_artifacts_present": True,
         "mechanism_evidence": True,
-        "behavior_evidence": True,
+        "fused": True,
+        "horizontal_gap_m": 0.5,
+        "gap_growing": False,
+        "gap_within_nominal_band": True,
+        "attitude_in_band": True,
+        "failsafe": False,
+        "mode_change": False,
     }
     observation.update(updates)
     return observation
@@ -345,6 +361,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertEqual("phase1_no_sitl", data["phase"])
         self.assertTrue(data["plugin_constructed"])
         self.assertFalse(data["launch_performed"])
+        self.assertFalse(data["live_readback_performed"])
         self.assertEqual("hard_denial", data["case"]["parameters"]["fault_type"])
         self.assertEqual(
             [str(path) for path in EXPECTED_PARAM_STACK],
@@ -534,6 +551,24 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             places=12,
         )
 
+    def test_stimulus_live_plan_preview_is_plan_only_and_no_launch(self) -> None:
+        case = GpsFailureCaseGenerator(GpsFailureConfig()).get_case(
+            "slow_drift_0p5_mps"
+        )
+        plan = build_live_plan_preview(
+            case,
+            {
+                "trigger_latitude_deg": 0.0,
+                "trigger_time_s": 12.0,
+                "elapsed_since_trigger_s": 90.0,
+            },
+        )
+
+        self.assertTrue(plan.ready_to_inject, plan.as_dict())
+        self.assertFalse(plan.launch_performed)
+        self.assertFalse(plan.live_readback_performed)
+        self.assertEqual(set(plan.injection_payload), set(plan.readback_rules))
+
     def test_dry_run_preview_rejects_nan_inputs_without_nan_json(self) -> None:
         env = dict(os.environ)
         env["PYTHONPATH"] = str(SRC)
@@ -709,6 +744,74 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertNotIn("gps_signal_metrics.json", schemas)
         self.assertNotIn("altitude_envelope.json", schemas)
 
+    def test_required_artifact_set_is_exact_and_locked(self) -> None:
+        self.assertEqual(
+            [
+                "gps_injection.json",
+                "gps_behavior_summary.json",
+                "ekf_innovation_metrics.json",
+                "truth_vs_belief.json",
+                "mode_timeline.json",
+                "attitude_altitude_envelope.json",
+            ],
+            required_attempt_artifacts(),
+        )
+        self.assertEqual(
+            list(defaults.REQUIRED_ATTEMPT_ARTIFACTS), required_attempt_artifacts()
+        )
+
+    def test_gps_injection_json_has_schema_covering_required_fields(self) -> None:
+        schemas = artifact_schema()
+        self.assertIn("gps_injection.json", schemas)
+        required_fields = schemas["gps_injection.json"]["required_fields"]
+        for field_name in (
+            "case_id",
+            "fault_type",
+            "requested_payload",
+            "injection_schedule",
+            "fault_recipe",
+            "payload_resolution",
+            "reset_payload",
+            "trigger",
+            "readback_rules",
+            "readback_status_shape",
+            "live_plan_contract",
+        ):
+            self.assertIn(field_name, required_fields)
+
+    def test_every_required_artifact_has_a_schema_entry(self) -> None:
+        schemas = artifact_schema()
+        for name in required_attempt_artifacts():
+            self.assertIn(name, schemas, name)
+
+    def test_produced_injection_artifact_satisfies_declared_schema(self) -> None:
+        for case in _cases():
+            with self.subTest(case_id=case.case_id):
+                artifact = build_injection_artifact(case)
+                self.assertEqual(
+                    [],
+                    validate_artifact_against_schema("gps_injection.json", artifact),
+                )
+                # The produced artifact must serialize as strict JSON.
+                encoded = json.dumps(artifact, allow_nan=False, sort_keys=True)
+                self.assertNotIn("NaN", encoded)
+                self.assertNotIn("Infinity", encoded)
+
+    def test_injection_artifact_missing_critical_fields_fails_validation(self) -> None:
+        case = GpsFailureCaseGenerator(GpsFailureConfig()).get_case("hard_denial_15s")
+        artifact = build_injection_artifact(case)
+        for critical in ("trigger", "readback_rules", "requested_payload"):
+            with self.subTest(critical=critical):
+                broken = {k: v for k, v in artifact.items() if k != critical}
+                missing = validate_artifact_against_schema("gps_injection.json", broken)
+                self.assertIn(critical, missing)
+
+    def test_unknown_artifact_name_fails_closed(self) -> None:
+        self.assertEqual(
+            ["<unknown-artifact:not_a_real_artifact.json>"],
+            validate_artifact_against_schema("not_a_real_artifact.json", {}),
+        )
+
     def test_plugin_constructs_through_registry_without_launch(self) -> None:
         self.assertIn("gps_failure", PLUGINS)
         plugin = cast(Any, PLUGINS["gps_failure"](launch_stack=False))
@@ -778,12 +881,87 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             {
                 **base,
                 "fused": True,
-                "truth_belief_gap_growing": True,
+                "horizontal_gap_m": 120.0,
+                "gap_growing": True,
+                "gap_within_nominal_band": False,
                 "failsafe": False,
             }
         )
         self.assertTrue(silent["accepted_observation"])
         self.assertEqual("silent_drift", silent["behavior_class"])
+
+    def test_behavior_evidence_marker_only_is_rejected_as_incomplete(self) -> None:
+        # A bare marker with no substantive truth-vs-belief / attitude fields must
+        # NOT fall through to nominal; it is an incomplete analysis.
+        marker_only = classify_observation(
+            {
+                "injection_triggered": True,
+                "injection_readback_ok": True,
+                "post_injection_s": 90.0,
+                "required_artifacts_present": True,
+                "mechanism_evidence": True,
+                "behavior_evidence": True,
+            }
+        )
+        self.assertFalse(marker_only["accepted_observation"])
+        self.assertEqual("analysis_incomplete", marker_only["behavior_class"])
+        self.assertEqual("missing_behavior_fields", marker_only["reason"])
+
+    def test_each_accepted_behavior_class_requires_its_own_evidence(self) -> None:
+        base = _valid_observation()
+        cases = [
+            # A rejected/reset fix is not fused; drop the nominal fused flag.
+            ({"fused": False, "reset_event": True}, "reset_captured"),
+            ({"fused": False, "pos_test_ratio_rejected": True}, "detected_rejected"),
+            ({"mode_change": True}, "autopilot_contained"),
+            ({"failsafe": True}, "autopilot_contained"),
+            (
+                {
+                    "horizontal_gap_m": 90.0,
+                    "gap_growing": True,
+                    "gap_within_nominal_band": False,
+                },
+                "silent_drift",
+            ),
+        ]
+        for updates, expected in cases:
+            with self.subTest(expected=expected):
+                summary = classify_observation({**base, **updates})
+                self.assertTrue(summary["accepted_observation"], summary)
+                self.assertEqual(expected, summary["behavior_class"])
+
+    def test_contradictory_and_malformed_behavior_evidence_is_rejected(self) -> None:
+        base = _valid_observation()
+        contradictory = classify_observation(
+            {**base, "fused": True, "pos_test_ratio_rejected": True}
+        )
+        self.assertFalse(contradictory["accepted_observation"])
+        self.assertEqual("analysis_incomplete", contradictory["behavior_class"])
+        self.assertEqual("contradictory_fused_and_rejected", contradictory["reason"])
+
+        non_bool = classify_observation({**base, "gap_growing": "yes"})
+        self.assertFalse(non_bool["accepted_observation"])
+        self.assertEqual("analysis_incomplete", non_bool["behavior_class"])
+        self.assertEqual("invalid_behavior_field_gap_growing", non_bool["reason"])
+
+        non_finite = classify_observation({**base, "horizontal_gap_m": math.inf})
+        self.assertFalse(non_finite["accepted_observation"])
+        self.assertEqual("analysis_incomplete", non_finite["behavior_class"])
+        self.assertEqual("non_finite_behavior_field_horizontal_gap_m", non_finite["reason"])
+
+        unsupported = classify_observation(
+            {**base, "behavior_fields": {"made_up_behavior_flag": True}}
+        )
+        self.assertFalse(unsupported["accepted_observation"])
+        self.assertEqual("unsupported_behavior_fields", unsupported["reason"])
+
+    def test_missing_mechanism_evidence_is_incomplete(self) -> None:
+        base = _valid_observation()
+        base.pop("mechanism_evidence")
+        summary = classify_observation(base)
+        self.assertFalse(summary["accepted_observation"])
+        self.assertEqual("analysis_incomplete", summary["behavior_class"])
+        self.assertEqual("missing_mechanism_fields", summary["reason"])
 
     def test_analysis_incomplete_for_short_window_and_missing_artifacts(self) -> None:
         short_window = classify_observation(
@@ -848,11 +1026,16 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertEqual("analysis_incomplete", missing_behavior["behavior_class"])
         self.assertEqual("missing_behavior_fields", missing_behavior["reason"])
 
-        explicit_behavior_false = classify_observation(
-            _valid_observation(behavior_evidence=False)
+        # Dropping a required substantive behavior field (attitude band) from an
+        # otherwise-valid observation must fail closed as incomplete.
+        partial_behavior = _valid_observation()
+        partial_behavior.pop("attitude_in_band")
+        partial_behavior_result = classify_observation(partial_behavior)
+        self.assertFalse(partial_behavior_result["accepted_observation"])
+        self.assertEqual(
+            "analysis_incomplete", partial_behavior_result["behavior_class"]
         )
-        self.assertFalse(explicit_behavior_false["accepted_observation"])
-        self.assertEqual("analysis_incomplete", explicit_behavior_false["behavior_class"])
+        self.assertEqual("missing_behavior_fields", partial_behavior_result["reason"])
 
         terminal_short = classify_observation(
             {
@@ -971,6 +1154,118 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                 )
             )
         )
+
+    def test_manifest_requires_verdict_and_analysis_behavior_to_agree(self) -> None:
+        # Headline Blocker-4 case: verdict says loss_of_control but the
+        # authoritative analysis says detected_rejected -> must NOT be accepted.
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(
+                    verdict={
+                        "class": "success",
+                        "reason": "loss_of_control",
+                        "metadata": {"accepted_observation": True},
+                    },
+                    analysis_results=[
+                        {
+                            "ok": True,
+                            "summary": {
+                                "accepted_observation": True,
+                                "behavior_class": "detected_rejected",
+                                "observation_quality_class": "valid_detected_rejection",
+                            },
+                        }
+                    ],
+                )
+            )
+        )
+        # Multiple incompatible analysis behavior classes fail closed.
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(
+                    analysis_results=[
+                        {
+                            "ok": True,
+                            "summary": {
+                                "accepted_observation": True,
+                                "behavior_class": "loss_of_control",
+                            },
+                        },
+                        {
+                            "ok": True,
+                            "summary": {
+                                "accepted_observation": True,
+                                "behavior_class": "detected_rejected",
+                            },
+                        },
+                    ]
+                )
+            )
+        )
+        # Unknown behavior class fails closed.
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(
+                    verdict={
+                        "class": "success",
+                        "reason": "made_up_class",
+                        "metadata": {"accepted_observation": True},
+                    },
+                    analysis_results=[
+                        {
+                            "ok": True,
+                            "summary": {
+                                "accepted_observation": True,
+                                "behavior_class": "made_up_class",
+                            },
+                        }
+                    ],
+                )
+            )
+        )
+        # A missing verdict accepted-observation metadata flag fails closed even
+        # when everything else agrees.
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(
+                    verdict={
+                        "class": "success",
+                        "reason": "loss_of_control",
+                        "metadata": {},
+                    }
+                )
+            )
+        )
+        # Every legitimate accepted behavior class, in agreement, is accepted.
+        for behavior in (
+            "nominal",
+            "silent_drift",
+            "detected_rejected",
+            "reset_captured",
+            "autopilot_contained",
+            "loss_of_control",
+        ):
+            with self.subTest(behavior=behavior):
+                self.assertTrue(
+                    accepted_observation_from_attempt(
+                        _accepted_attempt(
+                            verdict={
+                                "class": "success",
+                                "reason": behavior,
+                                "metadata": {"accepted_observation": True},
+                            },
+                            analysis_results=[
+                                {
+                                    "ok": True,
+                                    "summary": {
+                                        "accepted_observation": True,
+                                        "behavior_class": behavior,
+                                    },
+                                }
+                            ],
+                        )
+                    )
+                )
 
     def test_config_rejects_invalid_ladders_and_repeat_contracts(self) -> None:
         with self.assertRaisesRegex(ValueError, "jamming_repeats must be >= 5"):

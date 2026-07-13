@@ -17,6 +17,7 @@ from ..plugins.gps_failure import build_plugin
 from ..plugins.gps_failure import defaults, glitch
 from ..plugins.gps_failure.case_generator import GpsFailureCaseGenerator
 from ..plugins.gps_failure.config import GpsFailureConfig
+from ..plugins.gps_failure.readiness import build_readiness_report
 from ..plugins.gps_failure.stimulus import build_injection_artifact
 
 
@@ -26,6 +27,7 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     actions.add_argument("--list-cases", action="store_true")
     actions.add_argument("--dry-run", action="store_true")
     actions.add_argument("--probe-schema", action="store_true")
+    actions.add_argument("--preflight", action="store_true")
     parser.add_argument("--case", dest="case_id")
     parser.add_argument("--campaign-root", type=Path, default=None)
     parser.add_argument("--reference-latitude-deg", type=float, default=None)
@@ -73,6 +75,11 @@ def main(argv: Iterable[str] | None = None) -> None:
         print(json.dumps(defaults.parameter_schema(), indent=2, sort_keys=True))
         return
 
+    if args.preflight:
+        report = build_readiness_report(plugin)
+        print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
+        return
+
     if args.list_cases:
         for case in plugin.case_generator.iter_cases():
             print(case.case_id)
@@ -98,6 +105,7 @@ def main(argv: Iterable[str] | None = None) -> None:
             "injection_artifact": build_injection_artifact(case),
             "parameter_schema": defaults.parameter_schema(),
             "launch_performed": False,
+            "live_readback_performed": False,
         }
         if args.reference_latitude_deg is not None:
             try:

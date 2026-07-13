@@ -23,9 +23,27 @@ Current status:
 - Phase 1 Chunk 3 is implemented pending review: the locked five-item,
   approximately 36 km one-way mission, dedicated GPS parameter overlay,
   default-stack integration, and static/no-SITL contract tests exist.
-- Full Phase 1 remains open. No live run or parameter readback has occurred;
-  realized straight-leg duration, BIN analysis, and evidence claims remain
-  open.
+- Phase 1 Chunk 4 is implemented pending review: a synthetic no-SITL mechanism
+  gate evaluates decoded EKF-like records at the locked `posTestRatio >= 1.0`
+  boundary, with reset evidence distinct from simple rejection.
+- Phase 1 Chunk 5 is implemented pending review: a no-SITL runtime/MAVLink
+  contract layer builds live injection plans from trigger metadata and verifies
+  parameter write/readback behavior with fake connections.
+- Phase 1 Chunk 6 is implemented pending review: the lane is wired into the
+  shared suite path, with a `--preflight` integration-readiness report that
+  reports the SuiteRunner seams, manifest/artifact contract, parameter stack,
+  and explicit live blockers (`ready_for_live_run=false`).
+- A 2026-07-13 strict-review pass resolved six confirmed Phase-1 BLOCKERs
+  (no-SITL): trigger-gated executable injection plans (preview stays
+  non-executable), substantive behavior evidence in the classifier,
+  contradiction-safe manifest acceptance, the complete artifact schema including
+  `gps_injection.json`, and atomic MAVLink batch prevalidation. See the feature
+  runbook's `review.md`.
+- Full Phase 1 remains open (see the acceptance checklist in the feature
+  runbook's `review.md`); the strict-review blockers are resolved but acceptance
+  is still pending remaining review findings. No live run or parameter readback
+  has occurred; realized straight-leg duration, BIN/log analysis, and evidence
+  claims remain open.
 
 ## The Knee
 

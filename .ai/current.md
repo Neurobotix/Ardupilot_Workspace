@@ -150,6 +150,22 @@ injection. A 2026-06-07 blocker review removed the former sign-flip case from th
 case set because default `ARSPD_TUBE_ORDR=2`/AUTO uses absolute pressure, so
 that payload is not a sustained collapse fault on this stack.
 
+GPS failure behavior lane (Lane 3): Phase 0 design is locked (2026-07-06; five
+Proposed ADRs 0017–0021). The Phase 1 no-SITL foundation (Chunks 1–6: scaffold,
+payload semantics, static mission/overlay, synthetic mechanism gate,
+runtime/MAVLink contract, `--preflight` integration readiness) is implemented.
+On 2026-07-13 a strict Phase 1 review's six confirmed BLOCKERs were resolved
+no-SITL with regression tests: (2) executable live injection plans are now gated
+by ADR-0020 trigger evidence validated through the canonical monitor helper,
+with preview strictly non-executable; (3) the analyzer requires substantive
+behavior-tier evidence, not a marker boolean; (4) manifest acceptance requires
+verdict/analysis behavior agreement and fails closed on contradictions;
+(5) `gps_injection.json` is in the artifact schema and reported by readiness;
+(6) MAVLink batch writes are atomically prevalidated (zero writes on any invalid
+entry). No live SITL/Gazebo run, real parameter readback, BIN/log parsing, or
+evidence claim exists; Phase 1 acceptance remains pending the remaining review
+findings. See `governance/runbooks/features/gps_failure_behavior/`.
+
 Additional active feature work: the `test_suite` migration completed its Phase 3 sequence
 (3A–3G) on 2026-06-01. The staged `wind_matrix` plugin is fully zero-legacy
 (environment, MAVLink control/monitor, and wind injection all plugin-owned) and

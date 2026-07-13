@@ -10,6 +10,7 @@ from ...core.models import AttemptContext, TestCase
 from ...core.stimulus import StimulusAdapter
 from . import defaults
 from .config import GpsFailureConfig
+from .runtime import GpsInjectionPlan, build_live_injection_plan
 
 
 @dataclass
@@ -49,7 +50,34 @@ def build_injection_artifact(case: TestCase) -> dict[str, Any]:
             "reset": "pending_phase2",
             "missing_params_are_pre_injection_failure": True,
         },
+        "live_plan_contract": {
+            "preview_helper": (
+                "sim_ard_gaw.campaigns.test_suite.plugins.gps_failure."
+                "runtime.build_live_injection_plan"
+            ),
+            "authorized_helper": (
+                "sim_ard_gaw.campaigns.test_suite.plugins.gps_failure."
+                "runtime.build_authorized_injection_plan"
+            ),
+            "plan_only": True,
+            "preview_is_not_executable": True,
+            "execution_requires_validated_trigger": case.parameters["fault_type"]
+            != "nominal",
+            "requires_trigger_event": bool(
+                fault_recipe and fault_recipe.get("requires_live_resolution")
+            ),
+            "live_readback_performed": False,
+        },
     }
+
+
+def build_live_plan_preview(
+    case: TestCase,
+    trigger_event: dict[str, Any],
+) -> GpsInjectionPlan:
+    """Build a live injection plan without executing MAVLink writes."""
+
+    return build_live_injection_plan(case, trigger_event)
 
 
 def payload_resolution_status(fault_recipe: dict[str, Any] | None) -> dict[str, Any]:

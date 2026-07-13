@@ -20,6 +20,20 @@ _BAD_REASONS = {
     "pre_injection_failure",
 }
 
+# Behavior classes that can be an *accepted* observation. Adverse but
+# measurement-valid behaviors count as accepted; analysis/discard states never
+# do. Anything outside this set is an unknown class and fails closed.
+_ACCEPTABLE_BEHAVIOR_CLASSES = frozenset(
+    {
+        "nominal",
+        "silent_drift",
+        "detected_rejected",
+        "reset_captured",
+        "autopilot_contained",
+        "loss_of_control",
+    }
+)
+
 
 class GpsFailureManifest(Manifest):
     def __init__(self, campaign_root: Path) -> None:
@@ -79,8 +93,13 @@ def accepted_observation_from_attempt(attempt: dict[str, Any]) -> bool:
     """Authoritative Phase-1 GPS observation acceptance rule.
 
     Accepted means the measurement was valid enough to characterize behavior. It
-    does not mean the aircraft behaved nominally. All terminal/verdict/analysis
-    signals must agree; contradictory or missing analysis fails closed.
+    does not mean the aircraft behaved nominally: adverse but measurement-valid
+    behaviors (``loss_of_control``, ``autopilot_contained``, ...) can still be
+    accepted. Every acceptance-bearing signal must *agree*; a contradiction
+    between the verdict's behavior and the authoritative analysis behavior, an
+    analysis-incomplete state, a pre-injection failure, conflicting top-level or
+    verdict metadata, multiple incompatible behavior classes, or an unknown
+    behavior class all fail closed.
     """
     if not _top_level_status_valid_if_present(attempt):
         return False
@@ -93,14 +112,17 @@ def accepted_observation_from_attempt(attempt: dict[str, Any]) -> bool:
     if not _valid_success_verdict(verdict):
         return False
     metadata = verdict.get("metadata")
-    if isinstance(metadata, dict) and metadata.get("accepted_observation") is False:
+    # The verdict must carry explicit accepted-observation metadata set to True.
+    if not isinstance(metadata, dict) or metadata.get("accepted_observation") is not True:
         return False
 
     results = attempt.get("analysis_results")
     if not isinstance(results, list) or not results:
         return False
 
-    accepted_result_seen = False
+    # Every required GPS analysis result must be ok=True, explicitly accepted,
+    # and agree on a single authoritative behavior class.
+    analysis_behavior_classes: set[str] = set()
     for result in results:
         if not isinstance(result, dict):
             return False
@@ -113,9 +135,27 @@ def accepted_observation_from_attempt(attempt: dict[str, Any]) -> bool:
             return False
         if summary.get("accepted_observation") is not True:
             return False
-        accepted_result_seen = True
+        behavior = summary.get("behavior_class")
+        if not isinstance(behavior, str) or behavior not in _ACCEPTABLE_BEHAVIOR_CLASSES:
+            return False
+        analysis_behavior_classes.add(behavior)
 
-    return accepted_result_seen
+    # Multiple incompatible behavior classes across analysis results fail closed.
+    if len(analysis_behavior_classes) != 1:
+        return False
+    authoritative_behavior = next(iter(analysis_behavior_classes))
+
+    # The verdict's behavior (its reason) must agree with the authoritative
+    # analysis behavior class.
+    verdict_behavior = verdict.get("reason")
+    if not isinstance(verdict_behavior, str):
+        return False
+    if verdict_behavior not in _ACCEPTABLE_BEHAVIOR_CLASSES:
+        return False
+    if verdict_behavior != authoritative_behavior:
+        return False
+
+    return True
 
 
 def _top_level_status_valid_if_present(attempt: dict[str, Any]) -> bool:

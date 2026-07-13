@@ -5,11 +5,14 @@ phase.
 
 Feature slug: `gps_failure_behavior`
 Current status: Phase 0 design is locked. Phase 1 no-SITL foundation Chunks
-1-2 are implemented and this branch is undergoing foundation hardening. Phase 1
-Chunk 3 mission/overlay integration is implemented pending review. Full Phase 1
-remains open. No live SITL/runtime, live parameter readback, MAVLink,
-mechanism-gate extraction, BIN parsing, campaign execution, or scientific
-evidence claim exists.
+1-6 are implemented pending review: scaffold, payload semantics, static
+mission/parameter-stack integration, synthetic mechanism-gate evaluation, a
+fake-testable runtime/MAVLink parameter contract, and integration-readiness
+wiring into the shared suite path (a `--preflight` readiness report). Full
+Phase 1 remains open (see the acceptance checklist in `review.md`). No live
+SITL/runtime execution, real parameter readback, live MAVLink connection,
+BIN/log mechanism extraction, campaign execution, or scientific evidence claim
+exists.
 
 ## Read Order for New Work
 
@@ -53,9 +56,13 @@ through live Phase-2 measurement.
 | Path | Purpose |
 | --- | --- |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/` | Plugin package, built from the `airspeed_failure` template |
-| `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | CLI entry point |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/readiness.py` | No-SITL integration-readiness report (Chunk 6) |
+| `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | CLI entry point (`--list-cases`, `--dry-run`, `--probe-schema`, `--preflight`) |
 | `src/sim_ard_gaw/campaigns/test_suite/cli/_registry.py` | Registry key `gps_failure` |
 | `tests/unit/test_gps_failure_phase1.py` | No-SITL unit tests |
+| `tests/unit/test_gps_mechanism_gate.py` | Synthetic mechanism-gate unit tests |
+| `tests/unit/test_gps_failure_mavlink.py` | No-SITL MAVLink/runtime contract tests with fake connections |
+| `tests/unit/test_gps_failure_readiness.py` | No-SITL integration-readiness and `--preflight` CLI tests |
 
 ## Mission and Config
 
