@@ -39,6 +39,11 @@ Current status:
   contradiction-safe manifest acceptance, the complete artifact schema including
   `gps_injection.json`, and atomic MAVLink batch prevalidation. See the feature
   runbook's `review.md`.
+- Also on 2026-07-13, dedicated launch identities `plane-gps` /
+  `gazebo-plane-gps` were added (structural only) to replace the earlier
+  incorrect use of the CTE/airspeed targets, which loaded the airspeed overlay
+  and the local override. See the Launch Identities section below and ADR-0021's
+  amendment. No live smoke of these targets has occurred.
 - Full Phase 1 remains open (see the acceptance checklist in the feature
   runbook's `review.md`); the strict-review blockers are resolved but acceptance
   is still pending remaining review findings. No live run or parameter readback
@@ -91,6 +96,24 @@ while reporting healthy.
 Characterize, not gate. A run is never PASS/FAIL. **Accepted** = measurement
 validity only; **behavior class** = which band it landed in. The knee is the
 result of the campaign, not a bar to clear.
+
+## Launch Identities
+
+The lane uses dedicated launch targets `plane-gps` and `gazebo-plane-gps`
+(corrected 2026-07-13 from the CTE/airspeed targets, which load a different
+parameter stack):
+
+- `plane-gps` loads exactly `config/vehicles/plane_base.parm ->
+  config/overlays/plane_gps.parm` — no airspeed overlay and no local plane
+  override — wipes EEPROM, and emits `udp:127.0.0.1:14551`.
+- `gazebo-plane-gps` reuses the sensor-neutral base runway world
+  `assets/worlds/mini_talon_runway.sdf` (GPS/NavSat, calm, no wind publisher, no
+  airspeed sensor, no LiDAR bridge) as a dedicated identity, not an alias of
+  `gazebo-plane`.
+
+These targets are structurally implemented with no-SITL structural tests only;
+they are **not** live-smoke verified. See ADR-0021 (2026-07-13 amendment) and
+`docs/operations/gps_failure_runbook.md`.
 
 ## Output Paths
 

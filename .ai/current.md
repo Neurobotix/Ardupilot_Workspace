@@ -162,9 +162,18 @@ behavior-tier evidence, not a marker boolean; (4) manifest acceptance requires
 verdict/analysis behavior agreement and fails closed on contradictions;
 (5) `gps_injection.json` is in the artifact schema and reported by readiness;
 (6) MAVLink batch writes are atomically prevalidated (zero writes on any invalid
-entry). No live SITL/Gazebo run, real parameter readback, BIN/log parsing, or
-evidence claim exists; Phase 1 acceptance remains pending the remaining review
-findings. See `governance/runbooks/features/gps_failure_behavior/`.
+entry). Also on 2026-07-13, before Phase 2, dedicated launch identities
+`plane-gps` and `gazebo-plane-gps` were added (structural only) to replace the
+earlier incorrect `plane-cte` / `gazebo-plane-cte` GPS references: `plane-gps`
+loads `plane_base.parm -> plane_gps.parm` only (no airspeed overlay, local
+override excluded unconditionally, wipes EEPROM), and `gazebo-plane-gps` reuses
+the sensor-neutral base `mini_talon_runway.sdf` world by reference (GPS/NavSat,
+calm; no world duplication). Covered by no-SITL structural tests
+(`tests/unit/test_gps_launch_targets.py`) and recorded in ADR-0021's 2026-07-13
+amendment; existing CTE/airspeed targets are unchanged. No live SITL/Gazebo run,
+real parameter readback, BIN/log parsing, or evidence claim exists — including no
+live smoke of the new targets; Phase 1 acceptance remains pending the remaining
+review findings. See `governance/runbooks/features/gps_failure_behavior/`.
 
 Additional active feature work: the `test_suite` migration completed its Phase 3 sequence
 (3A–3G) on 2026-06-01. The staged `wind_matrix` plugin is fully zero-legacy

@@ -156,6 +156,14 @@ def _parameter_stack(config: GpsFailureConfig) -> dict[str, Any]:
     return {
         "effective_param_stack": [str(path) for path in config.effective_param_stack],
         "required_sim_gps_params": list(defaults.REQUIRED_SIM_GPS_PARAMS),
+        "sitl_target": defaults.SITL_TARGET,
+        "gazebo_target": defaults.GAZEBO_TARGET,
+        "local_override_excluded": True,
+        "airspeed_overlay_excluded": True,
+        "launch_target_note": (
+            "dedicated GPS identities plane-gps / gazebo-plane-gps; structurally "
+            "implemented, not yet live-smoke verified (Phase 2)"
+        ),
         "phase1_probe_mode": (
             "name-existence validation only; live SITL probe is Phase 2"
         ),

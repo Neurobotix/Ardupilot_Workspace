@@ -244,8 +244,13 @@ generator takes a rate list, so extending is a longer input, no code change.
     first-edge-latch logic transfers unchanged.
 
   Finalized in Phase 1; see the Mission Design ADR in `design_adrs.md`.
-- SITL target: `plane-cte`
-- Gazebo target: `gazebo-plane-cte`
+- SITL target: `plane-gps` (dedicated identity; loads `plane_base.parm ->
+  plane_gps.parm` only, no airspeed overlay and no local override, wipes EEPROM).
+  Corrected 2026-07-13 from `plane-cte`, which is the CTE/airspeed lane; see the
+  Dedicated Launch Identities amendment in `design_adrs.md` and ADR-0021.
+- Gazebo target: `gazebo-plane-gps` (dedicated identity reusing the
+  sensor-neutral base `mini_talon_runway.sdf` world; GPS/NavSat, calm, no
+  wind/airspeed/LiDAR). Structurally implemented, not yet live-smoke verified.
 - Base params: `config/vehicles/plane_base.parm` (sets `AHRS_EKF_TYPE 3`,
   `EK3_ENABLE 1`; does NOT set the four knee params or `EK3_SRC*`).
 - GPS overlay: a new `config/overlays/plane_gps.parm` — **not**

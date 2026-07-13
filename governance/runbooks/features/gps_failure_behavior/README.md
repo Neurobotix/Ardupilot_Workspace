@@ -72,6 +72,15 @@ through live Phase-2 measurement.
 | `config/vehicles/plane_base.parm` | Base vehicle parameters |
 | `config/overlays/plane_gps.parm` | GPS overlay pinning `EK3_POS_I_GATE`, `EK3_GLITCH_RAD`, `FS_EKF_THRESH`, `EK3_GPS_CHECK`, `EK3_SRC*`, calm wind |
 
+## Launch Targets
+
+Dedicated identities `plane-gps` and `gazebo-plane-gps` (added structurally
+2026-07-13; not live-smoke verified). `plane-gps` loads `plane_base.parm ->
+plane_gps.parm` only (no airspeed overlay, no local override, wipes EEPROM);
+`gazebo-plane-gps` reuses the sensor-neutral base `mini_talon_runway.sdf` world.
+These replaced the earlier incorrect `plane-cte` / `gazebo-plane-cte` references.
+See ADR-0021's 2026-07-13 amendment and `design_adrs.md`.
+
 ## Human Docs
 
 | Path | Purpose |

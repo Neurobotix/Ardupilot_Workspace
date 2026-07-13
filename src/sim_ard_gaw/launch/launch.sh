@@ -42,6 +42,7 @@ RUN_ONE_ENTRYPOINT="env/bin/python3 src/sim_ard_gaw/campaigns/wind_matrix/run_on
 # Parameter Paths
 PLANE_BASE_PARAM_FILE="$CONFIG_DIR/vehicles/plane_base.parm"
 PLANE_AIRSPEED_PARAM_FILE="$CONFIG_DIR/overlays/plane_airspeed.parm"
+PLANE_GPS_PARAM_FILE="$CONFIG_DIR/overlays/plane_gps.parm"
 PLANE_LIDAR_PARAM_FILE="$CONFIG_DIR/overlays/plane_lidar.parm"
 PLANE_AIRSPEED_LIDAR_PARAM_FILE="$CONFIG_DIR/campaigns/mini_talon_airspeed_lidar/plane_full.parm"
 PLANE_ALTITUDE_WIND_PARAM_FILE="$CONFIG_DIR/campaigns/mini_talon_altitude_wind/plane_full.parm"
@@ -89,6 +90,7 @@ PLANE_AIRSPEED_LIDAR_MISSION="$MISSIONS_DIR/mini_talon_airspeed_lidar/staircase_
 # Lane	                            Effective Parameter Stack
 # plane	                            plane_base.parm → .private/config/plane_params.local.parm
 # plane-airspeed / plane-cte	    plane_base.parm → plane_airspeed.parm → local override
+# plane-gps	                        plane_base.parm → plane_gps.parm (NO airspeed overlay, NO local override)
 # plane-lidar	                    plane_base.parm → plane_lidar.parm → local override
 # plane-staircase	                plane_base.parm → plane_lidar.parm → staircase_plane_params.parm → local override
 # plane-airspeed-lidar	            plane_base.parm → mini_talon_airspeed_lidar/plane_full.parm → local override
@@ -315,6 +317,24 @@ build_rebuild_param_args() {
     fi
 }
 
+# GPS failure lane stack: plane_base.parm -> plane_gps.parm ONLY.
+# Deliberately does NOT reuse build_plane_param_args (which appends the local
+# plane override) and does NOT load the airspeed overlay. ADR-0021 rejects the
+# airspeed overlay for GPS, and the local override must never silently perturb
+# the governed knee params. The exclusion is explicit and printed.
+build_plane_gps_param_args() {
+    PLANE_PARAM_ARGS=()
+
+    append_plane_param_file "$PLANE_BASE_PARAM_FILE"
+    append_plane_param_file "$PLANE_GPS_PARAM_FILE"
+
+    if [ -f "$PLANE_PARAM_LOCAL_OVERRIDE" ]; then
+        print_info "GPS lane intentionally excludes the local plane override: $PLANE_PARAM_LOCAL_OVERRIDE"
+    else
+        print_info "GPS lane: no local plane override present (and it would be excluded regardless): $PLANE_PARAM_LOCAL_OVERRIDE"
+    fi
+}
+
 build_sitl_runtime_args() {
     local target="$1"
     local run_dir="$WORKSPACE_DIR/var/runs/sitl/$target"
@@ -505,6 +525,35 @@ launch_plane_airspeed() {
     launch_plane_cte
 }
 
+launch_plane_gps() {
+    print_info "Launching ArduPlane GPS failure behavior lane..."
+    echo ""
+    echo "=========================================="
+    echo "  ArduPlane SITL + GPS Failure Lane (Mini Talon)"
+    echo "=========================================="
+    echo ""
+    print_info "STEP 1: Start Gazebo (in Terminal 2):"
+    print_cmd "$OPERATOR_LAUNCH gazebo-plane-gps"
+    echo ""
+    print_info "This is the GPS failure lane (degraded/corrupted GPS), NOT the CTE/airspeed lane."
+    print_info "Wind source: none (calm); no airspeed overlay and no local override."
+    print_info "This GPS lane wipes EEPROM on every launch for reproducible per-attempt state."
+    print_info "Param stack: plane_base.parm -> plane_gps.parm (local override intentionally excluded)"
+    echo ""
+
+    build_plane_gps_param_args
+    print_info "Effective GPS parameter stack:"
+    print_cmd "$PLANE_BASE_PARAM_FILE"
+    print_cmd "$PLANE_GPS_PARAM_FILE"
+    cd "$ARDUPILOT_DIR"
+    build_sitl_runtime_args "plane-gps"
+    sim_vehicle.py -v ArduPlane -f JSON --console --map \
+      "${SITL_RUNTIME_ARGS[@]}" \
+      "${PLANE_PARAM_ARGS[@]}" \
+      --wipe-eeprom \
+      --out=udp:127.0.0.1:14551
+}
+
 launch_plane_lidar() {
     print_info "Launching ArduPlane with LiDAR..."
     echo ""
@@ -693,6 +742,19 @@ launch_gazebo_plane_wind() {
     launch_gazebo_plane_cte
 }
 
+launch_gazebo_plane_gps() {
+    # GPS failure lane world. Reuses the sensor-neutral base Mini Talon runway
+    # world by reference: it provides the ArduPilot JSON FDM path and the NavSat
+    # (GPS) sensor, with no wind publisher, no WindEffects, no airspeed sensor,
+    # and no LiDAR bridge. This is a dedicated target identity (not an alias of
+    # gazebo-plane) so the GPS lane keeps its own name and future room for
+    # GPS-specific safety checks. See ADR-0021 and docs/architecture/gps_failure_lane.md.
+    print_info "Launching Gazebo GPS failure lane (base Mini Talon runway, calm, GPS/NavSat)..."
+    print_info "Pair with: $OPERATOR_LAUNCH plane-gps"
+    print_info "No wind publisher, no airspeed sensor, no LiDAR bridge; GPS fault injection is driven by SITL SIM_GPS1_* params."
+    launch_gazebo_world "$PLANE_WORLD" "Starting Gazebo GPS failure lane world (sensor-neutral base runway)..."
+}
+
 launch_gazebo_plane_wind_sea_level() {
     print_info "Launching Gazebo with Mini Talon + Wind Effects at sea level..."
     print_info "Density test world: identical wind case, but spherical elevation is 0 m."
@@ -824,6 +886,7 @@ show_help() {
     echo "  plane              - ArduPlane SITL (Mini Talon base)"
     echo "  plane-cte          - ArduPlane SITL CTE lane (Mini Talon + airspeed, wipes EEPROM)"
     echo "  plane-airspeed     - Alias for plane-cte"
+    echo "  plane-gps          - ArduPlane SITL GPS failure lane (base + plane_gps.parm only, no local override, wipes EEPROM)"
     echo "  plane-lidar        - ArduPlane SITL + LiDAR params"
     echo "  plane-staircase    - ArduPlane SITL + staircase nav params (tight L1, no wind)"
     echo "  plane-airspeed-lidar - ArduPlane SITL + integrated airspeed/LiDAR lane"
@@ -833,6 +896,7 @@ show_help() {
     echo "  gazebo-plane-lidar - Gazebo with Mini Talon + LiDAR"
     echo "  gazebo-plane-cte   - Gazebo CTE lane world (Mini Talon wind world, calm by default)"
     echo "  gazebo-plane-wind  - Alias for gazebo-plane-cte"
+    echo "  gazebo-plane-gps   - Gazebo GPS failure lane (sensor-neutral base Mini Talon runway, calm, GPS/NavSat)"
     echo "  gazebo-plane-wind-sea-level - Gazebo with Mini Talon + Wind Effects at elevation 0m"
     echo "  gazebo-plane-airspeed-lidar - Gazebo with the integrated wind + staircase lane"
     echo "  gazebo-plane-altitude-wind - Gazebo with Mini Talon altitude-driven wind lane"
@@ -867,6 +931,10 @@ show_help() {
     echo "  Terminal 1: $OPERATOR_LAUNCH plane-cte"
     echo "  Terminal 2: $OPERATOR_LAUNCH gazebo-plane-cte"
     echo "  Terminal 3: $RUN_ONE_ENTRYPOINT --x 4 --y 4 --rep 1"
+    echo ""
+    echo "QUICK START (GPS Failure Lane):"
+    echo "  Terminal 1: $OPERATOR_LAUNCH plane-gps"
+    echo "  Terminal 2: $OPERATOR_LAUNCH gazebo-plane-gps"
     echo ""
     echo "QUICK START (Plane + LiDAR):"
     echo "  Terminal 1: $OPERATOR_LAUNCH plane-lidar"
@@ -937,6 +1005,12 @@ case "${1:-help}" in
         check_environment
         launch_plane_cte
         ;;
+    plane-gps)
+        cleanup
+        setup_environment
+        check_environment
+        launch_plane_gps
+        ;;
     plane-lidar)
         cleanup
         setup_environment
@@ -986,6 +1060,11 @@ case "${1:-help}" in
         setup_environment
         check_environment
         launch_gazebo_plane_cte
+        ;;
+    gazebo-plane-gps)
+        setup_environment
+        check_environment
+        launch_gazebo_plane_gps
         ;;
     gazebo-plane-wind-sea-level)
         setup_environment

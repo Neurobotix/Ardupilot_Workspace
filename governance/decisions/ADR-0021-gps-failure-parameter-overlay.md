@@ -33,3 +33,56 @@ Full reasoning and alternatives:
 
 Open validation (Phase 1/2): chosen pinned values for the four params; live
 readback of all four in Phase 2 smoke.
+
+## Amendment 2026-07-13: Dedicated GPS launch identities
+
+Status: Proposed (extends the original 2026-07-06 decision; not a live claim)
+
+The original decision rejected the airspeed overlay for GPS but did not name a
+launch target. Before this amendment the GPS design pointed operators and the
+plugin defaults at `plane-cte` / `gazebo-plane-cte`. That is unsafe: the shell
+target `plane-cte` is the CTE/airspeed lane and loads a different parameter
+stack than this overlay contract:
+
+```text
+plane-cte:  plane_base.parm -> plane_airspeed.parm -> .private/config/plane_params.local.parm (when present)
+```
+
+So an operator running the documented target would silently launch the airspeed
+overlay (rejected above) plus an uncontrolled local override, not the governed
+GPS stack.
+
+Decision (execution-path correction):
+
+- Add dedicated launch identities `plane-gps` and `gazebo-plane-gps`; the GPS
+  design, plugin defaults, docs, and future plugin-owned launcher use these and
+  never `plane-cte`.
+- `plane-gps` loads exactly this stack, in order, and nothing else:
+
+  ```text
+  plane-gps:  config/vehicles/plane_base.parm -> config/overlays/plane_gps.parm
+  ```
+
+  No airspeed overlay. No LiDAR overlay. No campaign airspeed files. The local
+  plane override `.private/config/plane_params.local.parm` is excluded
+  unconditionally (it is never appended), because it could silently perturb the
+  four governed knee params. The launcher prints the effective stack and prints
+  that the local override was intentionally excluded. The lane wipes EEPROM for
+  clean per-attempt state, uses its own `var/runs/sitl/plane-gps` runtime dir
+  and `plane-gps` MAVProxy/log identity, and emits the governed local output
+  `udp:127.0.0.1:14551`.
+- The launcher uses a dedicated `build_plane_gps_param_args()` helper rather
+  than the shared `build_plane_param_args()` (which always appends the local
+  override), so no existing target's historical override behavior changes.
+- `gazebo-plane-gps` reuses the sensor-neutral base Mini Talon runway world
+  `assets/worlds/mini_talon_runway.sdf` **by reference** — no world duplication.
+  That world provides the ArduPilot JSON FDM path and the NavSat (GPS) sensor,
+  with no wind publisher, no `WindEffects`, no airspeed sensor, and no LiDAR
+  bridge — i.e. it is sensor-neutral enough for the GPS contract. It is exposed
+  as a dedicated target identity (not an alias of `gazebo-plane`) so the GPS
+  lane keeps its own name and future room for GPS-specific safety checks.
+
+Not a live claim: `plane-gps` / `gazebo-plane-gps` are structurally implemented
+and covered by no-SITL structural tests only. No live SITL/Gazebo run, live
+parameter readback, or evidence claim exists. Phase 2 smoke must read back the
+realized parameter stack live before any live GPS matrix.

@@ -24,8 +24,15 @@ CAMPAIGN_ROOT_PREFIX = "gps_failure_behavior"
 DEFAULT_CAMPAIGN_ROOT_PARENT = VAR_ROOT / "runs"
 
 MISSION_FILE = ASSETS_ROOT / "missions" / "gps_failure_behavior_mission.waypoints"
-SITL_TARGET = "plane-cte"
-GAZEBO_TARGET = "gazebo-plane-cte"
+# Dedicated GPS failure launch identities. These are NOT the CTE/airspeed
+# targets: plane-cte/gazebo-plane-cte load plane_airspeed.parm and the local
+# plane override, which ADR-0021 rejects for GPS. plane-gps loads exactly
+# plane_base.parm -> plane_gps.parm with no airspeed overlay and no local
+# override; gazebo-plane-gps is the sensor-neutral base runway world (GPS/NavSat,
+# calm, no wind/airspeed). A future plugin-owned live launcher must use these
+# identities and this explicit stack, never plane-cte.
+SITL_TARGET = "plane-gps"
+GAZEBO_TARGET = "gazebo-plane-gps"
 PLANE_BASE_PARAM_FILE = CONFIG_ROOT / "vehicles" / "plane_base.parm"
 PLANE_GPS_PARAM_FILE = CONFIG_ROOT / "overlays" / "plane_gps.parm"
 
@@ -163,6 +170,13 @@ def parameter_schema() -> dict[str, Any]:
         "fault_types": list(FAULT_TYPES),
         "behavior_classes": list(BEHAVIOR_CLASSES),
         "analysis_state_classes": list(ANALYSIS_STATE_CLASSES),
+        "sitl_target": SITL_TARGET,
+        "gazebo_target": GAZEBO_TARGET,
+        "launch_target_note": (
+            "dedicated GPS identities; plane-gps loads plane_base.parm -> "
+            "plane_gps.parm only (no airspeed overlay, no local override); "
+            "not yet live-smoke verified (Phase 2)"
+        ),
         "phase1_param_stack": [str(path) for path in phase1_param_files()],
         "phase1_probe_mode": "name-existence validation only; live SITL probe is Phase 2",
         "overlay_status": (

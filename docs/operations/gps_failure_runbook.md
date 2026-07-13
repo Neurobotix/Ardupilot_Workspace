@@ -34,16 +34,39 @@ or curated evidence claim exists.
 
 ## Static Default Stack
 
-- SITL target: `plane-cte`
-- Gazebo target: `gazebo-plane-cte`
+- SITL target: `plane-gps` (dedicated GPS failure identity)
+- Gazebo target: `gazebo-plane-gps` (dedicated GPS failure identity)
 - Mission: `assets/missions/gps_failure_behavior_mission.waypoints`
 - Params: `config/vehicles/plane_base.parm` + `config/overlays/plane_gps.parm`
-  in that order.
+  in that order, with no airspeed overlay and no local plane override.
 
 The overlay pins the four EKF knee parameters, complete primary EKF source set,
 and calm SITL wind. These checked-in values provide reproducible static inputs;
 they do not prove the empirical knee. Live readback and realized straight-leg
 duration remain Phase-2 requirements.
+
+### Dedicated launch identities (structural only, corrected 2026-07-13)
+
+`plane-gps` and `gazebo-plane-gps` exist structurally in the governed launcher
+and are **not** the CTE/airspeed targets:
+
+- `plane-gps` loads exactly `plane_base.parm -> plane_gps.parm`. It does not
+  load `plane_airspeed.parm` and does not append
+  `.private/config/plane_params.local.parm` (the local override is excluded
+  unconditionally and the launcher prints that exclusion). It wipes EEPROM, uses
+  `var/runs/sitl/plane-gps` and a `plane-gps` MAVProxy identity, and emits
+  `udp:127.0.0.1:14551`.
+- `gazebo-plane-gps` reuses the sensor-neutral base runway world
+  `assets/worlds/mini_talon_runway.sdf` (GPS/NavSat, calm, no wind publisher, no
+  airspeed sensor, no LiDAR bridge). It is a dedicated target, not an alias of
+  `gazebo-plane`.
+- Using the earlier `plane-cte` / `gazebo-plane-cte` for GPS was unsafe: those
+  load the airspeed overlay and the local override, a different stack than this
+  contract. See ADR-0021 (2026-07-13 amendment).
+
+These targets are structurally implemented and covered by no-SITL structural
+tests only. They have **not** been live-smoke verified; no live GPS failure run,
+parameter readback, or evidence claim exists. Phase 2 remains pending.
 
 ## No-SITL CLI
 

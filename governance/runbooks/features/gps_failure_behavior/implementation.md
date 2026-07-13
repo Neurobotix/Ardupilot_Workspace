@@ -63,6 +63,20 @@ shared suite path far enough to run and reports its own Phase-1 no-SITL posture;
 it starts no stack, opens no MAVLink connection, parses no BIN/log, and makes no
 evidence claim.
 
+## Dedicated Launch Identities (2026-07-13, structural only)
+
+| Path | Responsibility |
+| --- | --- |
+| `src/sim_ard_gaw/launch/launch.sh` | Adds `PLANE_GPS_PARAM_FILE`, `build_plane_gps_param_args()` (base + `plane_gps.parm` only; local override excluded and printed), `launch_plane_gps()` (`--wipe-eeprom`, `var/runs/sitl/plane-gps`, `udp:127.0.0.1:14551`), `launch_gazebo_plane_gps()` (reuses base `mini_talon_runway.sdf` by reference), help entries, quick-start block, and `plane-gps` / `gazebo-plane-gps` dispatch cases. Existing targets and the shared `build_plane_param_args()` are unchanged. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/defaults.py` | `SITL_TARGET="plane-gps"`, `GAZEBO_TARGET="gazebo-plane-gps"`; `parameter_schema()` reports both targets. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/readiness.py` | `--preflight` parameter-stack section reports the dedicated targets and the airspeed-overlay / local-override exclusions. |
+| `tests/unit/test_gps_launch_targets.py` | No-SITL structural tests: help discovery, dispatch routing, GPS builder/function body isolation (no airspeed overlay, no local override, wipe-eeprom, single UDP out), base-world Gazebo reuse (no CTE wind path), CTE-lane regression, and plugin/readiness target reporting. |
+
+These identities replace the earlier incorrect `plane-cte` / `gazebo-plane-cte`
+references. They are structurally implemented and tested no-SITL only; no live
+run, parameter readback, or evidence claim exists. See ADR-0021's 2026-07-13
+amendment and `design_adrs.md`.
+
 ## Current No-SITL Semantics
 
 - Case generation covers `nominal`, the ADR-0019 drift-rate ladder, the

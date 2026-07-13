@@ -338,3 +338,34 @@ overlay is a **first-class part of the experiment**, not boilerplate:
 ## Open validation items
 
 - Chosen pinned values for the four params; live readback in Phase 2.
+
+## Amendment 2026-07-13: Dedicated GPS launch identities
+
+This overlay decision originally left the launch target unspecified, and the
+design pointed at `plane-cte` / `gazebo-plane-cte`. That is a contract mismatch:
+`plane-cte` is the CTE/airspeed lane and loads
+`plane_base.parm -> plane_airspeed.parm -> .private/config/plane_params.local.parm`,
+i.e. the airspeed overlay this ADR rejects plus an uncontrolled local override.
+
+The correction (mirrored verbatim in the promoted record
+`governance/decisions/ADR-0021-gps-failure-parameter-overlay.md`):
+
+- New dedicated identities `plane-gps` and `gazebo-plane-gps`; the plugin
+  defaults, docs, and any future plugin-owned launcher use these, never
+  `plane-cte`.
+- `plane-gps` loads exactly `config/vehicles/plane_base.parm ->
+  config/overlays/plane_gps.parm` and nothing else — no airspeed overlay and no
+  local override (the launcher uses a dedicated `build_plane_gps_param_args()`
+  that never appends `.private/config/plane_params.local.parm`, and prints that
+  the override was intentionally excluded). It wipes EEPROM, uses
+  `var/runs/sitl/plane-gps` and a `plane-gps` MAVProxy identity, and emits
+  `udp:127.0.0.1:14551`.
+- `gazebo-plane-gps` reuses the sensor-neutral base runway world
+  `assets/worlds/mini_talon_runway.sdf` by reference (no duplication): it
+  provides the JSON FDM path and NavSat/GPS with no wind publisher,
+  `WindEffects`, airspeed sensor, or LiDAR bridge. It is a dedicated identity,
+  not an alias of `gazebo-plane`, so the lane keeps room for future GPS-specific
+  checks.
+
+No live claim: the targets are structurally implemented with no-SITL structural
+tests only. Phase 2 smoke must read back the realized stack live.

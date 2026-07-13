@@ -336,6 +336,34 @@ airspeed regression 41 passed, focused `pyright` 0 errors/0 warnings,
 doctor`. No live SITL/Gazebo run, real MAVLink connection, live readback,
 BIN/log parsing, or evidence claim was performed.
 
+## Dedicated Launch-Path Correction (2026-07-13, pre-Phase-2)
+
+The GPS design and `defaults.py` previously named `plane-cte` /
+`gazebo-plane-cte`. That was a contract mismatch: `plane-cte` is the CTE/airspeed
+lane and loads `plane_base.parm -> plane_airspeed.parm ->
+.private/config/plane_params.local.parm` — the airspeed overlay ADR-0021 rejects
+plus an uncontrolled local override. Corrected before Phase 2 by adding dedicated
+identities:
+
+- `plane-gps`: `build_plane_gps_param_args()` loads `plane_base.parm ->
+  plane_gps.parm` only, excludes the local override unconditionally (printed),
+  wipes EEPROM, uses `var/runs/sitl/plane-gps` and a `plane-gps` MAVProxy
+  identity, emits `udp:127.0.0.1:14551`, prints its effective stack, and points
+  the operator at `gazebo-plane-gps`.
+- `gazebo-plane-gps`: reuses the sensor-neutral base `mini_talon_runway.sdf`
+  world by reference (GPS/NavSat, calm, no wind publisher, no airspeed sensor, no
+  LiDAR bridge); a dedicated identity, not an alias of `gazebo-plane`. No world
+  was duplicated — the base world already satisfies the JSON/GPS contract, so
+  duplicating an SDF only to produce a GPS filename was unnecessary.
+- Shared `build_plane_param_args()` and all existing targets are unchanged;
+  `plane-cte` remains the airspeed/CTE lane.
+- Coverage: `tests/unit/test_gps_launch_targets.py` (10 no-SITL structural
+  tests). Governance: ADR-0021 2026-07-13 amendment and `design_adrs.md`.
+
+This is structural only. `plane-gps` / `gazebo-plane-gps` have not been
+live-smoke verified; the Phase-2 smoke ledger below still gates any live claim,
+and Phase-2 must read back the realized stack live.
+
 ## Phase 1 Acceptance Checklist (final gate for closing Phase 1)
 
 Phase 1 closes to Accepted only when every item below is checked. This is a
@@ -391,6 +419,9 @@ Phase 0.
   be read back live.
 - The GPS mission's realized straight-leg duration must be confirmed sufficient
   for the slowest drift rate.
+- The dedicated `plane-gps` / `gazebo-plane-gps` targets are structural only;
+  Phase-2 smoke must confirm the realized parameter stack (base + `plane_gps.parm`
+  with no local override) and Gazebo GPS/NavSat availability live.
 
 ## Smoke Ledger (Phase 2)
 

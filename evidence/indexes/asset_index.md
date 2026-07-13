@@ -21,7 +21,7 @@ alternate world, mission, or mesh variant in the same directory.
 
 | Path | Asset type | Role / purpose | Status | Known references | Verification |
 | --- | --- | --- | --- | --- | --- |
-| `assets/models/mini_talon/` | Gazebo model | Base Mini Talon V-tail model. | active | `assets/worlds/mini_talon_runway.sdf`; `gazebo-plane`. | verified in `workspace_next` |
+| `assets/models/mini_talon/` | Gazebo model | Base Mini Talon V-tail model (IMU + NavSat/GPS, JSON ArduPilotPlugin; no airspeed/LiDAR). | active | `assets/worlds/mini_talon_runway.sdf`; `gazebo-plane`; `gazebo-plane-gps` (GPS failure lane; structural, not yet live-smoke verified). | verified in `workspace_next` for `gazebo-plane`; `gazebo-plane-gps` reuse is structural only |
 | `assets/models/mini_talon_with_airspeed/` | Gazebo model | Mini Talon with Gazebo airspeed path for CTE/wind worlds. | active | `mini_talon_wind_runway.sdf`; `mini_talon_wind_runway_sea_level.sdf`; `gazebo-plane-cte`. | verified in `workspace_next` for the CTE wind-runway lane |
 | `assets/models/mini_talon_with_lidar/` | Gazebo model | Mini Talon with downward LiDAR for bridge-backed terrain readings. | active | `mini_talon_lidar_runway.sdf`; LiDAR bench/staircase worlds; `gazebo-plane-lidar`. | verified in `workspace_next` for the LiDAR runway lane |
 | `assets/models/iris_with_lidar/` | Gazebo model | Iris with LiDAR and obstacle-world bridge path. | active | `assets/worlds/iris_lidar_obstacles.sdf`; `gazebo-copter-lidar`. | verified in `workspace_next` for handshake/bridge evidence; obstacle return remains unproven |
@@ -36,7 +36,7 @@ alternate world, mission, or mesh variant in the same directory.
 
 | Path | Asset type | Role / purpose | Status | Known references | Verification |
 | --- | --- | --- | --- | --- | --- |
-| `assets/worlds/mini_talon_runway.sdf` | Gazebo world | Base Mini Talon runway. | active | `gazebo-plane`; Phase 2 `plane` lane. | verified in `workspace_next` |
+| `assets/worlds/mini_talon_runway.sdf` | Gazebo world | Base Mini Talon runway (sensor-neutral: NavSat/GPS + IMU, JSON FDM; no wind publisher, no airspeed sensor, no LiDAR). | active | `gazebo-plane`; Phase 2 `plane` lane; `gazebo-plane-gps` (GPS failure lane, reused by reference; structural, not yet live-smoke verified). | verified in `workspace_next` for `gazebo-plane`; `gazebo-plane-gps` reuse is structural only |
 | `assets/worlds/mini_talon_lidar_runway.sdf` | Gazebo world | LiDAR runway/terrain world. | active | `gazebo-plane-lidar`; `plane-lidar`; `bridge-plane`. | verified in `workspace_next` |
 | `assets/worlds/mini_talon_wind_runway.sdf` | Gazebo world | Calm-by-default CTE wind world mutated/injected by campaign tools. | active | `gazebo-plane-cte`; `run_one.py`; `run_matrix.py`. | verified in `workspace_next` for Phase 2 CTE lane |
 | `assets/worlds/iris_runway.sdf` | Gazebo world | Base Iris runway world using external Iris model. | active | `gazebo-copter`; Phase 2 `copter` lane. | verified in `workspace_next` |
