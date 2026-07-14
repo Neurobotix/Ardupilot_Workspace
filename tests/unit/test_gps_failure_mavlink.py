@@ -53,18 +53,28 @@ def _valid_trace(
 ) -> list[dict[str, Any]]:
     """A minimal armed/AUTO seq 1->2->3->4 monitor trace that authorizes a plan."""
     return [
-        {"seq": 1, "armed": True, "mode": "AUTO"},
-        {"seq": 2, "armed": True, "mode": "AUTO"},
-        {"seq": 3, "armed": True, "mode": "AUTO"},
+        _fresh_trigger_event(1),
+        _fresh_trigger_event(2),
+        _fresh_trigger_event(3),
         {
-            "seq": 4,
-            "armed": True,
-            "mode": "AUTO",
+            **_fresh_trigger_event(4),
             "trigger_latitude_deg": trigger_latitude_deg,
             "trigger_time_s": trigger_time_s,
             "elapsed_since_trigger_s": elapsed_since_trigger_s,
         },
     ]
+
+
+def _fresh_trigger_event(seq: int) -> dict[str, Any]:
+    return {
+        "seq": seq,
+        "armed": True,
+        "mode": "AUTO",
+        "heartbeat_age_s": 0.1,
+        "heartbeat_fresh": True,
+        "simstate_age_s": 0.1,
+        "simstate_fresh": True,
+    }
 
 
 class _FakeParamConnection:

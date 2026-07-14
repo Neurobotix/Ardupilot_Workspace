@@ -364,6 +364,89 @@ This is structural only. `plane-gps` / `gazebo-plane-gps` have not been
 live-smoke verified; the Phase-2 smoke ledger below still gates any live claim,
 and Phase-2 must read back the realized stack live.
 
+## Phase 2 Pre-Smoke Rejection And Remediation (2026-07-13)
+
+A fresh strict no-live review rejected the initial pre-smoke Phase 2 path. No
+live process was started. The rejection identified launch self-termination,
+post-success cleanup, stale trigger evidence/retry, non-substantive behavior
+artifacts, non-gating scheduled operations, ignored CLI terminal status,
+non-strict JSON, incomplete source-enum validation, and unanchored/reset-spanning
+BIN analysis.
+
+The working tree now contains no-live fixes and adversarial regressions for each
+finding:
+
+- Plane cleanup completes before Gazebo starts; process/MAVLink cleanup is
+  verified, recorded in `gps_cleanup.json` and the terminal manifest, and
+  terminal success is persisted only afterward.
+- GPS attempts prewrite `running`; cleanup failure cannot leave success and is
+  persisted as terminal error.
+- Trigger traces require fresh heartbeat and SIMSTATE ages; a failed injection
+  is latched and never retried.
+- Injection, drift updates, and restore readbacks all gate acceptance and stop
+  on first failure.
+- Mode, failsafe, disarm, attitude, altitude drawdown, reset, and
+  truth-vs-belief metrics are computed from post-trigger samples only; missing
+  substantive samples fail closed.
+- BIN analysis requires an injection-window anchor and segments position-gap
+  samples across EKF resets.
+- The protected live CLI requires an accepted success record and stops the
+  sequence on the first other terminal outcome.
+- Artifact writes are strict finite atomic JSON; live heartbeat timeout is
+  fatal; every pinned knee/source readback is checked against the exact overlay
+  contract.
+
+Checks run after remediation:
+
+- GPS no-live suite (`phase1`, mechanism gate, MAVLink, readiness, launch
+  targets, Phase 2 path): **216 passed, 197 subtests passed**.
+- GPS plus shared staged-attempt lifecycle regression: **265 passed,
+  205 subtests passed** (the three warnings are two protobuf deprecations and
+  pytest's existing `TestCase` collection warning).
+- Airspeed adjacent regression: **41 passed, 53 subtests passed** (two protobuf
+  deprecation warnings).
+- Focused Pyright over every changed Python module/test: **0 errors, 0 warnings**.
+- Launcher syntax/help, preflight, plan-only CLI, no-confirm live guard,
+  `git diff --check`, and `make doctor`: passed; the live guard exited 2 before
+  launch as required.
+- Repository-wide Pyright remains a pre-existing repository blocker:
+  **7336 errors, 519 warnings**, including ignored/runtime analysis under
+  `var/reports/`; no Pyright configuration or unrelated source was changed to
+  hide that baseline.
+
+Remediation status: **implemented and no-live tested.** The exact corrected diff
+received fresh strict no-live acceptance on 2026-07-14 as recorded below. This
+is not Phase 2 acceptance and is not a live result. The smoke ledger remains
+empty.
+
+## Phase 2 Corrected-Diff Strict Review Acceptance (2026-07-14)
+
+The exact corrected pre-smoke diff was reviewed end to end across the guarded
+CLI, shared attempt lifecycle, dedicated launch environment, mission adapter,
+MAVLink/source contract, trigger and scheduled operations, telemetry artifacts,
+BIN-window analysis, verdict/manifest agreement, and verified cleanup. The
+review found no unresolved BLOCKER or HIGH finding.
+
+Checks run against the reviewed diff before acceptance:
+
+- GPS Phase 1/2, MAVLink, readiness, mechanism, and launch-target suite:
+  **216 passed, 197 subtests passed**.
+- Shared staged-attempt lifecycle regression: **49 passed, 8 subtests passed**
+  (three existing warnings).
+- Adjacent airspeed Phase 1 regression: **28 passed, 53 subtests passed** (two
+  existing protobuf warnings).
+- Focused Pyright over the changed GPS plugin, CLI, shared attempt runner, and
+  relevant tests: **0 errors, 0 warnings**. The operator explicitly authorized
+  focused GPS Pyright for this smoke; the unrelated repository-wide baseline is
+  not this gate.
+
+This acceptance authorizes exactly one protected `nominal` live smoke after the
+reviewed diff is frozen in a scoped commit and all remaining no-live/runtime
+prerequisites pass. It does not authorize `--live-phase2-smoke`, a retry, any
+faulted case, the Phase 3 matrix, or evidence promotion.
+
+ACCEPTED FOR NOMINAL LIVE SMOKE
+
 ## Phase 1 Acceptance Checklist (final gate for closing Phase 1)
 
 Phase 1 closes to Accepted only when every item below is checked. This is a

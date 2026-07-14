@@ -12,11 +12,15 @@ Decision:
 
 - Two tiers.
   - Mechanism tier (primary knee signal): the position innovation test ratio
-    `posTestRatio`. The knee is `posTestRatio` crossing `1.0`, which is
-    ArduPilot's own gate (`AP_NavEKF3_PosVelFusion.cpp:824`). Below `1.0` the fix
-    is fused and the belief moves toward the drifting fix; at/above `1.0` the fix
-    is rejected (not fused), and the belief only moves later via `ResetPosition`
-    when variance exceeds `EK3_GLITCH_RAD²` or on `posTimeout`.
+    `posTestRatio`. Live telemetry derives it as
+    `EKF_STATUS_REPORT.pos_horiz_variance ** 2`; decoded BIN analysis derives it
+    from the selected primary core's `XKF4.SP` as `(SP / 100) ** 2`, with
+    `XKF4.PI` required to identify that primary core. The knee is
+    `posTestRatio` crossing `1.0`, which is ArduPilot's own gate
+    (`AP_NavEKF3_PosVelFusion.cpp:824`). Below `1.0` the fix is fused and the
+    belief moves toward the drifting fix; at/above `1.0` the fix is rejected
+    (not fused), and the belief only moves later via `ResetPosition` when
+    variance exceeds `EK3_GLITCH_RAD²` or on `posTimeout`.
   - Behavior tier: the believed-vs-truth horizontal position gap, attitude/
     altitude band, and mode/failsafe changes.
 - Accepted is not captured: an admitted fix (`posTestRatio < 1`) can barely move
@@ -42,5 +46,8 @@ Full derivation (verbatim EKF source), per-band raw signals, and alternatives:
 `design_research.md`.
 
 Open validation (Phase 2 smoke): live `EK3_POS_I_GATE`, `EK3_GLITCH_RAD`,
-`FS_EKF_THRESH`, `EK3_GPS_CHECK`; baseline `posTestRatio` and gap ranges from the
-`nominal` control.
+`FS_EKF_THRESH`, `EK3_GPS_CHECK`, and `EK3_SRC1_*`; require
+the exact checked-in knee values and complete source contract
+(`POSXY=3`, `VELXY=3`, `POSZ=1`, `VELZ=3`, `YAW=1`), with every source enum
+integral, plus EKF absolute-position status flags as the validated GPS-aiding
+proxy; baseline `posTestRatio` and gap ranges from the `nominal` control.

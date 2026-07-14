@@ -70,9 +70,15 @@ class _FakeManifest:
 
 
 class _RecordingEnvironment(EnvironmentAdapter):
-    def __init__(self, events: list[str], cleanup_raises: bool = False) -> None:
+    def __init__(
+        self,
+        events: list[str],
+        cleanup_raises: bool = False,
+        cleanup_result: dict[str, Any] | None = None,
+    ) -> None:
         self.events = events
         self.cleanup_raises = cleanup_raises
+        self.cleanup_result = cleanup_result
 
     def prepare_case(self, case: TestCase) -> None:
         self.events.append("prepare")
@@ -85,6 +91,8 @@ class _RecordingEnvironment(EnvironmentAdapter):
 
     def cleanup(self, case: TestCase, ctx: AttemptContext) -> None:
         self.events.append("cleanup")
+        if self.cleanup_result is not None:
+            ctx.extra["cleanup_result"] = dict(self.cleanup_result)
         if self.cleanup_raises:
             raise RuntimeError("cleanup failed")
 
@@ -176,6 +184,9 @@ def _runner(
     *,
     control_error: BaseException | None = None,
     verdict_class: VerdictClass = VerdictClass.SUCCESS,
+    cleanup_raises: bool = False,
+    cleanup_result: dict[str, Any] | None = None,
+    prewrite_running_record: bool = False,
 ) -> tuple[AttemptRunner, _FakeManifest]:
     manifest = _FakeManifest()
     strategy = StagedStrategy(
@@ -187,11 +198,16 @@ def _runner(
     )
     return (
         AttemptRunner(
-            environment=_RecordingEnvironment(events),
+            environment=_RecordingEnvironment(
+                events,
+                cleanup_raises=cleanup_raises,
+                cleanup_result=cleanup_result,
+            ),
             strategy=strategy,
             manifest=manifest,  # type: ignore[arg-type]
             artifact_root=Path("/tmp/campaign"),
             log=lambda _msg: None,
+            prewrite_running_record=prewrite_running_record,
         ),
         manifest,
     )
@@ -240,6 +256,38 @@ class Phase3StagedAttemptTests(unittest.TestCase):
         runner.run(_case(), 1, 1, Path("/tmp/attempt"))
 
         self.assertIn("cleanup", events)
+
+    def test_cleanup_failure_cannot_leave_a_terminal_success_record(self) -> None:
+        events: list[str] = []
+        runner, manifest = _runner(
+            events,
+            cleanup_raises=True,
+            prewrite_running_record=True,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "cleanup failed"):
+            runner.run(_case(), 1, 1, Path("/tmp/attempt"))
+
+        self.assertEqual(
+            [AttemptStatus.RUNNING, AttemptStatus.ERROR],
+            [record.status for record in manifest.records],
+        )
+        self.assertNotIn(AttemptStatus.SUCCESS, [record.status for record in manifest.records])
+
+    def test_cleanup_result_is_in_terminal_record_before_persistence(self) -> None:
+        events: list[str] = []
+        runner, manifest = _runner(
+            events,
+            cleanup_result={"ok": True, "remaining_processes": []},
+        )
+
+        record = runner.run(_case(), 1, 1, Path("/tmp/attempt"))
+
+        self.assertEqual(
+            {"ok": True, "remaining_processes": []},
+            record.plugin_manifest_fields["cleanup"],
+        )
+        self.assertEqual(record, manifest.records[0])
 
     def test_cleanup_runs_on_failure(self) -> None:
         events: list[str] = []
@@ -380,6 +428,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             strategy = plugin.attempt_runner()._strategy  # noqa: SLF001
             self.assertIsInstance(strategy, StagedStrategy)
             self.assertNotIsInstance(strategy, LegacyDelegateStrategy)
+            assert isinstance(strategy, StagedStrategy)
             self.assertIn(
                 "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix",
                 type(strategy.stimulus).__module__,

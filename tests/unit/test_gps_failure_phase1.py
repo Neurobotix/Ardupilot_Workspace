@@ -17,6 +17,20 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+
+def _fresh_trigger_event(seq: int, **overrides: object) -> dict[str, object]:
+    event: dict[str, object] = {
+        "seq": seq,
+        "armed": True,
+        "mode": "AUTO",
+        "heartbeat_age_s": 0.1,
+        "heartbeat_fresh": True,
+        "simstate_age_s": 0.1,
+        "simstate_fresh": True,
+    }
+    event.update(overrides)
+    return event
+
 from sim_ard_gaw.campaigns.test_suite.cli._registry import PLUGINS  # noqa: E402
 from sim_ard_gaw.campaigns.test_suite.core.models import (  # noqa: E402
     AnalysisResult,
@@ -683,12 +697,12 @@ class GpsFailurePhase1Tests(unittest.TestCase):
 
     def test_structured_trigger_requires_armed_auto_front_half_before_seq4(self) -> None:
         good = [
-            {"seq": 1, "armed": True, "mode": "AUTO"},
-            {"seq": 1, "armed": True, "mode": "AUTO"},
-            {"seq": 2, "armed": True, "mode": "AUTO"},
-            {"seq": 3, "armed": True, "mode": "AUTO"},
-            {"seq": 4, "armed": True, "mode": "AUTO"},
-            {"seq": 4, "armed": True, "mode": "AUTO"},
+            _fresh_trigger_event(1),
+            _fresh_trigger_event(1),
+            _fresh_trigger_event(2),
+            _fresh_trigger_event(3),
+            _fresh_trigger_event(4),
+            _fresh_trigger_event(4),
         ]
         self.assertTrue(first_seq4_edge_after_armed_auto_front_half(good))
         self.assertFalse(first_seq4_edge_after_armed_auto_front_half(["bad"]))
@@ -735,7 +749,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         )
 
     def test_trigger_rejects_regressive_and_skipped_sequences(self) -> None:
-        armed = lambda seq: {"seq": seq, "armed": True, "mode": "AUTO"}
+        armed = _fresh_trigger_event
         # A regression to a lower mission-current seq (1,2,3,2,4) is invalid.
         self.assertFalse(
             first_seq4_edge_after_armed_auto_front_half(

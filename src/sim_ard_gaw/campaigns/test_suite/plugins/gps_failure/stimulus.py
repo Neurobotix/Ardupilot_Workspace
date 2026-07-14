@@ -27,7 +27,7 @@ class GpsFailureStimulus(StimulusAdapter):
         if not self.config.launch_stack:
             return {"phase": "phase1_no_sitl", "live_readback_performed": False}
         return {
-            "phase": "live_not_implemented",
+            "phase": "phase2_live_pending_monitor_verification",
             "live_readback_performed": False,
             "terminal_verification_pending": True,
         }

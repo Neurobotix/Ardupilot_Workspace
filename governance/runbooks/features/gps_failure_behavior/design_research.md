@@ -149,8 +149,8 @@ So the behavior ladder maps cleanly onto the source:
 
 This is why the belief moves in exactly two ways — **gradual fusion below the
 gate, or a discontinuous reset above it** — and never gradually above the gate.
-The `reset_captured` band is a discrete, observable event (`ResetPosition` in the
-`NKF*` log), which makes it a clean classifier.
+The `reset_captured` band is a discrete, observable event (`ResetPosition`
+reflected in `XKF4.OFN/OFE` reset offsets), which makes it a clean classifier.
 
 ### Accepted is not captured
 
@@ -176,6 +176,32 @@ These depend on runtime state or the pinned overlay and are NOT guessed here:
   ladder brackets it at `10–500 m`).
 - Realized straight-leg duration of the GPS mission (drift needs time).
 - Whether v1 flies a thin slice or the full sweep first.
+
+## Phase 2 Source-Contract Addendum (2026-07-13, no live run)
+
+Follow-up source verification for the pre-smoke Phase 2 implementation refined
+three contracts before live analysis logic was added:
+
+- **Absolute aiding proof:** `PV_AidingMode == AID_ABSOLUTE` is internal state
+  (`AP_NavEKF3_core.h`, `AidingMode`; transitions in
+  `AP_NavEKF3_Control.cpp`). There is no direct live/BIN field named
+  `PV_AidingMode`. The implementation therefore treats absolute aiding as a
+  named validated proxy, not exact proof: the exact pinned knee readbacks,
+  the complete integral source set (`POSXY=3`, `VELXY=3`, `POSZ=1`,
+  `VELZ=3`, `YAW=1`; enums in `AP_NavEKF/AP_NavEKF_Source.h`), plus EKF status
+  flags showing absolute horizontal position and not constant-position mode.
+  If that combination is absent, GPS-rejection classification fails closed.
+- **Primary EKF core:** `XKF4.PI` is written from
+  `frontend->getPrimaryCoreIndex()` in `AP_NavEKF3_Logging.cpp`. Phase 2 decoded
+  analysis selects records where `XKF4.C == XKF4.PI` and fails closed if `PI` is
+  missing or changes during the analyzed window.
+- **BIN believed position:** `POS.Lat` / `POS.Lng` are the canonical vehicle
+  position written by `AP_AHRS::Write_POS()` from `get_location()` in
+  `AP_AHRS_Logging.cpp`; `SIM.Lat` / `SIM.Lng` remain simulator truth. Both are
+  WGS84 degE7 on `TimeUS`, so truth-vs-belief pairing can be computed only
+  within a strict `TimeUS` skew bound. `XKF1.PN/PE` remain EKF-core local states,
+  but Phase 2 does not subtract them from `SIM` unless origin/common-frame proof
+  is added.
 
 ## Excluded Knobs (full reasoning)
 

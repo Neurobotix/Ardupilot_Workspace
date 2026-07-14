@@ -58,12 +58,14 @@ fusing a corrupted GPS fix and rejecting it. It is measured on two tiers.
 
 - **Mechanism tier (primary knee signal):** did the EKF admit the fix? Read from
   the position innovation test ratio `posTestRatio` and reject/glitch flags
-  (`EKF_STATUS_REPORT` live; `NKF*`/`XKF*` innovations + reset events in the BIN
-  log). The knee is defined as the drift rate at which `posTestRatio` crosses
-  `1.0` — ArduPilot's own gate boundary, width set by `EK3_POS_I_GATE`, not a
-  threshold we invented. Below the knee: `posTestRatio < 1` → fused → silent
-  drift. Above: `posTestRatio >= 1` → rejected → eventually
-  `posTimeout`/`EK3_GLITCH_RAD` reset.
+  (`EKF_STATUS_REPORT.pos_horiz_variance ** 2` live; primary-core `XKF4.SP`
+  squared with `XKF4.PI` primary-core selection plus `XKF4.OFN/OFE` reset events
+  in the BIN log). The knee is defined as the drift rate at which
+  `posTestRatio` crosses `1.0` — ArduPilot's own gate boundary, width set by
+  `EK3_POS_I_GATE`, not a threshold we invented. Below the knee:
+  `posTestRatio < 1` → fused → silent drift. Above:
+  `posTestRatio >= 1` → rejected → eventually `posTimeout`/`EK3_GLITCH_RAD`
+  reset.
 - **Behavior tier (why it matters):** did the aircraft act on it? Read from the
   believed-vs-truth horizontal position excursion, attitude/altitude band, and
   mode/failsafe changes.
@@ -108,14 +110,15 @@ Raw signals per band:
 | `nominal` | `posTestRatio < 1` throughout; gap ~ 0; no MODE/failsafe |
 | `silent_drift` | fused (`< 1`) AND gap growing large AND no failsafe/flag |
 | `detected_rejected` | `posTestRatio >= 1` sustained; variance climbing; EKF STATUSTEXT/MSG |
-| `reset_captured` | ResetPosition event / belief discontinuity in `NKF*`; variance snap-back |
+| `reset_captured` | ResetPosition event / belief discontinuity in `XKF4.OFN/OFE`; variance snap-back |
 | `autopilot_contained` | MODE/HEARTBEAT change after injection |
 | `loss_of_control` | ATT/CTUN/altitude beyond control band; unexpected disarm |
 | `pre_injection_failure` | injection readback absent before trigger seq |
 
 Mechanism-tier sources: `posTestRatio` / innovations / reject flags
-(`EKF_STATUS_REPORT` live, `NKF*`/`XKF*` + reset events in BIN). Behavior-tier
-sources: believed-vs-truth excursion (m), attitude/altitude, num_sats/lock,
+(`EKF_STATUS_REPORT.pos_horiz_variance ** 2` live; primary-core `XKF4.SP` and
+`XKF4.OFN/OFE` reset events in BIN). Behavior-tier sources:
+believed-vs-truth excursion (m), attitude/altitude, num_sats/lock,
 MODE/HEARTBEAT, STATUSTEXT/MSG.
 
 ## Cases (locked 2026-07-06)
@@ -199,9 +202,22 @@ generator takes a rate list, so extending is a longer input, no code change.
 - Run one `nominal` (no-fault control) smoke attempt under `var/runs/`.
 - Run one `slow_drift` and one `hard_denial` smoke attempt under `var/runs/`.
 - Confirm injection by reading back every injected `SIM_GPS1_*` parameter.
+- Require a fresh, co-temporal heartbeat and SIMSTATE sample at every
+  seq-1→2→3→4 trigger event; a stale or untimestamped trace cannot authorize a
+  write, and injection is attempted at most once.
+- Treat every scheduled drift update, denial/jamming restore, MAVLink close,
+  and process cleanup as acceptance-gating. Persist terminal success only after
+  cleanup completes; stop the protected sequence on the first non-success.
 - **Must-measure:** read live `EK3_POS_I_GATE`, `EK3_GLITCH_RAD`,
-  `FS_EKF_THRESH`, `EK3_GPS_CHECK`; confirm the realized straight-leg duration;
-  locate the empirical knee bracket.
+  `FS_EKF_THRESH`, `EK3_GPS_CHECK`, and `EK3_SRC1_*`; require
+  `EK3_GLITCH_RAD > 0`, integer GPS source enums, and EKF absolute-position
+  status flags as a validated proxy for GPS aiding before accepting a mechanism
+  observation. Confirm the realized straight-leg duration; locate the empirical
+  knee bracket.
+- Compute behavior only from the post-trigger window, including real mode,
+  failsafe, disarm, roll/pitch, altitude-drawdown, reset, and truth-vs-belief
+  evidence. BIN analysis must have an injection-window anchor and must not
+  calculate gap growth across an EKF reset segment.
 - Produce monitor and summary artifacts; record the raw run roots and gate
   decision in `review.md` before Phase 3.
 - Do not make a curated feature evidence claim in this phase.

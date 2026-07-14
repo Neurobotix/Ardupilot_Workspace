@@ -5,6 +5,7 @@ import copy
 import json
 import os
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -43,6 +44,8 @@ INJECTION_TRIGGER = {
     "front_half_required_sequences": [1, 2, 3],
     "mode": "AUTO",
     "armed_required": True,
+    "heartbeat_max_age_s": 1.0,
+    "simstate_max_age_s": 1.0,
     "late_or_missed_result": "pre_injection_failure",
 }
 
@@ -54,6 +57,42 @@ SOURCE_DEFAULTS = {
     "SIM_GPS1_JAM": 0.0,
 }
 REQUIRED_SIM_GPS_PARAMS = tuple(SOURCE_DEFAULTS.keys())
+
+KNEE_READBACK_PARAMS = (
+    "EK3_POS_I_GATE",
+    "EK3_GLITCH_RAD",
+    "FS_EKF_THRESH",
+    "EK3_GPS_CHECK",
+)
+SOURCE_CONTRACT_PARAMS = (
+    "EK3_SRC1_POSXY",
+    "EK3_SRC1_VELXY",
+    "EK3_SRC1_POSZ",
+    "EK3_SRC1_VELZ",
+    "EK3_SRC1_YAW",
+)
+LIVE_READBACK_PARAMS = (
+    *REQUIRED_SIM_GPS_PARAMS,
+    *KNEE_READBACK_PARAMS,
+    *SOURCE_CONTRACT_PARAMS,
+)
+
+PHASE2_PROTECTED_CASE_IDS = (
+    "nominal",
+    "slow_drift_0p5_mps",
+    "hard_denial_15s",
+)
+
+TELEMETRY_MESSAGE_TYPES = (
+    "HEARTBEAT",
+    "MISSION_CURRENT",
+    "STATUSTEXT",
+    "GLOBAL_POSITION_INT",
+    "ATTITUDE",
+    "SIMSTATE",
+    "EKF_STATUS_REPORT",
+    "GPS_RAW_INT",
+)
 
 PARAMETER_METADATA = {
     "SIM_GPS1_ENABLE": {
@@ -108,6 +147,19 @@ JAMMING_REPEAT_COUNT = 5
 JAMMING_DURATION_S = 45.0
 
 MIN_POST_INJECTION_S = 90.0
+PHASE2_MONITOR_TIMEOUT_S = 900.0
+SLOW_DRIFT_UPDATE_PERIOD_S = 5.0
+CLEANUP_TIMEOUT_S = 30.0
+TRIGGER_HEARTBEAT_MAX_AGE_S = 1.0
+TRIGGER_SIMSTATE_MAX_AGE_S = 1.0
+MAX_ABS_ROLL_DEG = 60.0
+MAX_ABS_PITCH_DEG = 35.0
+MAX_ALTITUDE_LOSS_M = 30.0
+UPLOAD_TIMEOUT_S = 60.0
+ARM_TIMEOUT_S = 60.0
+MODE_TIMEOUT_S = 30.0
+AUTO_ARM_TO_AUTO_SETTLE_S = 5.0
+FORCE_ARM_MAGIC = 21196.0
 REQUIRED_ATTEMPT_ARTIFACTS = (
     "gps_injection.json",
     "gps_behavior_summary.json",
@@ -131,8 +183,34 @@ def default_campaign_root() -> Path:
 
 
 def write_json(path: Path, data: Any) -> None:
+    """Write strict JSON atomically, preserving any previous artifact on error."""
+
+    encoded = json.dumps(
+        data,
+        indent=2,
+        sort_keys=True,
+        allow_nan=False,
+    ) + "\n"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    fd, raw_temp_path = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    temp_path = Path(raw_temp_path)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 def read_json(path: Path) -> Any:
@@ -141,6 +219,10 @@ def read_json(path: Path) -> Any:
 
 def preferred_python() -> str:
     return str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
+
+
+def log(message: str) -> None:
+    print(message, flush=True)
 
 
 def case_attempt_id(case_id: str, target_run_index: int, attempt_index: int) -> str:
@@ -165,6 +247,11 @@ def validate_required_param_names(names: Iterable[str]) -> None:
 def parameter_schema() -> dict[str, Any]:
     return {
         "required_names": list(REQUIRED_SIM_GPS_PARAMS),
+        "live_readback_names": list(LIVE_READBACK_PARAMS),
+        "knee_readback_names": list(KNEE_READBACK_PARAMS),
+        "source_contract_names": list(SOURCE_CONTRACT_PARAMS),
+        "phase2_protected_case_ids": list(PHASE2_PROTECTED_CASE_IDS),
+        "telemetry_message_types": list(TELEMETRY_MESSAGE_TYPES),
         "source_defaults": dict(SOURCE_DEFAULTS),
         "metadata": copy.deepcopy(PARAMETER_METADATA),
         "fault_types": list(FAULT_TYPES),

@@ -71,6 +71,9 @@ def artifact_schema() -> dict[str, dict[str, Any]]:
                 "altitude_loss_m",
                 "attitude_excursions",
                 "threshold_crossings",
+                "unexpected_disarm",
+                "samples_complete",
+                "limits",
             ],
         },
     }
@@ -112,6 +115,8 @@ def classify_observation(observation: dict[str, Any]) -> dict[str, Any]:
         return _result(ANALYSIS_STATE_CLASS, "insufficient_post_injection_window", False)
     if not observation.get("required_artifacts_present", False):
         return _result(ANALYSIS_STATE_CLASS, "missing_required_artifacts", False)
+    if observation.get("behavior_measurements_complete") is False:
+        return _result(ANALYSIS_STATE_CLASS, "missing_behavior_samples", False)
     if not _explicit_evidence_present(
         observation,
         primary="mechanism_evidence",

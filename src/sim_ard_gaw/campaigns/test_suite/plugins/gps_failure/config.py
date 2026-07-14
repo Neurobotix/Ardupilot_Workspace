@@ -23,6 +23,12 @@ class GpsFailureConfig:
     param_file_stack: Sequence[Path] | None = None
     mavlink_addr: str = "udpin:0.0.0.0:14551"
     launch_stack: bool = False
+    mission_timeout_s: float = defaults.PHASE2_MONITOR_TIMEOUT_S
+    upload_timeout_s: float = defaults.UPLOAD_TIMEOUT_S
+    arm_timeout_s: float = defaults.ARM_TIMEOUT_S
+    mode_timeout_s: float = defaults.MODE_TIMEOUT_S
+    cleanup_timeout_s: float = defaults.CLEANUP_TIMEOUT_S
+    force_arm: bool = True
 
     def __post_init__(self) -> None:
         self.runs_per_case = _positive_int("runs_per_case", self.runs_per_case, minimum=1)
@@ -49,6 +55,26 @@ class GpsFailureConfig:
             "denial_durations_s",
             self.denial_durations_s,
             denial_duration_token,
+        )
+        self.mission_timeout_s = _positive_finite(
+            "mission_timeout_s",
+            self.mission_timeout_s,
+        )
+        self.upload_timeout_s = _positive_finite(
+            "upload_timeout_s",
+            self.upload_timeout_s,
+        )
+        self.arm_timeout_s = _positive_finite(
+            "arm_timeout_s",
+            self.arm_timeout_s,
+        )
+        self.mode_timeout_s = _positive_finite(
+            "mode_timeout_s",
+            self.mode_timeout_s,
+        )
+        self.cleanup_timeout_s = _positive_finite(
+            "cleanup_timeout_s",
+            self.cleanup_timeout_s,
         )
 
     @property

@@ -18,32 +18,30 @@ from .config import GpsFailureConfig
 from .plugin import GpsFailurePlugin, build_plugin
 
 
-# The three adapters that still hard-stub any live behavior. Preflight reports
-# them as blockers so "readiness" never reads as "ready to fly".
 LIVE_BLOCKERS: tuple[dict[str, str], ...] = (
     {
         "component": "environment.GpsFailureEnvironment",
-        "blocker": "launch/assert_ready raise for launch_stack=True",
+        "blocker": "live launch adapter implemented but not executed or smoke-verified",
         "phase": "phase2_live_smoke",
     },
     {
         "component": "control.GpsFailureMissionControl",
-        "blocker": "live mission control raises for launch_stack=True",
+        "blocker": "mission adapter contract implemented but not executed or smoke-verified",
         "phase": "phase2_live_smoke",
     },
     {
         "component": "monitor.GpsFailureMonitor",
-        "blocker": "live monitor raises for launch_stack=True",
+        "blocker": "telemetry/injection monitor implemented but not executed or smoke-verified",
         "phase": "phase2_live_smoke",
     },
     {
         "component": "mavlink/runtime",
-        "blocker": "no real MAVLink connection or live parameter readback",
+        "blocker": "real connection factory is explicit but no live readback has been performed",
         "phase": "phase2_live_smoke",
     },
     {
-        "component": "mechanism_gate",
-        "blocker": "synthetic records only; no BIN/log innovation extraction",
+        "component": "bin_analysis",
+        "blocker": "decoded-record extraction implemented but no real BIN has been parsed",
         "phase": "phase3_full_campaign",
     },
 )
@@ -78,6 +76,16 @@ def build_readiness_report(
         "artifact_contract": _artifact_contract(),
         "parameter_stack": _parameter_stack(config),
         "trigger": dict(defaults.INJECTION_TRIGGER),
+        "phase2_protected_smoke": {
+            "case_ids": list(defaults.PHASE2_PROTECTED_CASE_IDS),
+            "full_phase3_matrix_enabled": False,
+            "telemetry_message_types": list(defaults.TELEMETRY_MESSAGE_TYPES),
+            "required_live_readbacks": list(defaults.LIVE_READBACK_PARAMS),
+            "trigger_heartbeat_max_age_s": defaults.TRIGGER_HEARTBEAT_MAX_AGE_S,
+            "trigger_simstate_max_age_s": defaults.TRIGGER_SIMSTATE_MAX_AGE_S,
+            "terminal_success_requires_cleanup": True,
+            "stop_on_first_non_accepted_record": True,
+        },
         "live_blockers": [dict(item) for item in LIVE_BLOCKERS],
         "ready_for_live_run": False,
     }

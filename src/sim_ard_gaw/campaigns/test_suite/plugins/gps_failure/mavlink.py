@@ -22,6 +22,11 @@ class MavlinkParameterConnection(Protocol):
         ...
 
 
+class MavlinkConnectionFactory(Protocol):
+    def __call__(self, endpoint: str, *, timeout_s: float) -> MavlinkParameterConnection:
+        ...
+
+
 @dataclass(frozen=True)
 class ReadbackRule:
     expected: float
@@ -222,6 +227,55 @@ def read_parameters(
         name: adapter.read_parameter(name, timeout_s=timeout_s)
         for name in sorted(names)
     }
+
+
+def read_live_contract_parameters(
+    connection: MavlinkParameterConnection,
+    *,
+    injected_or_restored: Mapping[str, float] | None = None,
+    timeout_s: float = 5.0,
+) -> dict[str, ParameterReadResult]:
+    """Read all Phase-2 GPS source-contract parameters from an explicit link."""
+
+    names = set(defaults.LIVE_READBACK_PARAMS)
+    names.update(injected_or_restored or {})
+    return read_parameters(connection, tuple(sorted(names)), timeout_s=timeout_s)
+
+
+def connect_mavlink(
+    endpoint: str,
+    *,
+    timeout_s: float = 30.0,
+    factory: MavlinkConnectionFactory | None = None,
+) -> MavlinkParameterConnection:
+    """Create a MAVLink connection only when explicitly called.
+
+    Importing this module never imports pymavlink and never opens a socket. A
+    fake ``factory`` can be supplied by tests; otherwise the real pymavlink
+    import happens inside this function.
+    """
+
+    if factory is not None:
+        connection = factory(endpoint, timeout_s=timeout_s)
+    else:
+        try:
+            from pymavlink import mavutil  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise RuntimeError("pymavlink is required for live GPS failure runs") from exc
+        connection = mavutil.mavlink_connection(endpoint)
+    heartbeat = getattr(connection, "wait_heartbeat", None)
+    if callable(heartbeat):
+        message = heartbeat(timeout=timeout_s)
+        if message is None:
+            close = getattr(connection, "close", None)
+            if callable(close):
+                close()
+            raise TimeoutError(
+                f"no MAVLink heartbeat received from {endpoint} within {timeout_s}s"
+            )
+    elif factory is None:
+        raise RuntimeError("live MAVLink connection does not provide wait_heartbeat()")
+    return connection
 
 
 def readback_rules_for_payload(payload: Mapping[str, float]) -> dict[str, ReadbackRule]:

@@ -38,6 +38,7 @@ class GpsFailurePlugin:
             ),
             manifest=self.manifest,
             artifact_root=self.config.campaign_root,
+            prewrite_running_record=True,
         )
 
     def attempt_dir_factory(self):

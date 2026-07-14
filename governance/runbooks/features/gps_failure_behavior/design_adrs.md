@@ -101,11 +101,14 @@ pass/fail gate.
 **Two tiers.**
 
 - **Mechanism tier (primary knee signal):** the position innovation test ratio
-  `posTestRatio`. The knee is `posTestRatio` crossing `1.0` — ArduPilot's own
-  gate (`AP_NavEKF3_PosVelFusion.cpp:824`). Below `1.0`: fused → belief moves
-  toward the drifting fix. At/above `1.0`: rejected → not fused; the belief only
-  moves later via `ResetPosition` when variance exceeds `EK3_GLITCH_RAD²` or on
-  `posTimeout`.
+  `posTestRatio`. Live telemetry derives it as
+  `EKF_STATUS_REPORT.pos_horiz_variance ** 2`; decoded BIN analysis derives it
+  from the selected primary core's `XKF4.SP` as `(SP / 100) ** 2`, with
+  `XKF4.PI` required to identify the primary core. The knee is `posTestRatio`
+  crossing `1.0` — ArduPilot's own gate (`AP_NavEKF3_PosVelFusion.cpp:824`).
+  Below `1.0`: fused → belief moves toward the drifting fix. At/above `1.0`:
+  rejected → not fused; the belief only moves later via `ResetPosition` when
+  variance exceeds `EK3_GLITCH_RAD²` or on `posTimeout`.
 - **Behavior tier (why it matters):** the believed-vs-truth horizontal position
   gap, attitude/altitude band, and mode/failsafe changes.
 
@@ -154,11 +157,15 @@ concepts:
 
 - Mandatory logged fields: `posTestRatio` timeline + reject/reset flags
   (mechanism), truth-vs-belief gap (behavior).
-- `reset_captured` is a discrete, observable event (`ResetPosition` in `NKF*`).
+- `reset_captured` is a discrete, observable event (`ResetPosition` reflected in
+  `XKF4.OFN/OFE` reset offsets).
 
 ## Open validation items
 
-- Live `EK3_POS_I_GATE`, `EK3_GLITCH_RAD`, `FS_EKF_THRESH`, `EK3_GPS_CHECK`.
+- Live `EK3_POS_I_GATE`, `EK3_GLITCH_RAD`, `FS_EKF_THRESH`, `EK3_GPS_CHECK`,
+  and `EK3_SRC1_*`; exact checked-in knee values; complete integral source
+  contract (`POSXY=3`, `VELXY=3`, `POSZ=1`, `VELZ=3`, `YAW=1`); EKF
+  absolute-position status flags as the validated GPS-aiding proxy.
 - Baseline `posTestRatio` and gap ranges from the `nominal` control.
 
 ---

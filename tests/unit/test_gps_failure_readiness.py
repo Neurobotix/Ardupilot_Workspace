@@ -115,7 +115,21 @@ class ReadinessReportTests(unittest.TestCase):
         self.assertIn("environment.GpsFailureEnvironment", components)
         self.assertIn("control.GpsFailureMissionControl", components)
         self.assertIn("monitor.GpsFailureMonitor", components)
+        self.assertNotIn("strict_review", components)
         self.assertEqual(len(blockers), len(LIVE_BLOCKERS))
+
+    def test_phase2_report_exposes_strict_trigger_and_terminal_guards(self) -> None:
+        smoke = self.report["phase2_protected_smoke"]
+        self.assertEqual(
+            defaults.TRIGGER_HEARTBEAT_MAX_AGE_S,
+            smoke["trigger_heartbeat_max_age_s"],
+        )
+        self.assertEqual(
+            defaults.TRIGGER_SIMSTATE_MAX_AGE_S,
+            smoke["trigger_simstate_max_age_s"],
+        )
+        self.assertTrue(smoke["terminal_success_requires_cleanup"])
+        self.assertTrue(smoke["stop_on_first_non_accepted_record"])
 
     def test_report_built_from_registry_plugin_is_consistent(self) -> None:
         registry_plugin = cast(GpsFailurePlugin, PLUGINS["gps_failure"]())

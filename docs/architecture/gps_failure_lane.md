@@ -53,6 +53,21 @@ Current status:
   next and remains unverified: no live run or parameter readback has occurred;
   realized straight-leg duration, BIN/log analysis, and evidence claims remain
   open.
+- Pre-smoke Phase 2 implementation code now exists for later authorized live
+  smoke: live telemetry/source-contract helpers, explicit connection/launch/
+  mission adapters, production mission-adapter installation from the MAVLink
+  master, source-contract-gated monitor acceptance, cleanup wait/kill behavior,
+  protected smoke-case planning, and decoded-record BIN analysis helpers. This
+  is no-SITL implementation only and does not verify the dedicated targets or
+  accept Phase 2.
+- A 2026-07-13 strict pre-smoke review rejected the first Phase 2 live path. Its
+  findings are remediated in the working tree with no-live tests: launch cleanup
+  is ordered before Gazebo, cleanup gates terminal success, trigger evidence is
+  fresh and one-shot, all scheduled writes gate acceptance, behavior/BIN
+  analysis is injection-window scoped, JSON is strict/atomic, and the CLI stops
+  on the first non-success. A fresh strict no-live review on 2026-07-14 found no
+  remaining BLOCKER or HIGH finding and accepted the exact corrected diff for
+  the single nominal live smoke. No live result is claimed by that acceptance.
 
 ## The Knee
 
@@ -60,9 +75,13 @@ The central result is the **knee**: the boundary between the EKF fusing a
 corrupted GPS fix and rejecting it, measured on two tiers.
 
 - **Mechanism tier (primary):** the position innovation test ratio
-  `posTestRatio`. The knee is `posTestRatio` crossing `1.0` — ArduPilot's own
-  gate (`AP_NavEKF3_PosVelFusion.cpp`). Below `1.0` the fix is fused and the
-  belief moves toward the drifting fix; at/above `1.0` the fix is rejected.
+  `posTestRatio`. Live, this is derived as
+  `EKF_STATUS_REPORT.pos_horiz_variance ** 2`; in BIN decoded `XKF4`, it is
+  `(SP / 100.0) ** 2` on the primary core selected by `PI`. The knee is
+  `posTestRatio` crossing `1.0` — ArduPilot's own gate
+  (`AP_NavEKF3_PosVelFusion.cpp`). Below `1.0` the fix is fused and the belief
+  moves toward the drifting fix; at/above `1.0` the fix is rejected only when
+  the validated source preconditions hold.
 - **Behavior tier:** the believed-vs-truth horizontal position gap, attitude/
   altitude band, and mode/failsafe changes.
 

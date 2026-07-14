@@ -4,10 +4,16 @@ Status: Phase 1 no-SITL foundation is **Accepted** (2026-07-13, final no-SITL
 review). The GPS failure lane has the no-SITL plugin foundation, locked static
 mission and GPS parameter overlay, structural tests, a synthetic no-SITL
 mechanism gate, a fake-testable runtime/MAVLink parameter contract, and
-integration-readiness wiring into the shared suite path (a `--preflight`
-readiness report). Phase 2 live smoke is next and remains unverified: no live
-SITL/Gazebo GPS failure run, real parameter readback, real mission timing,
-BIN/log parsing, or curated evidence claim exists.
+integration-readiness wiring into the shared suite path. A pre-smoke Phase 2
+implementation path now exists for later authorized live smoke, including
+explicit telemetry/source-contract helpers, production mission-adapter wiring,
+cleanup hardening, and decoded-record BIN analysis helpers. Phase 2 live smoke
+remains unverified: no live SITL/Gazebo GPS failure run, real parameter
+readback, real mission timing, real BIN/log parsing, or curated evidence claim
+exists. A strict pre-smoke review rejected the initial live path; its fixes were
+implemented and no-live tested, then a fresh strict no-live review on 2026-07-14
+found no remaining BLOCKER or HIGH finding and accepted the exact corrected
+diff for the single nominal live smoke. That acceptance is not a live result.
 
 ## Current State
 
@@ -28,10 +34,19 @@ BIN/log parsing, or curated evidence claim exists.
   (no-SITL, with regression tests): ADR-0020 trigger-gated executable injection
   plans with preview strictly non-executable, substantive behavior evidence in
   the analyzer, contradiction-safe manifest acceptance, `gps_injection.json` in
-  the artifact schema, and atomic MAVLink batch prevalidation. Acceptance is
-  still pending remaining review findings.
+  the artifact schema, and atomic MAVLink batch prevalidation. Pre-smoke Phase 2
+  remains unaccepted until authorized live smoke supplies dated evidence.
 - No live run, live parameter readback, realized mission-duration validation,
-  BIN/log parsing, or curated evidence exists.
+  real BIN/log parsing, or curated evidence exists.
+- The guarded live path now constructs mission control from the live MAVLink
+  master and gates mechanism acceptance on the EKF/GPS source contract, but
+  those paths remain no-SITL/fake tested only until authorized smoke.
+- Pre-smoke hardening now waits for the Plane target's cleanup barrier before
+  starting Gazebo, requires fresh heartbeat/SIMSTATE trigger evidence, latches
+  one injection attempt, gates on every write/restore and verified cleanup,
+  scopes behavior/BIN analysis to the injection window, and makes the CLI stop
+  on the first non-accepted terminal record. These are no-live implementation
+  facts, not smoke evidence.
 
 ## Static Default Stack
 
@@ -74,17 +89,25 @@ parameter readback, or evidence claim exists. Phase 2 remains pending.
 - `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` exists for
   no-SITL `--list-cases`, `--dry-run --case <case_id>`, `--probe-schema`, and
   `--preflight` (integration-readiness report).
-- Live GPS failure commands are unavailable in Phase 1; there is no
-  live SITL/Gazebo launch path in this CLI yet.
+- A guarded Phase 2 smoke runner exists for the protected smoke slice only:
+  `--live-phase2-smoke --confirm-live-phase2`, or
+  `--live-case <case> --confirm-live-phase2` for one of the protected cases
+  below. Do not run it without explicit live-smoke authorization.
+- `--phase2-smoke-plan` is plan-only and does not start SITL/Gazebo or open
+  MAVLink.
 
-Example no-SITL checks:
+Example no-SITL and guard checks (the `--live-case nominal` command without
+confirmation must fail before launch):
 
 ```bash
 PYTHONPATH=src ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure --list-cases
 PYTHONPATH=src ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure --probe-schema
 PYTHONPATH=src ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure --preflight
+PYTHONPATH=src ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure --phase2-smoke-plan
+PYTHONPATH=src ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure --live-case nominal
 PYTHONPATH=src ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure --dry-run --case slow_drift_0p5_mps --reference-latitude-deg -35.363262 --preview-elapsed-s 90
 PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_failure_mavlink.py
+PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_failure_phase2_path.py
 PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_failure_phase1.py
 PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_mechanism_gate.py
 PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_failure_readiness.py
@@ -93,9 +116,24 @@ PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_failure_readiness
 ## Live-Run Gate (Phase 2)
 
 Before any live matrix: read back every injected `SIM_GPS1_*` param, read live
-`EK3_POS_I_GATE` / `EK3_GLITCH_RAD` / `FS_EKF_THRESH` / `EK3_GPS_CHECK`, and
-confirm the straight-leg duration. See
+`EK3_POS_I_GATE` / `EK3_GLITCH_RAD` / `FS_EKF_THRESH` / `EK3_GPS_CHECK` plus
+`EK3_SRC1_POSXY` / `EK3_SRC1_VELXY` / `EK3_SRC1_POSZ` / `EK3_SRC1_VELZ` /
+`EK3_SRC1_YAW`, require `EK3_GLITCH_RAD > 0`, integral source enums, and EKF
+absolute-position status flags as the validated GPS-aiding proxy, and confirm
+the exact checked-in source set (`3/3/1/3/1`) and knee values plus the
+straight-leg duration. Trigger authorization additionally requires fresh,
+co-temporal heartbeat and SIMSTATE evidence; cleanup, all scheduled operations,
+and an accepted terminal record must succeed. See
 `governance/runbooks/features/gps_failure_behavior/plan.md`.
+
+Protected Phase 2 smoke implementation slice:
+
+- `nominal`
+- `slow_drift_0p5_mps`
+- `hard_denial_15s`
+
+The full Phase 3 matrix remains gated; do not infer that `--phase2-smoke-plan`
+or the protected Phase 2 live flags authorize a full matrix run.
 
 ## References
 

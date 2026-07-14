@@ -175,11 +175,24 @@ no-SITL review re-verified every prior finding in code and found no new
 BLOCKER/HIGH/MEDIUM/substantiated-LOW issue, and the **Phase 1 no-SITL
 foundation was accepted** (163 GPS tests + 41 airspeed regressions passed,
 pyright 0 errors, `make doctor` pass, worktree clean). This is a no-SITL
-acceptance of the plugin foundation only. Phase 2 live smoke is next and remains
-unverified: no live SITL/Gazebo run, real parameter readback, real mission
-timing, BIN/log parsing, empirical-knee result, or evidence claim exists —
-including no live smoke of the new targets; `ready_for_live_run=false` remains
-correct because the live adapters are not implemented yet. See
+acceptance of the plugin foundation only. Pre-smoke Phase 2 implementation code
+now exists for later authorized smoke (source-contract helpers, live telemetry
+normalization/rate requests with `COMMAND_ACK` gating, explicit
+connection/launch/mission adapters, production mission-adapter installation from
+the live MAVLink master, source-contract-gated monitor acceptance, cleanup
+wait/kill behavior, a guarded protected smoke-case live CLI, post-injection
+monitor/artifact emission, and decoded-record BIN analysis helpers). Phase 2
+live smoke remains unverified. A 2026-07-13 strict pre-smoke review rejected the
+initial live path; the working tree now remediates every reported finding
+no-live (ordered launch cleanup, cleanup-gated terminal persistence, fresh
+one-shot trigger evidence, operation-gated acceptance, post-trigger behavior
+and reset-segmented BIN analysis, strict atomic JSON/source validation, and
+stop-on-non-success CLI handling). A fresh strict no-live review on 2026-07-14
+found no remaining BLOCKER or HIGH finding and accepted the exact corrected diff
+for the single nominal live smoke. No live SITL/Gazebo run, real parameter readback,
+real mission timing, real BIN/log parse, empirical-knee result, or evidence
+claim exists — including no live smoke of the new targets; the readiness report
+must remain conservative until an authorized live smoke supplies dated evidence. See
 `governance/runbooks/features/gps_failure_behavior/`.
 
 Additional active feature work: the `test_suite` migration completed its Phase 3 sequence

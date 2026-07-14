@@ -205,6 +205,7 @@ class AttemptRunner:
 
         running_persisted = False
         terminal_persisted = False
+        cleanup_attempted = False
         try:
             if self._prewrite_running_record:
                 running_record = (
@@ -219,6 +220,22 @@ class AttemptRunner:
             self._env.launch(case, ctx)
             self._env.assert_ready(case, ctx)
             record = self._strategy.execute(ctx)
+            # Cleanup is part of a successful attempt, not best-effort work that
+            # happens after success has already been persisted. A cleanup error
+            # must therefore enter the exception path and prevent a success row.
+            cleanup_attempted = True
+            self._env.cleanup(case, ctx)
+            # Cleanup adapters may emit final artifacts or a structured cleanup
+            # result. Refresh the already-built strategy record before terminal
+            # persistence so that proof is not lost.
+            record.artifacts.update({
+                name: str(path) for name, path in ctx.artifacts.items()
+            })
+            cleanup_result = ctx.extra.get("cleanup_result")
+            if isinstance(cleanup_result, dict):
+                record.plugin_manifest_fields["cleanup"] = dict(cleanup_result)
+            if record.plugin_manifest_fields:
+                record.plugin_manifest_fields["artifacts"] = dict(record.artifacts)
             if not record.end_time_utc:
                 record.end_time_utc = _utc_now_iso()
             record.duration_wall_s = time.time() - ctx.start_wall_s
@@ -247,11 +264,15 @@ class AttemptRunner:
                     )
             raise
         finally:
-            try:
-                self._env.cleanup(case, ctx)
-            except Exception as cleanup_exc:
-                self._log(f"[attempt_runner] cleanup error: "
-                          f"{type(cleanup_exc).__name__}: {cleanup_exc}")
+            if not cleanup_attempted:
+                try:
+                    cleanup_attempted = True
+                    self._env.cleanup(case, ctx)
+                except Exception as cleanup_exc:
+                    # An earlier stage error remains the primary failure. The
+                    # cleanup error is logged without replacing or hiding it.
+                    self._log(f"[attempt_runner] cleanup error: "
+                              f"{type(cleanup_exc).__name__}: {cleanup_exc}")
 
 
 def _default_attempt_id(ctx: AttemptContext) -> str:

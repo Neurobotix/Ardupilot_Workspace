@@ -3,8 +3,9 @@
 Status: Phase 1 no-SITL foundation (Chunks 1–6) is **Accepted** (2026-07-13,
 final no-SITL review): the lane is wired into the shared suite path with a
 no-SITL integration-readiness report, and all prior findings are resolved and
-verified in code. Phase 2 live smoke is next and remains unverified (no live
-SITL/Gazebo run, real parameter readback, or evidence claim).
+verified in code. Pre-smoke Phase 2 implementation is present for later
+authorized live smoke, but Phase 2 live smoke remains unverified (no live
+SITL/Gazebo run, real parameter readback, real BIN parse, or evidence claim).
 
 ## Implemented In Phase 1 Chunk 1
 
@@ -78,6 +79,64 @@ These identities replace the earlier incorrect `plane-cte` / `gazebo-plane-cte`
 references. They are structurally implemented and tested no-SITL only; no live
 run, parameter readback, or evidence claim exists. See ADR-0021's 2026-07-13
 amendment and `design_adrs.md`.
+
+## Implemented In Pre-Smoke Phase 2 (2026-07-13, no live run)
+
+| Path | Responsibility |
+| --- | --- |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/source_contract.py` | Source-backed live/BIN preconditions: `EKF_STATUS_REPORT.pos_horiz_variance ** 2` for live `posTestRatio`, `XKF4.SP/100` squared for BIN, `EK3_GLITCH_RAD > 0`, GPS source readbacks, EKF absolute-position status flags, and explicit "validated proxy" wording for absolute aiding. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/telemetry.py` | Testable telemetry rate requests for `HEARTBEAT`, `MISSION_CURRENT`, `STATUSTEXT`, `GLOBAL_POSITION_INT`, `ATTITUDE`, `SIMSTATE`, `EKF_STATUS_REPORT`, and `GPS_RAW_INT`; each `MAV_CMD_SET_MESSAGE_INTERVAL` request requires a matching accepted `COMMAND_ACK`, and malformed EKF samples normalize to fail-closed records instead of raising. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py` | Current-attempt BIN decode/analysis boundary: lazy `pymavlink.DFReader` decode for live use, fake decoder injection for tests, `XKF4` primary-core mechanism extraction (`PI` selects the primary core and must be present on every analyzed row), reset detection from `OFN/OFE`, and `SIM` truth versus `POS` canonical-belief pairing on `TimeUS` with <=0.1 s skew. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/mavlink.py` | Explicit `connect_mavlink()` factory hook (no import-time connection), live contract readback list, and no-SITL tests preserving atomic batch validation. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/environment.py` | Later-live launch plan uses only `plane-gps` / `gazebo-plane-gps`, routes attempt runtime under `var/`, records process/log handles through injectable launchers for no-SITL tests, snapshots pre-launch BIN names, installs a production mission adapter from the live MAVLink master, accepts only one new `.BIN` for attempt analysis, and waits/terminates/kills/clears process handles during cleanup. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/control.py` | Mission control now has a production `MavlinkGpsMissionAdapter` for upload/verify/arm/AUTO, with fake adapter support retained for tests; no live upload was executed during this task. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/monitor.py` | Later-live monitor requests the GPS telemetry set with ACK-gated rate changes, records monotonic arrivals, reads the GPS/EKF source-contract parameters, validates the canonical seq-1->2->3->4 armed/AUTO trigger, executes only authorized injection plans, schedules bounded restores/ramped slow-drift updates, observes at least 90 s post-injection, emits the required observation artifacts plus `source_contract.json`, gates mechanism evidence on the source contract, and overlays the selected current-attempt BIN analysis when exactly one new BIN exists. |
+| `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | Adds `--phase2-smoke-plan` as a plan-only no-live action and a guarded runnable Phase 2 path for the protected smoke slice only: `--live-phase2-smoke --confirm-live-phase2` or `--live-case <protected-case> --confirm-live-phase2`. The full Phase 3 matrix is not enabled through this live CLI. |
+| `tests/unit/test_gps_failure_phase2_path.py` | No-SITL/fake coverage for the source contract, source-contract-gated monitor acceptance, telemetry ACK/malformed-sample handling, decoded/current-attempt BIN helpers, launch plan, production mission adapter installation, cleanup wait/kill behavior, monitor scheduling/artifact emission, guarded live CLI parsing, and connection factory. |
+
+No SITL, Gazebo, MAVProxy, real MAVLink connection, mission upload, parameter
+write, BIN/tlog generation, live BIN decode, or evidence promotion was performed
+for this implementation.
+
+## Pre-Smoke Strict-Review Remediation (2026-07-13, no live run)
+
+The first strict review of the Phase 2 path rejected live-smoke authorization.
+The implementation was then hardened without starting SITL, Gazebo, or MAVLink:
+
+- `environment.py` starts `plane-gps` first and waits for its governed
+  `Cleanup complete` barrier before starting `gazebo-plane-gps`, so the Plane
+  target cannot kill its own Gazebo process. Cleanup verifies process exit after
+  terminate/kill, closes the MAVLink master and log handles, records a cleanup
+  result in `gps_cleanup.json` and the terminal manifest, and raises on any
+  surviving process or close failure.
+- `AttemptRunner` performs cleanup before persisting terminal success. The GPS
+  runner prewrites `running`, so a cleanup exception produces a terminal error
+  row rather than leaving success or no manifest record.
+- Trigger authorization requires bounded heartbeat and SIMSTATE ages on every
+  ordered seq-1→2→3→4 event. Untimestamped/stale evidence fails closed, and the
+  monitor latches the first injection attempt whether it succeeds or fails.
+- Initial injection, every slow-drift update, and every restore readback are
+  acceptance-gating. Any failed operation stops monitoring; expected update and
+  restore counts must be complete before observation acceptance.
+- Live behavior artifacts use only post-trigger samples. They calculate real
+  mode/failsafe/disarm changes, roll/pitch crossings, ordered altitude
+  drawdown, reset events, and substantive truth-vs-belief coverage. Missing
+  behavior samples fail closed instead of becoming nominal.
+- BIN analysis requires a seq-4 or matching parameter-transition injection
+  anchor, discards pre-trigger rows, and segments truth-vs-belief samples at
+  `XKF4.OFN/OFE` reset events so gap growth never spans a reset.
+- The live CLI inspects the returned terminal record, exits nonzero on anything
+  other than an explicitly accepted success, and stops the protected sequence
+  immediately.
+- GPS JSON writes use `allow_nan=False`, fsync, and atomic replace; telemetry
+  normalizes non-finite fields to `None`. The source contract checks all five
+  pinned source enums and the exact checked-in knee values. A real connection
+  factory must receive a heartbeat; an explicit heartbeat timeout is fatal.
+
+This is implementation remediation only; it does not accept Phase 2. A fresh
+strict no-live review on 2026-07-14 found no remaining BLOCKER or HIGH finding
+and accepted the exact corrected diff for the single nominal live smoke. That
+review acceptance is not a live result or a full-campaign authorization.
 
 ## Current No-SITL Semantics
 
@@ -159,18 +218,19 @@ amendment and `design_adrs.md`.
 
 ## Still Open
 
-The following are deliberately not implemented in Phase 1 no-SITL chunks:
+The following remain open until an explicitly authorized live smoke:
 
-- Actual live MAVLink connection creation, real parameter write/readback against
-  SITL, live SITL/Gazebo launch, mission upload/control, and live monitor
-  behavior.
-- Runtime scheduling of multi-event payload updates after trigger. Chunk 5
-  builds the individual plan/restore contracts only.
-- EKF mechanism-gate extraction from BIN/log data; Chunk 4 covers only synthetic no-SITL records.
-- Full Phase 1 acceptance and any Phase 2/3/4 evidence claim.
+- Real execution of the launch, mission upload/control, monitor loop, parameter
+  writes/readbacks, restore timing, and BIN decoding against a live run.
+- Live verification of `plane-gps` / `gazebo-plane-gps` and the realized
+  `plane_base.parm -> plane_gps.parm` stack.
+- Any empirical-knee, behavior, parity, or Phase 2 acceptance claim.
 
 ## Live Gates (Future Phase 2)
 
 - Read back every injected `SIM_GPS1_*` param.
-- Read live `EK3_POS_I_GATE`, `EK3_GLITCH_RAD`, `FS_EKF_THRESH`, `EK3_GPS_CHECK`.
+- Read live `EK3_POS_I_GATE`, `EK3_GLITCH_RAD`, `FS_EKF_THRESH`,
+  `EK3_GPS_CHECK`, and `EK3_SRC1_*`; require `EK3_GLITCH_RAD > 0`, integer GPS
+  source enums, and EKF absolute-position status flags as the validated
+  GPS-aiding proxy.
 - Confirm the realized straight-leg duration and bracket the empirical knee.
