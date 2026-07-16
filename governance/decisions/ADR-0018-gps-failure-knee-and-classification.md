@@ -14,7 +14,7 @@ Decision:
   - Mechanism tier (primary knee signal): the position innovation test ratio
     `posTestRatio`. Live telemetry derives it as
     `EKF_STATUS_REPORT.pos_horiz_variance ** 2`; decoded BIN analysis derives it
-    from the selected primary core's `XKF4.SP` as `(SP / 100) ** 2`, with
+    from the selected primary core's already-scaled `XKF4.SP` as `SP ** 2`, with
     `XKF4.PI` required to identify that primary core. The knee is
     `posTestRatio` crossing `1.0`, which is ArduPilot's own gate
     (`AP_NavEKF3_PosVelFusion.cpp:824`). Below `1.0` the fix is fused and the
@@ -36,7 +36,8 @@ Decision:
   gap-growing AND no-failsafe.
 - Verdict model: characterize, not gate. A run is never PASS/FAIL. Accepted =
   measurement validity only (fault injected + read back, enough post-injection
-  flight, required fields present); Behavior class = which band it landed in. The
+  flight, required fields present, valid terminal evidence; nominal additionally
+  requires planned mission completion); Behavior class = which band it landed in. The
   `silent_drift` vs `detected_rejected` boundary (the knee) is the result of the
   campaign, not a bar to clear.
 

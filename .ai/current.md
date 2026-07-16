@@ -166,9 +166,11 @@ entry). Also on 2026-07-13, before Phase 2, dedicated launch identities
 `plane-gps` and `gazebo-plane-gps` were added (structural only) to replace the
 earlier incorrect `plane-cte` / `gazebo-plane-cte` GPS references: `plane-gps`
 loads `plane_base.parm -> plane_gps.parm` only (no airspeed overlay, local
-override excluded unconditionally, wipes EEPROM), and `gazebo-plane-gps` reuses
-the sensor-neutral base `mini_talon_runway.sdf` world by reference (GPS/NavSat,
-calm; no world duplication). Covered by no-SITL structural tests
+override excluded unconditionally, wipes EEPROM). The original
+`gazebo-plane-gps` base-world reuse was corrected on 2026-07-14 after a rejected
+nominal run proved its spawn heading did not match the mission; the target now
+uses the dedicated sensor-neutral `mini_talon_gps_runway.sdf` with the proven
+east-facing pose. Covered by no-SITL structural tests
 (`tests/unit/test_gps_launch_targets.py`) and recorded in ADR-0021's 2026-07-13
 amendment; existing CTE/airspeed targets are unchanged. On 2026-07-13 a final
 no-SITL review re-verified every prior finding in code and found no new
@@ -177,23 +179,127 @@ foundation was accepted** (163 GPS tests + 41 airspeed regressions passed,
 pyright 0 errors, `make doctor` pass, worktree clean). This is a no-SITL
 acceptance of the plugin foundation only. Pre-smoke Phase 2 implementation code
 now exists for later authorized smoke (source-contract helpers, live telemetry
-normalization/rate requests with `COMMAND_ACK` gating, explicit
+normalization and proven Plane data-stream requests, explicit
 connection/launch/mission adapters, production mission-adapter installation from
 the live MAVLink master, source-contract-gated monitor acceptance, cleanup
 wait/kill behavior, a guarded protected smoke-case live CLI, post-injection
-monitor/artifact emission, and decoded-record BIN analysis helpers). Phase 2
-live smoke remains unverified. A 2026-07-13 strict pre-smoke review rejected the
+monitor/artifact emission, and decoded-record BIN analysis helpers). At that
+point Phase 2 live smoke remained unverified. A 2026-07-13 strict pre-smoke review rejected the
 initial live path; the working tree now remediates every reported finding
 no-live (ordered launch cleanup, cleanup-gated terminal persistence, fresh
 one-shot trigger evidence, operation-gated acceptance, post-trigger behavior
 and reset-segmented BIN analysis, strict atomic JSON/source validation, and
 stop-on-non-success CLI handling). A fresh strict no-live review on 2026-07-14
 found no remaining BLOCKER or HIGH finding and accepted the exact corrected diff
-for the single nominal live smoke. No live SITL/Gazebo run, real parameter readback,
-real mission timing, real BIN/log parse, empirical-knee result, or evidence
-claim exists — including no live smoke of the new targets; the readiness report
-must remain conservative until an authorized live smoke supplies dated evidence. See
+for the single nominal live smoke. The one authorized attempt ran on 2026-07-14
+at HEAD `f21395c` and was **NOMINAL_SMOKE_REJECTED** before arming: ArduPlane was
+still `INITIALISING` when mission upload returned `MAV_MISSION_NO_SPACE`; no
+mission verification, AUTO/trigger, observation window, live source readback,
+or BIN analysis occurred. The attempt cleanup also detected three surviving
+MAVProxy children; canonical cleanup afterward succeeded and the final process
+scan was clean. No retry or faulted case ran. Raw root:
+`var/runs/gps_failure_behavior_phase2_nominal_20260714T073957200424999Z/`.
+The working tree now implements no-live remediation for all three blockers:
+AUTO/non-INITIALISING/GPS/EKF readiness before mission control, canonical
+governed cleanup followed by an independent survivor scan, and cleanup-before-
+terminal-error persistence that preserves both cleanup proof and the primary
+failure. GPS terminal rows now explicitly persist framework status and monitor
+result. A second nominal attempt at the same HEAD reached readiness, verified
+the five-item mission, armed, and entered AUTO, then was
+**NOMINAL_SMOKE_REJECTED** before trigger/source readback/90 s observation. The
+GPS monitor had incorrectly replaced airspeed's proven stream setup with
+per-message interval commands and mandatory ACKs; the event-driven
+`STATUSTEXT` request was denied. Canonical cleanup also missed `mavproxy.py`
+because it matched only `mavproxy`; the corrected terminal row did persist the
+cleanup failure and monitor result. Raw root:
+`var/runs/gps_failure_behavior_phase2_nominal_20260714T080120722888267Z/`.
+The working tree now provides GPS-owned stream, readiness, mission-protocol,
+and workspace-owned cleanup helpers, gates on required messages actually
+observed, and explicitly matches `[m]avproxy.py` in canonical cleanup. A
+structural test forbids GPS imports from sibling plugins. Focused no-live tests
+cover both real failure shapes. A later operator-started, unaccepted diagnostic
+emitted mission-current progress `0 -> 1 -> 3 -> 4`: ArduPlane did not publish
+seq 2 because it is a `DO_CHANGE_SPEED` command. ADR-0020 and the trigger now
+require fresh armed/AUTO navigation seqs 1 and 3, permit optional seq 2, and
+still latch only the first seq-4 edge. Phase 2 remains open
+pending fresh strict no-live review and separate operator authorization. See
 `governance/runbooks/features/gps_failure_behavior/`.
+
+A governed nominal attempt at
+`var/runs/gps_failure_behavior_phase2_nominal_20260714T083812969855707Z/`
+then proved GPS-owned readiness, mission upload/identity, arming/AUTO,
+telemetry, and cleanup live. It was deliberately interrupted after diagnosis,
+not accepted: leading home-row `MISSION_CURRENT seq=0` had entered the trigger
+trace and permanently invalidated later `1 -> 3 -> 4` progress. The terminal
+row is `interrupted`; `gps_cleanup.json` is `ok=true`, canonical cleanup exited
+0, and the final process scan is empty. The monitor now ignores only leading
+seq 0 before evidence begins and still rejects seq-0 regression after seq 1.
+
+A later nominal run at
+`var/runs/gps_failure_behavior_live_nominal_codex_20260714T095246Z/` declared
+`success` / `valid_nominal`, but strict review on 2026-07-14 rejected it as
+evidence. The staged analyzer decoded a still-growing BIN before cleanup,
+anchored on a mission-upload CMD row, and double-scaled pymavlink-decoded XKF4
+and SIM/POS fields. The case/monitor duration contracts disagreed, terminal
+injection registration/state was incomplete, and run/input/source provenance
+was absent. No-live remediation now places staged analysis/verdict after
+framework cleanup, records the live seq-4 boot timestamp, excludes CMD upload
+rows from anchoring, consumes decoded engineering units correctly, makes
+per-case metadata authoritative for duration, synchronizes terminal artifacts,
+and provides shared campaign-level provenance without any GPS-to-airspeed
+import. Phase 2 remains open and requires a fresh governed run.
+
+The subsequent nominal root
+`var/runs/gps_failure_behavior_20260714T113259746238Z/` is also rejected. It
+spawned approximately north against the eastbound mission, stopped at seq 4
+plus the 20 s minimum observation window, anchored BIN analysis to the last of
+many repeated seq-4 reports instead of the immutable first injection event, and
+declared `valid_nominal` without mission completion. The working tree now owns
+an east-facing calm GPS world, treats 20/90 s as minimum evidence only, tracks
+real reached-waypoint and AUTO-to-RTL progress, waits 10 s after planned RTL,
+uses the authorized first edge as the analysis anchor, and requires terminal
+mission evidence for nominal summary/manifest acceptance. Focused no-live tests
+cover these regressions.
+
+The fresh protected nominal root
+`var/runs/gps_failure_behavior_20260714T120212630044Z/` then completed reviewed
+raw validation on 2026-07-14: approximately 89.27-degree initial yaw, immutable
+seq-4 boot anchor at 56.487 s, max mission seq 9, reached rows 2–8, planned RTL
+at seq 8 plus 10 s stabilization, accepted source/BIN/behavior analysis, and
+clean cleanup. A preceding readiness-only timeout led to five-second idempotent
+stream refresh and detailed readiness-state diagnostics. This is raw output
+only; no fault run, evidence promotion, empirical-knee result, or Phase-2
+acceptance is claimed.
+
+Read-only path review of that nominal then found the visible pre-trigger loop:
+takeoff completed at 98.22 m AGL around 323 m East, so the copied 300 m seq-3
+settle waypoint was behind the calm-lane aircraft. Mission v3 moves seq 3/7 to
+500 m East and seq 4/5/6 to 1300 m East, preserving both 800 m legs, sequence
+numbers, and trigger/RTL contracts. Its validation hash is `3d111b32351a...`; the
+successful raw nominal remains tied to historical v2 hash `c372bf6253c9...`.
+The fresh v3 nominal root
+`var/runs/gps_failure_behavior_20260714T122459635208Z/` completed the full
+mission through seq 9 and planned RTL with the active hash. From takeoff
+completion to seq 3, East displacement was monotonic, waypoint distance fell
+from about 180 m to less than 1 m, and maximum absolute roll was 2.1 degrees;
+the pre-injection loop is removed. This remains raw validation only. No fault
+case or curated-evidence claim has been made.
+
+The active mission is now v4 for the first fault experiment: it retains the
+v3-validated 500 m settle, extends both measurement legs to 2000 m, and widens
+the reciprocal-lane spacing to 500 m without changing seq-4 injection or seq-9
+RTL. Active hash: `8d1c8de43c6e...`. Targeted geometry and
+`hard_denial_15s` dry-run checks pass; v4 has not yet been flown.
+
+On 2026-07-15, no-live campaign-readiness work added a guarded protected
+round-robin command for `nominal`, `slow_drift_0p5_mps`, and
+`hard_denial_15s`. It writes `campaign_contract.json`, defaults to five
+workflow-complete physical attempts per case, uses zero automatic retries, and
+stops on workflow/cleanup/raw-log failure. GPS manifest logic now separates
+workflow-complete counting from strict accepted-observation counting, and the
+source contract validates pre-injection EKF/GPS aiding flags while recording
+post-fault flags as behavior context. Focused no-live tests passed; no new live
+campaign result is claimed.
 
 Additional active feature work: the `test_suite` migration completed its Phase 3 sequence
 (3A–3G) on 2026-06-01. The staged `wind_matrix` plugin is fully zero-legacy

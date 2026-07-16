@@ -16,14 +16,58 @@ gate makes GPS the sharpest available "knee" experiment.
 
 Current status:
 
-- Phase 1 no-SITL foundation accepted 2026-07-13; Phase 2 live smoke is next and
-  remains unverified.
+- The corrected protected nominal root
+  `var/runs/gps_failure_behavior_20260714T120212630044Z/` completed reviewed raw
+  validation on 2026-07-14: east-facing launch, immutable first seq-4 anchor,
+  continued flight through seq 9, planned RTL stabilization, accepted
+  source/BIN/behavior analysis, and clean cleanup. It is not curated evidence;
+  Phase 2 and every fault case remain open.
+- Review of that nominal's pre-trigger path found the calm-lane aircraft
+  completed its 100 m climb around 323 m East, beyond the copied 300 m settle
+  waypoint. Mission v3 therefore uses a 500 m settle and shifts the paired far
+  endpoints to 1300 m, preserving both 800 m legs and the seq-4 trigger. This
+  geometry was raw-validated at
+  `var/runs/gps_failure_behavior_20260714T122459635208Z/`: the aircraft flew
+  monotonically East from takeoff completion to seq 3 with maximum absolute
+  roll of 2.1 degrees, then completed through seq 9 and planned RTL. Fault cases
+  and curated evidence remain open.
+- The active v4 fault geometry retains that 500 m settle, extends each
+  measurement leg to 2000 m, and increases reciprocal-lane spacing to 500 m.
+  Sequence numbering, seq-4 injection, 100 m altitude, and seq-9 RTL are
+  unchanged. V4 is structurally tested but not yet live-validated.
+- A 2026-07-15 no-live campaign-readiness update adds a protected round-robin
+  live entry point for `nominal`, `slow_drift_0p5_mps`, and
+  `hard_denial_15s`. It counts workflow-complete physical attempts separately
+  from post-cleanup behavior acceptance, writes a frozen
+  `campaign_contract.json`, defaults to five runs per case, and uses zero
+  automatic retries. This does not claim a new live campaign result.
+
+- Phase 1 no-SITL foundation accepted 2026-07-13. Two nominal smoke attempts on
+  2026-07-14 are rejected. Attempt 1 exposed weak readiness and incomplete
+  cleanup/terminal proof. Attempt 2 reached verified mission upload, arming, and
+  AUTO, then stopped before the trigger because GPS incorrectly ACK-gated an
+  event-driven `STATUSTEXT` interval request; cleanup matched `mavproxy` but not
+  the real `mavproxy.py` name. GPS now owns its stream, readiness,
+  mission-protocol, and process-cleanup implementations, gates on telemetry
+  actually observed, and adds the canonical `.py` matcher. A structural test
+  forbids imports from sibling plugins. A later unaccepted diagnostic showed
+  real `MISSION_CURRENT` progress `0 -> 1 -> 3 -> 4`; seq 2 is the verified
+  `DO_CHANGE_SPEED` mission item and is not necessarily emitted. The amended
+  trigger therefore requires navigation seqs 1 and 3 and permits optional seq
+  2 before the first seq-4 edge. These earlier fixes were later exercised by
+  the corrected protected nominal, while Phase 2 remains open.
+- A governed nominal attempt on 2026-07-14 subsequently proved the GPS-owned
+  readiness, mission, telemetry, and cleanup paths, but was interrupted and is
+  not accepted. It exposed one more trigger issue: leading home-row seq 0 was
+  stored as evidence and poisoned the later valid `1 -> 3 -> 4` progression.
+  The monitor now ignores seq 0 only before evidence starts and rejects any
+  later regression to 0. Phase 2 remains open.
 - Phase 0 (design lock): accepted 2026-07-06.
 - Phase 1 Chunks 1–2 no-SITL foundation: plugin skeleton, deterministic case
   catalog, payload conversion/previews, dry-run CLI, registry entry, and unit
   tests exist.
-- Phase 1 Chunk 3 is implemented pending review: the locked five-item,
-  approximately 36 km one-way mission, dedicated GPS parameter overlay,
+- Phase 1 Chunk 3 is implemented pending review: the locked airspeed-style
+  smoke mission geometry, dedicated GPS parameter overlay,
   default-stack integration, and static/no-SITL contract tests exist.
 - Phase 1 Chunk 4 is implemented pending review: a synthetic no-SITL mechanism
   gate evaluates decoded EKF-like records at the locked `posTestRatio >= 1.0`
@@ -42,24 +86,26 @@ Current status:
   `gps_injection.json`, and atomic MAVLink batch prevalidation. See the feature
   runbook's `review.md`.
 - Also on 2026-07-13, dedicated launch identities `plane-gps` /
-  `gazebo-plane-gps` were added (structural only) to replace the earlier
+  `gazebo-plane-gps` were added to replace the earlier
   incorrect use of the CTE/airspeed targets, which loaded the airspeed overlay
   and the local override. See the Launch Identities section below and ADR-0021's
-  amendment. No live smoke of these targets has occurred.
+  amendment. Their corrected world/stack path later completed the protected
+  nominal raw validation recorded above.
 - Phase 1 no-SITL foundation is **Accepted** (2026-07-13, final no-SITL review):
   all prior BLOCKER/HIGH/MEDIUM findings are resolved and verified in code, and
   the final review found no new BLOCKER/HIGH/MEDIUM/substantiated-LOW issue. This
-  is a no-SITL acceptance of the plugin foundation only. Phase 2 live smoke is
-  next and remains unverified: no live run or parameter readback has occurred;
-  realized straight-leg duration, BIN/log analysis, and evidence claims remain
-  open.
-- Pre-smoke Phase 2 implementation code now exists for later authorized live
-  smoke: live telemetry/source-contract helpers, explicit connection/launch/
+  is a no-SITL acceptance of the plugin foundation only. The later protected
+  nominal raw validation is separate and has not been promoted as curated
+  Phase-2 evidence.
+- Phase 2 implementation code includes live telemetry/source-contract helpers,
+  explicit connection/launch/
   mission adapters, production mission-adapter installation from the MAVLink
   master, source-contract-gated monitor acceptance, cleanup wait/kill behavior,
-  protected smoke-case planning, and decoded-record BIN analysis helpers. This
-  is no-SITL implementation only and does not verify the dedicated targets or
-  accept Phase 2.
+  protected smoke-case planning, protected round-robin campaign automation,
+  and decoded-record BIN analysis helpers. The source contract now validates
+  pre-injection EKF/GPS aiding flags and records post-fault flags as behavior
+  context. The corrected nominal exercised the live path before this campaign
+  command existed; fault cases and Phase-2 acceptance remain open.
 - A 2026-07-13 strict pre-smoke review rejected the first Phase 2 live path. Its
   findings are remediated in the working tree with no-live tests: launch cleanup
   is ordered before Gazebo, cleanup gates terminal success, trigger evidence is
@@ -68,6 +114,25 @@ Current status:
   on the first non-success. A fresh strict no-live review on 2026-07-14 found no
   remaining BLOCKER or HIGH finding and accepted the exact corrected diff for
   the single nominal live smoke. No live result is claimed by that acceptance.
+- The later raw nominal root
+  `var/runs/gps_failure_behavior_live_nominal_codex_20260714T095246Z/`
+  declared success, but strict review rejected the declaration: analysis ran
+  before cleanup closed the BIN, the window used a mission-upload CMD row,
+  decoded engineering units were scaled twice, and provenance/artifact
+  contracts were incomplete. That rejected root remains historical; its
+  correction was exercised by the later protected nominal.
+- The next nominal root
+  `var/runs/gps_failure_behavior_20260714T113259746238Z/` is also rejected.
+  It exposed GPS-only lifecycle regressions: the base world spawned the aircraft
+  north while the copied mission begins east; the monitor treated the 20 s
+  minimum evidence window as the end of the experiment; repeated seq-4
+  telemetry replaced the true first-edge BIN anchor; and acceptance did not
+  require a terminal mission state. The working tree now uses a dedicated
+  east-facing calm GPS world, continues through RTL plus 10 s stabilization,
+  records reached-waypoint/RTL progress, anchors analysis to the immutable
+  first trigger event, and rejects incomplete nominal attempts. These fixes are
+  no-live tested and then exercised successfully by the corrected protected
+  nominal above; the rejected run itself is not rehabilitated.
 
 ## The Knee
 
@@ -77,7 +142,8 @@ corrupted GPS fix and rejecting it, measured on two tiers.
 - **Mechanism tier (primary):** the position innovation test ratio
   `posTestRatio`. Live, this is derived as
   `EKF_STATUS_REPORT.pos_horiz_variance ** 2`; in BIN decoded `XKF4`, it is
-  `(SP / 100.0) ** 2` on the primary core selected by `PI`. The knee is
+  `SP ** 2` on the primary core selected by `PI` because pymavlink's DFReader
+  has already applied the XKF4 format multiplier. The knee is
   `posTestRatio` crossing `1.0` — ArduPilot's own gate
   (`AP_NavEKF3_PosVelFusion.cpp`). Below `1.0` the fix is fused and the belief
   moves toward the drifting fix; at/above `1.0` the fix is rejected only when
@@ -118,7 +184,8 @@ while reporting healthy.
 
 Characterize, not gate. A run is never PASS/FAIL. **Accepted** = measurement
 validity only; **behavior class** = which band it landed in. The knee is the
-result of the campaign, not a bar to clear.
+result of the campaign, not a bar to clear. Measurement validity includes a
+recorded terminal state; nominal additionally requires planned RTL completion.
 
 ## Launch Identities
 
@@ -129,13 +196,14 @@ parameter stack):
 - `plane-gps` loads exactly `config/vehicles/plane_base.parm ->
   config/overlays/plane_gps.parm` — no airspeed overlay and no local plane
   override — wipes EEPROM, and emits `udp:127.0.0.1:14551`.
-- `gazebo-plane-gps` reuses the sensor-neutral base runway world
-  `assets/worlds/mini_talon_runway.sdf` (GPS/NavSat, calm, no wind publisher, no
-  airspeed sensor, no LiDAR bridge) as a dedicated identity, not an alias of
-  `gazebo-plane`.
+- `gazebo-plane-gps` uses the dedicated sensor-neutral world
+  `assets/worlds/mini_talon_gps_runway.sdf` (GPS/NavSat, calm, no wind
+  publisher, no airspeed sensor, no LiDAR bridge). Its east-facing pose matches
+  the mission's first leg without changing the shared `gazebo-plane` world.
 
-These targets are structurally implemented with no-SITL structural tests only;
-they are **not** live-smoke verified. See ADR-0021 (2026-07-13 amendment) and
+These targets are structurally implemented and have launched in rejected
+diagnostic attempts; they are **not** live-smoke verified. See ADR-0021
+(2026-07-13 amendment) and
 `docs/operations/gps_failure_runbook.md`.
 
 ## Output Paths

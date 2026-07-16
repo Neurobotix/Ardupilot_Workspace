@@ -203,7 +203,9 @@ generator takes a rate list, so extending is a longer input, no code change.
 - Run one `slow_drift` and one `hard_denial` smoke attempt under `var/runs/`.
 - Confirm injection by reading back every injected `SIM_GPS1_*` parameter.
 - Require a fresh, co-temporal heartbeat and SIMSTATE sample at every
-  seq-1→2→3→4 trigger event; a stale or untimestamped trace cannot authorize a
+  seq-1→3→4 navigation trigger event (optional seq-2 DO-command report; leading
+  home-row seq 0 ignored before evidence begins); a stale
+  or untimestamped trace cannot authorize a
   write, and injection is attempted at most once.
 - Treat every scheduled drift update, denial/jamming restore, MAVLink close,
   and process cleanup as acceptance-gating. Persist terminal success only after
@@ -240,33 +242,30 @@ generator takes a rate list, so extending is a longer input, no code change.
 
 ## Default Stack
 
-- Mission: a new `assets/missions/gps_failure_behavior_mission.waypoints`, based
-  on the **long one-way** airspeed mission
-  `airspeed_failure_eastbound_long_speed_15_mission.waypoints` (36 km WP3→WP4
-  straight leg), NOT the short 800 m behavior mission. Three deliberate changes
-  from the short template, with reasons:
-  - **Much longer straight leg.** The 800 m airspeed leg (~80 s) was sized for a
-    fast-showing fault. GPS slow-drift needs time to accumulate — at 0.5 m/s the
-    belief walks only ~45 m in 90 s. A very long straight cruise lets even the
-    slowest drift rate develop, and lets a fast-rejected glitch and its reset
-    both be observed on the same heading.
-  - **No reciprocal leg (or optional).** Airspeed needed the West leg because
-    wind sign flips `ARSP−GPS` — the reciprocal was an observability trick. GPS
-    does not care about wind sign; the truth-vs-belief gap is observable on a
-    single heading. The one-way long mission (no RTL; the monitor stops after
-    the schedule) is simpler and cleaner for drift accumulation.
-  - **Injection point stays `seq 4`.** The seq-1..4 front-half and the seq-4
-    injection edge are preserved from the airspeed missions, so the plugin's
-    first-edge-latch logic transfers unchanged.
+- Mission: `assets/missions/gps_failure_behavior_mission.waypoints`, based on
+  the practical airspeed behavior lifecycle with GPS-owned geometry: 100 m AGL,
+  500 m Eastbound calm-lane settle, 2000 m Eastbound measurement leg, reciprocal
+  return leg 500 m North, and RTL at seq 9. The prior 36 km one-way template is
+  retired for nominal smoke because it made the live gate far slower than the
+  airspeed lane while adding no value to the first live experiment.
+  - **Injection point stays `seq 4`.** The seq-1/3 front-half and the seq-4
+    injection edge are preserved, so the plugin's first-edge-latch logic remains
+    unchanged.
+  - **Reciprocal/RTL is retained for smoke ergonomics.** GPS does not require a
+    wind-sign reciprocal, but the airspeed-style shape gives a bounded, familiar
+    mission and a deterministic end path.
 
   Finalized in Phase 1; see the Mission Design ADR in `design_adrs.md`.
 - SITL target: `plane-gps` (dedicated identity; loads `plane_base.parm ->
   plane_gps.parm` only, no airspeed overlay and no local override, wipes EEPROM).
   Corrected 2026-07-13 from `plane-cte`, which is the CTE/airspeed lane; see the
   Dedicated Launch Identities amendment in `design_adrs.md` and ADR-0021.
-- Gazebo target: `gazebo-plane-gps` (dedicated identity reusing the
-  sensor-neutral base `mini_talon_runway.sdf` world; GPS/NavSat, calm, no
-  wind/airspeed/LiDAR). Structurally implemented, not yet live-smoke verified.
+- Gazebo target: `gazebo-plane-gps` (dedicated identity using
+  `mini_talon_gps_runway.sdf`; sensor-neutral GPS/NavSat, calm, no
+  wind/airspeed/LiDAR, east-facing spawn aligned to the mission). The corrected
+  pose was live-verified by the successful raw nominal roots on 2026-07-14,
+  including the v3 geometry root
+  `var/runs/gps_failure_behavior_20260714T122459635208Z/`.
 - Base params: `config/vehicles/plane_base.parm` (sets `AHRS_EKF_TYPE 3`,
   `EK3_ENABLE 1`; does NOT set the four knee params or `EK3_SRC*`).
 - GPS overlay: a new `config/overlays/plane_gps.parm` — **not**
@@ -295,7 +294,9 @@ Full contracts are in `design_adrs.md` (Trigger, Sweep, Reset ADRs).
 
 - **Trigger:** inject on entering the measurement waypoint — the first
   `MISSION_CURRENT` message with `seq == 4` after confirmed front-half progress
-  (seq 1..3 in AUTO while armed), first-edge latched, never re-fired. `seq 4` is
+  (required navigation seqs 1 and 3 in AUTO while armed; leading home-row seq 0
+  ignored; optional seq-2
+  `DO_CHANGE_SPEED` report), first-edge latched, never re-fired. `seq 4` is
   preserved from the airspeed missions so the plugin's first-edge-latch logic
   transfers unchanged. This places the fault at the start of the long straight
   measurement leg, so excursion is clean against a stable ground track. A
@@ -307,11 +308,12 @@ Full contracts are in `design_adrs.md` (Trigger, Sweep, Reset ADRs).
   matters more for GPS than airspeed because GPS drift corrupts the EKF belief,
   which does not clear by zeroing the param. One rate/magnitude/duration per
   clean flight.
-- **Observation window:** >= 90 s post-injection on the straight leg (at
-  0.5 m/s that is ~45 m excursion, clearly above the control noise band). The
-  one-way long leg provides trailing observation on a single heading; there is
-  no reciprocal leg or RTL. Denial/jam windows (5–60 s) sit inside the window.
-  The continuous-ramp case runs the whole leg.
+- **Observation window and terminal state:** nominal uses a 20 s minimum and
+  faulted cases use a 90 s minimum. These are evidence-eligibility gates, never
+  normal stop conditions. The monitor continues through the remaining mission
+  and stops after planned RTL at/after seq 8 has stabilized for 10 s, or records
+  a genuine early terminal such as early RTL or loss of control. Nominal
+  acceptance requires clean planned mission completion.
 - **Control:** a `nominal` no-fault run per campaign, flying the identical
   mission with all fault knobs at defaults. Every threshold is defined relative
   to this control (baseline `posTestRatio` range, baseline gap ~ sensor noise,
@@ -322,9 +324,11 @@ Full contracts are in `design_adrs.md` (Trigger, Sweep, Reset ADRs).
 A run is never PASS/FAIL. Two distinct concepts:
 
 - **Accepted** (counts toward repeats?) = measurement validity only: the fault
-  was injected and read back, enough post-injection flight was observed, and the
-  required log fields are present. A run with terrible behavior is still accepted
-  if it was cleanly measured.
+  was injected and read back, enough post-injection flight was observed, the
+  required log fields are present, and a valid terminal state was recorded.
+  Nominal additionally requires planned RTL completion. A faulted run with
+  terrible behavior may still be accepted when that adverse terminal is cleanly
+  measured.
 - **Behavior class** (the science output) = which band the run landed in —
   characterized, not gated.
 

@@ -1,7 +1,9 @@
 # GPS Failure Behavior — Review
 
 Status: Phase 1 no-SITL foundation is **Accepted** (2026-07-13, final no-SITL
-review). Phase 2 live smoke is next and remains unverified.
+review). A corrected protected nominal completed reviewed raw validation on
+2026-07-14; Phase 2 remains open because no curated evidence was promoted and
+no fault case has run.
 
 ## Phase Acceptance Ledger
 
@@ -9,7 +11,7 @@ review). Phase 2 live smoke is next and remains unverified.
 | --- | --- | --- | --- |
 | Phase 0 — design lock | Accepted | 2026-07-06 | Full brainstorm; four faults, two-tier knee, seven bands, characterize-not-gate; five Proposed ADRs (0017–0021). |
 | Phase 1 — no-SITL plugin foundation | Accepted | 2026-07-13 | Chunks 1–6: scaffold, payload semantics, static mission/parameter-stack integration, synthetic mechanism-gate evaluation, runtime/MAVLink contract helpers, and integration-readiness wiring. All prior BLOCKER/HIGH/MEDIUM findings resolved and verified in code; a final no-SITL review (2026-07-13) found no new BLOCKER/HIGH/MEDIUM/substantiated-LOW issue. No-SITL acceptance of the plugin foundation only — no live result. Live connection, mission execution, and BIN/log extraction remain Phase 2. |
-| Phase 2 — live smoke | Open (unverified) | — | Next phase; no live SITL/Gazebo run, real parameter readback, real mission timing, BIN extraction, empirical knee, or scientific evidence exists. |
+| Phase 2 — live smoke | Open (protected nominal raw validation passed) | 2026-07-14 | Root `var/runs/gps_failure_behavior_20260714T120212630044Z/` completed seq 9, planned RTL stabilization, accepted source/BIN/behavior analysis, and clean cleanup. Raw output only: no evidence promotion, fault smoke, or Phase-2 acceptance. |
 | Phase 3 — full v1 campaign | Open | — | — |
 | Phase 4 — evidence curation | Open | — | — |
 
@@ -497,7 +499,8 @@ makes no live claim.
 Every previously reported finding was re-verified as resolved in the current
 committed code (not merely claimed in prose):
 
-- Former BLOCKERs: runtime injection requires a validated seq 1→2→3→4 trigger
+- Former BLOCKERs: runtime injection requires a validated seq 1→3→4 navigation
+  trigger (with an optional seq-2 DO-command report)
   trace before any write (`runtime.py`, `monitor.py`); preview plans are never
   execution-authorized; the analyzer requires substantive finite behavior-tier
   evidence, not a marker boolean (`analyzers.py`); missing/contradictory evidence
@@ -568,8 +571,359 @@ Phase 0.
 
 ## Smoke Ledger (Phase 2)
 
-Empty until Phase 2. Will record raw run roots, artifact checklists, and the gate
-decision before Phase 3.
+### 2026-07-14 — protected nominal attempt 1
+
+- Time: start `2026-07-14T07:40:06Z` / `2026-07-14T10:40:06+03:00 EEST`;
+  terminal record `2026-07-14T07:40:20Z`.
+- Reviewed live-run HEAD:
+  `f21395c75a53cf9832c5fbac67360c02ba97b394` (`Fixed: harden gps nominal
+  live smoke path`).
+- Exact command:
+
+  ```bash
+  PYTHONPATH=src ./env/bin/python3 -m \
+    sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure \
+    --live-case nominal \
+    --confirm-live-phase2 \
+    --campaign-root /home/ahmed/ardupilot_workspace_next/var/runs/gps_failure_behavior_phase2_nominal_20260714T073957200424999Z
+  ```
+
+- Raw root:
+  `var/runs/gps_failure_behavior_phase2_nominal_20260714T073957200424999Z/`.
+  Attempt directory: `nominal/runs/attempt_001/`. Command exit status: **1**.
+- Launch identity: `plane-gps` and `gazebo-plane-gps` both started. The Plane
+  log records exactly `plane_base.parm -> plane_gps.parm`, explicitly excludes
+  `.private/config/plane_params.local.parm`, and contains no airspeed overlay.
+  Gazebo reported the governed workspace-only plugin search path
+  `/home/ahmed/ardupilot_workspace_next/build/ardupilot_gazebo`; the loaded
+  plugin emitted `ArduPilotPlugin` runtime messages. Pre-run plugin SHA-256:
+  `1d4089bb6306ecc602e484e9b4e3e77dfb7ecf6649a4292ba872f6d420415fc0`.
+- Mission/trigger/observation: upload of the five-item mission failed with
+  `MISSION_ACK type=4`, decoded as `MAV_MISSION_NO_SPACE`. The Plane console was
+  still in `INITIALISING`. Mission verification, arming, AUTO, seq-1->2->3->4,
+  the trigger, realized straight-leg duration, and the required 90 s
+  observation did not occur.
+- Nominal fault contract: `gps_injection.json` records `fault_type=nominal`, an
+  empty requested payload and empty schedule. Failure occurred before monitor
+  execution; `live_execution` is absent and no `SIM_GPS1_*` fault write was
+  attempted.
+- Live parameter/source contract: not reached. No live knee/source readbacks,
+  estimator flags, or live `posTestRatio` samples exist.
+- Artifact checklist: `manifest.json`, `gps_injection.json`,
+  `gps_cleanup.json`, `plane_gps.log`, and `gazebo_plane_gps.log` exist and the
+  JSON files parse as strict finite JSON. Required behavior artifacts
+  `gps_behavior_summary.json`, `ekf_innovation_metrics.json`,
+  `truth_vs_belief.json`, `mode_timeline.json`,
+  `attitude_altitude_envelope.json`, and `source_contract.json` are absent
+  because control failed before the monitor. Manifest SHA-256:
+  `6f90b7c564774808b6e1aadfa0b59656205b68fa12ad1a396fc910a9315bde7a`;
+  injection SHA-256:
+  `4a248638589bb216f5fbfeff73fec8cff3656bf923a6f499c740f96c846ad476`;
+  cleanup SHA-256:
+  `ca8aa07e75a08d5d731d942d7cda5d25d02e41615542702f0581c423d7ec0657`.
+- BIN/log analysis: no current-attempt DataFlash BIN was produced, so no XKF4,
+  SIM, or POS analysis and no BIN hash exist. MAVProxy created a zero-byte
+  `var/logs/mavproxy/plane-gps/logs/2026-07-14/flight1/flight.tlog`; it is raw
+  runtime state, not evidence.
+- Behavior class: **not classifiable / analysis incomplete**. The terminal
+  manifest verdict is `failed_retryable` / `error` with the mission-upload
+  exception; no analyzer ran and no accepted observation exists.
+- Cleanup: attempt-owned termination closed its direct handles and MAVLink but
+  `gps_cleanup.json` is `ok=false` because three MAVProxy child processes
+  remained. The governed `scripts/ops/launch.sh cleanup` was then run once;
+  afterward the simulator-process scan was clean and port 14551 was free.
+- Blockers exposed by the attempt: the GPS environment waits only for the first
+  heartbeat and did not establish initialized/GPS/EKF vehicle readiness before
+  mission upload; attempt cleanup did not own/terminate every MAVProxy child;
+  the terminal error row was persisted before failed cleanup and therefore did
+  not include the cleanup artifact/result. These require no-live remediation
+  and a fresh strict review before any new live authorization.
+- Gate decision: **NOMINAL_SMOKE_REJECTED**. No retry, slow drift, hard denial,
+  jamming, step glitch, combined smoke, matrix, evidence promotion, commit, or
+  push followed this attempt.
+
+### 2026-07-14 — post-rejection remediation state (no live rerun)
+
+- The historical rejected attempt and its hashes above are unchanged.
+- Readiness remediation is implemented: mission control is unavailable until
+  the existing Plane gate confirms AUTO availability, a non-`INITIALISING`
+  mode, GPS readiness, EKF readiness, and two consecutive ready heartbeats.
+- Cleanup remediation is implemented: direct handle termination and MAVLink
+  close are followed by canonical `scripts/ops/launch.sh cleanup`, structured
+  command-result capture, and an independent final survivor scan. Any failure
+  remains terminal.
+- Terminal-record remediation is implemented: on a stage exception,
+  `AttemptRunner` cleans up before appending the error row, refreshes cleanup
+  artifacts/results into that row, records a secondary cleanup exception if
+  present, and re-raises the original failure. GPS rows explicitly persist
+  framework `status` and the generic monitor result.
+- All remediation paths are fake/injection tested; no SITL, Gazebo, MAVProxy,
+  MAVLink, mission upload, parameter readback/write, BIN decode, live retry, or
+  evidence promotion occurred.
+- Checks run after the remediation: the focused GPS/core/adjacent-airspeed
+  regression set passed (**324 tests, 258 subtests**); focused Pyright over the
+  GPS plugin/CLI, changed core files, and affected tests reported **0 errors, 0
+  warnings**; no-live `--preflight` and `--phase2-smoke-plan` passed; the live
+  CLI without confirmation remained denied; `make doctor` and
+  `git diff --check` passed.
+- Gate decision remains **NOMINAL_SMOKE_REJECTED / PHASE_2_OPEN**. The next
+  permitted action is a fresh strict no-live review. A second nominal live
+  attempt requires separate operator authorization after that review.
+
+### 2026-07-14 — protected nominal attempt 2
+
+- Time: start `2026-07-14T08:01:23Z` / `2026-07-14T11:01:23+03:00 EEST`;
+  terminal record `2026-07-14T08:02:12Z`. Reviewed live-run HEAD remained
+  `f21395c75a53cf9832c5fbac67360c02ba97b394`.
+- Exact command:
+
+  ```bash
+  PYTHONPATH=src ./env/bin/python3 -m \
+    sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure \
+    --live-case nominal \
+    --confirm-live-phase2 \
+    --campaign-root /home/ahmed/ardupilot_workspace_next/var/runs/gps_failure_behavior_phase2_nominal_20260714T080120722888267Z
+  ```
+
+- Raw root:
+  `var/runs/gps_failure_behavior_phase2_nominal_20260714T080120722888267Z/`.
+  Attempt directory: `nominal/runs/attempt_001/`. Command exit status: **1**.
+- Progress proved: the remediated gate reported AUTO availability, a
+  non-`INITIALISING` vehicle, GPS readiness, EKF readiness, and two ready
+  heartbeats. The five-item mission uploaded and verified, the vehicle armed,
+  and AUTO was entered. This validates those paths only; it is not an accepted
+  smoke.
+- Monitor failure: `mode_timeline.json` records
+  `telemetry_rate_request_failed`, an empty trigger trace, and no mode samples.
+  Read-only extraction from the raw tlog found four command-511 ACKs in request
+  order: accepted, accepted, denied, accepted. The then-current code's third
+  request was `STATUSTEXT`, an event-driven message. Requiring its interval ACK
+  incorrectly stopped the monitor before live source-contract readback,
+  seq-1->2->3->4 trigger, nominal no-write execution, or the 90 s observation.
+- Behavior/artifacts: `gps_behavior_summary.json` is
+  `pre_injection_failure` / `accepted_observation=false`. The behavior files
+  exist but contain no accepted live observation; `source_contract.json` lacks
+  the required live readbacks. The current-attempt BIN and tlog are retained
+  only as raw diagnostics. BIN SHA-256:
+  `0c471d27db854a4ebcd5a134180536fbdce680e7290700b764772c8506df64ec`;
+  tlog SHA-256:
+  `c9a9d4ea3ad59ae04595312bb4e21f7e8a2783787906732aee44a5d81fb850c1`.
+- Cleanup: the canonical command returned 1 and the final scan reported one
+  live MAVProxy plus two children/zombies. The command used exact-name
+  `mavproxy`, while the real executable name was `mavproxy.py`. The proven
+  airspeed workspace-owned cleanup was then used manually to remove the
+  attempt's remnants; the dated final simulator-process scan was clean.
+- Terminal-record remediation proved effective: the final row is `status=error`
+  / `failed_retryable`, contains the structured monitor result, and contains
+  `gps_cleanup.json` plus the cleanup errors. Manifest SHA-256:
+  `87d6f335ea989b76db2ae2e9b70ffd5759b04fd98eb2316c1072d0d1ded72e1a`;
+  injection SHA-256:
+  `4a248638589bb216f5fbfeff73fec8cff3656bf923a6f499c740f96c846ad476`;
+  cleanup SHA-256:
+  `91b81a0826eca7f2efb4cd5092cb98b0475a594db9de2ce2fab734b27683642a`.
+- Gate decision: **NOMINAL_SMOKE_REJECTED / PHASE_2_OPEN**. No faulted case,
+  matrix run, evidence promotion, commit, or push followed.
+
+### 2026-07-14 — attempt-2 remediation state (no live rerun)
+
+- GPS telemetry setup now uses its own `request_live_streams` helper. It makes
+  no per-message ACK a prerequisite;
+  the monitor records and fails closed on actual required periodic-message
+  delivery. `STATUSTEXT` remains optional/event-driven.
+- GPS governed cleanup now runs its own workspace-scoped process cleanup before
+  canonical cleanup and the independent survivor scan. Canonical
+  `launch.sh cleanup` additionally matches `[m]avproxy.py`.
+- GPS owns its stream, readiness, mission-protocol, and cleanup helpers. A
+  structural test fails on any GPS import from a sibling plugin.
+- Focused tests reproduce the denied/missing ACK condition without aborting,
+  verify all four proven stream requests, require actual telemetry delivery,
+  verify cleanup-helper reuse, and assert the canonical Python-name matcher.
+  The GPS/core/adjacent-airspeed regression set passed **334 tests, 262
+  subtests**; focused Pyright reported **0 errors, 0 warnings**; no-live
+  `--preflight`, `--phase2-smoke-plan`, and the unconfirmed-live denial passed;
+  both launcher syntax checks, `git diff --check`, and `make doctor` passed.
+- Gate decision remains **NOMINAL_SMOKE_REJECTED / PHASE_2_OPEN**. A third
+  nominal attempt requires fresh strict no-live review and separate operator
+  authorization.
+
+### 2026-07-14 — unaccepted diagnostic attempt 3
+
+- An operator-started nominal diagnostic used raw root
+  `var/tmp/gps_failure_behavior_phase2_nominal_20260714T081602434288891Z/`.
+  It was not an accepted or promoted smoke result; the attempt root was not
+  retained at final review.
+- The telemetry ACK failure did not recur. Read-only inspection of raw flight-3
+  telemetry showed the required message streams arriving, AUTO armed flight,
+  and `MISSION_CURRENT` progress `0 -> 1 -> 3 -> 4`. Seq 2 was absent because
+  it is the verified `DO_CHANGE_SPEED` command, not a navigation item whose
+  current report ArduPlane guarantees. Tlog SHA-256:
+  `3b77a45c0fceba45db03cd686560bb7446a4f9f179127924f406a2c6383ae35c`.
+- The then-running monitor still required seq 2, so it could not authorize the
+  seq-4 trigger. The process ended without an accepted terminal result and left
+  three orphaned MAVProxy processes. The new GPS-owned workspace cleanup
+  removed those exact remnants; the final simulator-process scan was empty.
+- ADR-0020 is amended to require fresh, monotonic, armed/AUTO navigation seqs 1
+  and 3, permit an optional seq-2 DO-command report, and retain first-edge seq-4
+  latching. Fake tests cover both emitted forms (`1 -> 2 -> 3 -> 4` and
+  `1 -> 3 -> 4`) plus regressions and missing required navigation progress.
+- Gate decision: **UNACCEPTED_DIAGNOSTIC / PHASE_2_OPEN**. No new live attempt
+  is authorized by this diagnostic or remediation.
+
+### 2026-07-14 — governed nominal attempt 4
+
+- Raw root:
+  `var/runs/gps_failure_behavior_phase2_nominal_20260714T083812969855707Z/`.
+  Start `2026-07-14T08:38:22Z`; terminal `2026-07-14T08:46:54Z`.
+- GPS-owned readiness passed, all five mission items uploaded and verified, the
+  vehicle armed and entered AUTO, and the GPS-owned telemetry stream setup
+  delivered real mission progress `0 -> 1 -> 3 -> 4`. The earlier readiness,
+  ACK-gate, and sibling-plugin defects did not recur.
+- The attempt did not trigger. Leading home-row seq 0 had entered
+  `trigger_trace`; the validator correctly rejects out-of-contract evidence,
+  but the monitor should not have treated pre-navigation home-row reports as
+  evidence at all. Once present, seq 0 made later `1 -> 3 -> 4` permanently
+  invalid. The attempt was interrupted rather than waiting for the 900 s
+  timeout.
+- Terminal status is `interrupted` / `failed_retryable`; no behavior artifacts
+  or accepted observation exist. Cleanup is `ok=true`: GPS-owned cleanup and
+  canonical cleanup succeeded, MAVLink closed, and the final process scan is
+  empty. Manifest SHA-256:
+  `e80ae97acee34622835471e888b828656ddae8c5d20880c4ee08919b206e4e3a`;
+  cleanup SHA-256:
+  `2bc8bff61234a0c4143cbb7b32202e956d07263ff6e9763a0cd52e6b5d687036`;
+  raw tlog SHA-256:
+  `664c9c500e278da1215a79d6ace88c972755e3fadcc42b84774c4a3440311a61`;
+  current-attempt BIN (`00000003.BIN`) SHA-256:
+  `8693b69750a13e4b5f7cda2cb92cd9fb0a9f4c607e8ebd158aae248025033ca5`.
+- No-live remediation now ignores seq 0 only while `trigger_trace` is empty.
+  After seq 1, seq 0 is retained and rejected as a regression. Tests cover both
+  cases.
+- Gate decision: **NOMINAL_SMOKE_REJECTED / PHASE_2_OPEN**. No automatic retry
+  or faulted case ran.
+
+### 2026-07-14 — nominal run declared success but rejected on strict review
+
+- Raw root:
+  `var/runs/gps_failure_behavior_live_nominal_codex_20260714T095246Z/`.
+  The terminal row says `success` / `valid_nominal`; that declaration is not
+  accepted as Phase-2 evidence.
+- Review found the BIN was decoded while it was still growing, before cleanup
+  closed the logger. The decoded window was also anchored to the mission-upload
+  `CMD CNum=4` row rather than live seq-4 execution.
+- Pymavlink had already scaled decoded `XKF4.SP` and decoded `SIM/POS Lat/Lng`
+  into engineering units. Applying another `/100` and `/1e7` suppressed the
+  innovation ratio and truth-vs-belief distance.
+- The nominal case advertised a 90 s acceptance window while the monitor used
+  20 s. `gps_injection.json` existed but was omitted from the terminal artifact
+  map, the terminal stimulus retained stale plan-only fields, and no required
+  run configuration/source-tree/input provenance was captured.
+- No-live remediation moves staged analysis/verdict after framework cleanup,
+  records a fresh live seq-4 boot-time anchor, rejects CMD upload rows as an
+  anchor, fixes decoded units, makes case metadata the duration source of
+  truth, synchronizes the injection artifact/stimulus, and adds shared
+  campaign-level provenance used independently by GPS and airspeed. GPS still
+  has no sibling-plugin import.
+- Gate decision: **DECLARED_RESULT_REJECTED / PHASE_2_OPEN**. A new live run is
+  required; the raw root is retained only as diagnostic output.
+
+### 2026-07-14 — full-flight lifecycle comparison and no-live correction
+
+- Raw root:
+  `var/runs/gps_failure_behavior_20260714T113259746238Z/`.
+- The run is rejected despite `gps_behavior_summary.json` declaring
+  `valid_nominal`. It observed only mission-current seqs 1, 3 and 4 and stopped
+  with `post_injection_observation_complete` after the 20 s minimum window;
+  seqs 5–9 and planned RTL were never observed.
+- The GPS base world realized an approximately 359-degree initial heading while
+  the copied behavior mission begins east. Historical airspeed comparison
+  realized approximately 89 degrees and completed seq 9 / stabilized RTL.
+- The authorized first trigger event was at boot time 83.186 s. The analyzer's
+  reverse trace search selected a repeated seq-4 message near 102.686 s,
+  leaving only five persisted BIN mechanism/truth samples. Read-only analysis
+  from the correct first edge produced hundreds of paired samples; the BIN was
+  usable but the stored analysis window was not.
+- No-live correction: dedicated east-facing `mini_talon_gps_runway.sdf`;
+  `MISSION_ITEM_REACHED`, max-seq and AUTO-to-RTL tracking; 20/90 s as minimum
+  evidence only; planned RTL plus 10 s stabilization; immutable first-edge BIN
+  anchor; and terminal/mission-completion gates in classifier, summary and
+  manifest acceptance. The shared base world and airspeed plugin are unchanged.
+- Gate decision: **DECLARED_RESULT_REJECTED / NO-LIVE_FIX_TESTED /
+  PHASE_2_OPEN**. No fault case is authorized by this record; a fresh governed
+  nominal run must verify the realized heading and full mission terminal path.
+
+### 2026-07-14 — corrected protected nominal raw validation
+
+- Exact command:
+
+  ```bash
+  env/bin/python -m sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure \
+    --live-case nominal --confirm-live-phase2
+  ```
+
+- Raw root:
+  `var/runs/gps_failure_behavior_20260714T120212630044Z/`; attempt directory
+  `nominal/runs/attempt_001/`; command exit status **0**.
+- A preceding post-fix attempt at
+  `var/runs/gps_failure_behavior_20260714T115636180733Z/` timed out at the
+  readiness gate before flight. The timeout exposed insufficient diagnostics,
+  not a missing world signal: a read-only probe observed GPS fix type 6 with 10
+  satellites and EKF flags 831. The readiness loop now refreshes idempotent
+  stream requests every five seconds and includes all observed gate state in a
+  timeout. The fresh run then passed readiness normally.
+- Flight lifecycle: immutable trigger seq 4 at boot `56.487 s`; monitor duration
+  `208.43 s`; max mission seq 9; distinct reached rows 2–8; AUTO-to-RTL at seq
+  8; stop reason `planned_rtl_stabilized`; terminal and mission-complete flags
+  both true. Initial BIN ATT yaw was approximately `89.27 deg` east.
+- Analysis: `gps_behavior_summary.json` is `valid_nominal`,
+  `accepted_observation=true`; the live source contract is `ok=true`; BIN
+  `window_start_time_us=56487000` matches the stored first-edge trigger and
+  contains 4,038 truth/belief pairs plus 4,039 mechanism samples.
+- Provenance: world SHA-256
+  `69d1a7f18348f0cef21507c93226bc6e982f4c103b31c5ef7dafc7c357b6fa26`;
+  mission SHA-256
+  `c372bf6253c986acd7ecb48f1292f6bc5bc9861161d1b869503514ca71362c2e`.
+- Cleanup: `gps_cleanup.json` is `ok=true`; canonical cleanup exited 0 and the
+  final simulator-process scan was empty.
+- Gate decision: **PROTECTED_NOMINAL_RAW_VALIDATION_PASSED / PHASE_2_OPEN**.
+  The run is not promoted curated evidence, does not establish an empirical
+  knee, and does not authorize or claim any fault-case result.
+
+### 2026-07-14 — post-nominal takeoff-loop correction
+
+- Read-only BIN review tied the visible pre-injection loop to mission geometry:
+  takeoff completed at `98.22 m` AGL around `323 m` East, after which the copied
+  seq-3 waypoint at `300 m` was behind the aircraft and outside the configured
+  20 m waypoint radius. Target bearing reversed to approximately `-92.8 deg`
+  and commanded roll reached about 40–45 degrees until seq 3 was passed.
+- Mission v3 moves seq 3/7 to 500 m East and seq 4/5/6 to 1300 m East. It keeps
+  both 800 m analysis legs, seq numbering, 100 m altitude, first seq-4 trigger,
+  reciprocal path, and planned RTL unchanged.
+- Active mission SHA-256 is
+  `3d111b32351a527500eafa43e4ad67d74b71ffc09555bd878e570cbed5f671bd`.
+  The raw nominal above remains bound to its recorded v2 hash
+  `c372bf6253c986acd7ecb48f1292f6bc5bc9861161d1b869503514ca71362c2e`.
+- Fresh governed nominal:
+  `var/runs/gps_failure_behavior_20260714T122459635208Z/`.
+- The run recorded the active v3 hash, reached seq 9, observed reached rows
+  2–8, transitioned to planned RTL at seq 8, stopped after RTL stabilization,
+  and emitted `accepted_observation=true` with clean cleanup.
+- From takeoff completion to seq 3, East displacement was monotonic, waypoint
+  distance fell from about 180 m to less than 1 m, north span was 3.7 m, target
+  bearing remained eastward, and maximum absolute roll was 2.1 degrees.
+- Gate decision: **V3_GEOMETRY_RAW_VALIDATED / FAULT_CASES_STILL_OPEN**. The
+  pre-injection loop is fixed. This does not promote curated evidence or accept
+  Phase 2.
+
+### 2026-07-14 — v4 longer/wider fault geometry
+
+- Mission v4 retains the raw-validated 500 m settle and all trigger/terminal
+  sequence contracts.
+- Seq 4/5/6 move to 2500 m East; seq 5–8 move to 500 m North. The outbound and
+  reciprocal measurement legs are 2000 m and their lane spacing is 500 m.
+- Active SHA-256:
+  `8d1c8de43c6e496946b1f6bdf3d88f4aa14cd3ba7abe84067cb6a4edd27d7f35`.
+- Targeted mission geometry and `hard_denial_15s` dry-run checks pass. V4 has
+  not yet been flown; the v3 nominal remains the latest raw live validation.
 
 ## Rollback Rule
 

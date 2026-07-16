@@ -19,8 +19,8 @@ Decisions locked with the operator (summary; details in each ADR):
   characterize-not-gate verdict model.
 - **ADR-0019** — Severity-sweep design (one independent variable per fault;
   GPS-drift-has-memory → one-per-flight; pulse-with-reset dropped).
-- **ADR-0020** — Mission design and injection trigger (long one-way leg, seq-4
-  first-edge latch).
+- **ADR-0020** — Mission design and injection trigger (bounded
+  reciprocal/RTL mission, seq-4 first-edge latch, full-flight terminal contract).
 - **ADR-0021** — GPS parameter overlay (`plane_gps.parm`, pinning the four
   knee-governing EKF params).
 
@@ -103,7 +103,7 @@ pass/fail gate.
 - **Mechanism tier (primary knee signal):** the position innovation test ratio
   `posTestRatio`. Live telemetry derives it as
   `EKF_STATUS_REPORT.pos_horiz_variance ** 2`; decoded BIN analysis derives it
-  from the selected primary core's `XKF4.SP` as `(SP / 100) ** 2`, with
+  from the selected primary core's already-scaled `XKF4.SP` as `SP ** 2`, with
   `XKF4.PI` required to identify the primary core. The knee is `posTestRatio`
   crossing `1.0` — ArduPilot's own gate (`AP_NavEKF3_PosVelFusion.cpp:824`).
   Below `1.0`: fused → belief moves toward the drifting fix. At/above `1.0`:
@@ -132,8 +132,9 @@ believes is fine.
 **Verdict model: characterize, not gate.** A run is never PASS/FAIL. Two
 concepts:
 - **Accepted** = measurement validity only (fault injected + read back, enough
-  post-injection flight, required fields present). A run with terrible behavior
-  is still accepted if cleanly measured.
+  post-injection flight, required fields present, and valid terminal evidence;
+  nominal also requires planned mission completion). A run with terrible
+  behavior is still accepted if cleanly measured.
 - **Behavior class** = which band it landed in. The `silent_drift` vs
   `detected_rejected` boundary (the knee) is the *result*, not a bar to clear.
 
@@ -248,47 +249,62 @@ is observable on a single heading regardless of wind.
 
 ## Decision
 
-New `assets/missions/gps_failure_behavior_mission.waypoints`, based on the
-**long one-way** airspeed mission
-`airspeed_failure_eastbound_long_speed_15_mission.waypoints` (36 km WP3→WP4
-straight leg), with three changes:
+`assets/missions/gps_failure_behavior_mission.waypoints` uses the practical
+airspeed behavior lifecycle with GPS-owned geometry: a 500 m calm-lane settle,
+2000 m Eastbound measurement leg, reciprocal return leg 500 m North, and RTL at
+seq 9. The
+earlier 36 km one-way candidate was retired before the nominal live gate because
+it made the experiment unnecessarily long.
 
-1. **Much longer straight leg** — GPS slow-drift needs time; at 0.5 m/s the
-   belief walks ~45 m in 90 s. A very long straight cruise lets even the slowest
-   rate develop, and lets a fast-rejected glitch and its reset both be seen on
-   one heading.
-2. **No reciprocal leg, no RTL** — GPS does not care about wind sign; the
-   monitor stops after the schedule.
-3. **Injection stays `seq 4`** — the seq-1..4 front-half and the seq-4 injection
-   edge are preserved from the airspeed missions, so the plugin's
-   first-edge-latch logic transfers unchanged.
+1. **Bounded but long enough for fault observation** — the 2000 m outbound plus
+   reciprocal route provides post-injection observation while retaining a
+   deterministic end state.
+2. **Reciprocal plus RTL** — the reciprocal is not required for GPS physics,
+   but it preserves a proven mission lifecycle and gives the monitor a planned
+   RTL terminal contract.
+3. **Injection stays `seq 4`** — the seq-1/3 front-half and the seq-4 injection
+   edge are preserved from the airspeed mission.
+4. **Minimum window is not termination** — 20 s nominal / 90 s fault are
+   evidence gates. The monitor normally continues to RTL and waits 10 s for
+   stabilization.
 
 **Trigger:** inject on the first `MISSION_CURRENT` with `seq == 4` after
-confirmed front-half progress (seq 1..3 in AUTO while armed), first-edge latched,
+confirmed navigation progress (seq 1 and 3 in AUTO while armed; seq 2 is an
+optional `DO_CHANGE_SPEED` current report), first-edge latched,
 never re-fired. A missed/late trigger is `pre_injection_failure`, not a late
 injection. Record requested vs actual.
 
 ## Alternatives considered
 
-- **Reuse the short 800 m behavior mission** — rejected; too short for drift
-  accumulation.
-- **Keep the reciprocal leg** — rejected; unnecessary for GPS, adds complexity.
+- **Use the 36 km one-way mission** — rejected for the first live gate; it
+  removed the deterministic RTL lifecycle and made diagnosis unnecessarily
+  slow.
+- **Stop at the minimum evidence window** — rejected after the 2026-07-14
+  nominal regression; it truncates the experiment before reciprocal/RTL
+  behavior is observed.
 - **Move the injection seq** — rejected; breaks first-edge-latch reuse.
+- **Keep the airspeed lane's exact 300/1100 m coordinates** — rejected after
+  the 2026-07-14 nominal completed its calm-lane climb around 323 m East and had
+  to turn back to seq 3. V3 first moved the paired endpoints to 500/1300 m;
+  v4 retains the safe 500 m settle while extending the far endpoint to 2500 m
+  and widening the reciprocal separation to 500 m. Trigger ordering is
+  unchanged.
 
 ## Evidence / sources
 
-- Existing `airspeed_failure_eastbound_long_speed_15_mission.waypoints` (36 km
-  one-way; verified present).
+- Existing `airspeed_failure_behavior_mission.waypoints` mission shape.
 - `plan.md` Default Stack + Injection Rule.
 
 ## Consequences
 
-- The plugin's trigger logic is inherited unchanged from airspeed.
-- Exact `seq`-4 waypoint geometry finalized in Phase 1.
+- The GPS plugin owns its trigger implementation while preserving the proven
+  first-edge mission contract; it does not import the airspeed plugin.
+- Nominal acceptance requires planned RTL completion; adverse fault terminals
+  remain characterizable when cleanly measured.
 
 ## Open validation items
 
-- Realized straight-leg duration; final waypoint list.
+- Realized complete-flight timing and east-facing spawn alignment.
 
 ---
 
@@ -367,12 +383,11 @@ The correction (mirrored verbatim in the promoted record
   the override was intentionally excluded). It wipes EEPROM, uses
   `var/runs/sitl/plane-gps` and a `plane-gps` MAVProxy identity, and emits
   `udp:127.0.0.1:14551`.
-- `gazebo-plane-gps` reuses the sensor-neutral base runway world
-  `assets/worlds/mini_talon_runway.sdf` by reference (no duplication): it
-  provides the JSON FDM path and NavSat/GPS with no wind publisher,
-  `WindEffects`, airspeed sensor, or LiDAR bridge. It is a dedicated identity,
-  not an alias of `gazebo-plane`, so the lane keeps room for future GPS-specific
-  checks.
+- `gazebo-plane-gps` uses the dedicated sensor-neutral
+  `assets/worlds/mini_talon_gps_runway.sdf`. It provides the JSON FDM path and
+  NavSat/GPS with no wind publisher, `WindEffects`, airspeed sensor, or LiDAR
+  bridge, and owns the east-facing pose required by the mission. The shared
+  `gazebo-plane` world is not modified.
 
 No live claim: the targets are structurally implemented with no-SITL structural
 tests only. Phase 2 smoke must read back the realized stack live.

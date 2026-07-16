@@ -74,15 +74,22 @@ Decision (execution-path correction):
 - The launcher uses a dedicated `build_plane_gps_param_args()` helper rather
   than the shared `build_plane_param_args()` (which always appends the local
   override), so no existing target's historical override behavior changes.
-- `gazebo-plane-gps` reuses the sensor-neutral base Mini Talon runway world
-  `assets/worlds/mini_talon_runway.sdf` **by reference** — no world duplication.
-  That world provides the ArduPilot JSON FDM path and the NavSat (GPS) sensor,
-  with no wind publisher, no `WindEffects`, no airspeed sensor, and no LiDAR
-  bridge — i.e. it is sensor-neutral enough for the GPS contract. It is exposed
-  as a dedicated target identity (not an alias of `gazebo-plane`) so the GPS
-  lane keeps its own name and future room for GPS-specific safety checks.
+- `gazebo-plane-gps` uses the dedicated
+  `assets/worlds/mini_talon_gps_runway.sdf`. It retains the sensor-neutral base
+  Mini Talon, JSON FDM, NavSat/GPS, and calm/no-wind/no-airspeed/no-LiDAR
+  contract while owning the spawn orientation required by the GPS mission.
+  The shared `gazebo-plane` world remains unchanged.
 
-Not a live claim: `plane-gps` / `gazebo-plane-gps` are structurally implemented
-and covered by no-SITL structural tests only. No live SITL/Gazebo run, live
-parameter readback, or evidence claim exists. Phase 2 smoke must read back the
-realized parameter stack live before any live GPS matrix.
+This execution-path decision is not itself a live claim. Rejected diagnostics
+later exercised the targets and parameter readback, but no accepted complete
+nominal result or evidence claim exists. Phase 2 smoke must accept the realized
+stack and full terminal path before any live GPS matrix.
+
+Amendment (2026-07-14, spawn-frame correction): the rejected nominal root
+`var/runs/gps_failure_behavior_20260714T113259746238Z/` showed that reusing
+`mini_talon_runway.sdf` violated the mission-frame contract: the aircraft began
+approximately north while the copied behavior mission begins east. The GPS
+target therefore owns `mini_talon_gps_runway.sdf`, whose model pose matches the
+proven east-facing behavior-mission frame. The attempt provenance hashes this
+world. This is a no-live structural correction; a fresh run must verify the
+realized heading.

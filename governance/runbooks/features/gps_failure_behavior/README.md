@@ -9,10 +9,12 @@ Current status: Phase 0 design is locked. Phase 1 no-SITL foundation (Chunks
 semantics, static mission/parameter-stack integration, synthetic mechanism-gate
 evaluation, a fake-testable runtime/MAVLink parameter contract, and
 integration-readiness wiring into the shared suite path (a `--preflight`
-readiness report). All prior findings are resolved and verified in code (see
-`review.md`). Phase 2 live smoke is next and remains unverified: no live
-SITL/runtime execution, real parameter readback, live MAVLink connection,
-BIN/log mechanism extraction, campaign execution, or scientific evidence claim
+readiness report). All prior Phase-1 findings were resolved and verified in code
+(see `review.md`). Phase 2 remains open: rejected diagnostic runs exercised the
+live stack, parameter, mission, trigger and BIN paths, and corrected governed
+nominal runs now complete the full mission. Mission v3 was raw-validated at
+`var/runs/gps_failure_behavior_20260714T122459635208Z/` without the earlier
+pre-injection loop. No fault-case scientific result or curated evidence claim
 exists.
 
 ## Read Order for New Work
@@ -49,7 +51,7 @@ through live Phase-2 measurement.
 | [ADR-0017](../../../decisions/ADR-0017-gps-failure-fault-catalog.md) | Fault catalog and `SIM_GPS1_*` knob mapping (four headline faults) |
 | [ADR-0018](../../../decisions/ADR-0018-gps-failure-knee-and-classification.md) | Two-tier knee (`posTestRatio` = 1.0), behavior bands, characterize-not-gate |
 | [ADR-0019](../../../decisions/ADR-0019-gps-failure-sweep-design.md) | Severity-sweep design (one variable per fault; drift-has-memory) |
-| [ADR-0020](../../../decisions/ADR-0020-gps-failure-mission-and-trigger.md) | Long one-way mission and seq-4 injection trigger |
+| [ADR-0020](../../../decisions/ADR-0020-gps-failure-mission-and-trigger.md) | Bounded reciprocal/RTL mission, seq-4 trigger, and full-flight terminal contract |
 | [ADR-0021](../../../decisions/ADR-0021-gps-failure-parameter-overlay.md) | `plane_gps.parm` overlay pinning the four knee params |
 
 ## Code Paths
@@ -69,7 +71,8 @@ through live Phase-2 measurement.
 
 | Path | Purpose |
 | --- | --- |
-| `assets/missions/gps_failure_behavior_mission.waypoints` | Long one-way mission (based on the 36 km airspeed mission), seq-4 inject, no reciprocal/RTL |
+| `assets/missions/gps_failure_behavior_mission.waypoints` | Bounded 2000 m outbound/reciprocal mission with 500 m spacing, seq-4 inject, seq-9 RTL |
+| `assets/worlds/mini_talon_gps_runway.sdf` | Calm sensor-neutral GPS world with east-facing pose aligned to the mission |
 | `config/vehicles/plane_base.parm` | Base vehicle parameters |
 | `config/overlays/plane_gps.parm` | GPS overlay pinning `EK3_POS_I_GATE`, `EK3_GLITCH_RAD`, `FS_EKF_THRESH`, `EK3_GPS_CHECK`, `EK3_SRC*`, calm wind |
 
@@ -78,7 +81,8 @@ through live Phase-2 measurement.
 Dedicated identities `plane-gps` and `gazebo-plane-gps` (added structurally
 2026-07-13; not live-smoke verified). `plane-gps` loads `plane_base.parm ->
 plane_gps.parm` only (no airspeed overlay, no local override, wipes EEPROM);
-`gazebo-plane-gps` reuses the sensor-neutral base `mini_talon_runway.sdf` world.
+`gazebo-plane-gps` uses the dedicated sensor-neutral
+`mini_talon_gps_runway.sdf` world so the spawn heading matches the mission.
 These replaced the earlier incorrect `plane-cte` / `gazebo-plane-cte` references.
 See ADR-0021's 2026-07-13 amendment and `design_adrs.md`.
 
