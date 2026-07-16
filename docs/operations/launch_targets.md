@@ -66,7 +66,7 @@ launch target or CTE/wind-matrix default and must be named explicitly to use.
 | --- | --- | --- |
 | `plane` | `config/vehicles/plane_base.parm` | Compatibility launcher appends `.private/config/plane_params.local.parm` only when it exists. |
 | `plane-cte` / `plane-airspeed` | `config/vehicles/plane_base.parm` -> `config/overlays/plane_airspeed.parm` | Same optional local final overlay; `plane-cte` wipes EEPROM. |
-| `plane-gps` | `config/vehicles/plane_base.parm` -> `config/overlays/plane_gps.parm` | Local override **excluded unconditionally** (dedicated `build_plane_gps_param_args`, exclusion printed); no airspeed overlay; wipes EEPROM. Structural only, not yet live-smoke verified. Pairs with `gazebo-plane-gps` (base `mini_talon_runway.sdf`). |
+| `plane-gps` | `config/vehicles/plane_base.parm` -> `config/overlays/plane_gps.parm` | Local override **excluded unconditionally** (dedicated `build_plane_gps_param_args`, exclusion printed); no airspeed overlay; wipes EEPROM. Pairs with `gazebo-plane-gps` (`mini_talon_gps_runway.sdf`, east-facing sensor-neutral model). Corrected world is no-live tested; complete-flight live verification remains pending. |
 | `plane-lidar` | `config/vehicles/plane_base.parm` -> `config/overlays/plane_lidar.parm` | Same optional local final overlay. |
 | `plane-staircase` | `config/vehicles/plane_base.parm` -> `config/overlays/plane_lidar.parm` -> `config/overlays/staircase_plane_params.parm` | Same optional local final overlay. |
 | `plane-airspeed-lidar` | `config/vehicles/plane_base.parm` -> `config/campaigns/mini_talon_airspeed_lidar/plane_full.parm` | Same optional local final overlay; the integrated target remains not yet tested in current evidence. |

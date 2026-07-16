@@ -35,11 +35,11 @@ Active waypoint missions live directly in this directory.
   cruise-speed source. Seq numbering and the seq-4 injection contract match
   the speed-15 variant.
 - `gps_failure_behavior_mission.waypoints`
-  Purpose: active GPS failure behavior mission. It preserves the locked
-  seq-1..4 front half and explicit `DO_CHANGE_SPEED=15`, injects on the first
-  seq-4 edge, then provides an approximately 36 km one-way Eastbound
-  measurement leg with no reciprocal leg, RTL, or landing sequence. Static
-  structure is validated; realized flight duration remains a Phase-2 item.
+  Purpose: active GPS failure behavior mission. It keeps the practical airspeed
+  lifecycle but uses a calm-lane-specific 500 m pre-injection settle point,
+  followed by 2000 m outbound and reciprocal legs separated by 500 m. It
+  injects on the first seq-4 edge and ends in RTL at seq 9. The minimum
+  post-injection window is an evidence gate; it does not terminate the flight.
 - `lidar_staircase_mission.waypoints`
   Purpose: LiDAR overpass mission for the staircase world.
 - `quad_star_showcase_mission.waypoints`

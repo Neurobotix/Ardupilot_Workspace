@@ -1,12 +1,43 @@
 QGC WPL 110
-# GPS FAILURE BEHAVIOR MISSION
-# Speed source: explicit DO_CHANGE_SPEED=15 m/s.
-# Seq 1-4 and the seq-4 injection edge are preserved from the locked long template.
-# WP3->WP4 is the approximately 36 km one-way Eastbound measurement leg.
-# The monitor stops after the schedule; there is no reciprocal leg, RTL, or landing sequence.
-# Straight-leg flight duration has not been live-validated; that remains a Phase-2 item.
+# GPS FAILURE BEHAVIOR MISSION v4
+# Purpose-built nominal/fault trigger mission for the gps_failure lane.
+# Geometry keeps the practical airspeed behavior lifecycle instead of the old
+# 36 km long-line template, but extends the calm-lane settle point to 500 m.
+# A v2 live nominal completed its 100 m climb around 323 m East; the former
+# 300 m settle waypoint was then behind the aircraft and caused a full turnback
+# loop. V3 fixed that settle point; v4 extends each measurement leg to 2000 m
+# and increases reciprocal-lane spacing to 500 m. GPS faults still inject on
+# entering seq 4 after front-half progress through seq 1 and seq 3; seq 2 may be
+# skipped by MISSION_CURRENT.
+#
+# Home
 0	1	0	16	0	0	0	0	-35.3632620	149.1652370	584.00	1
-1	0	3	22	15.0	0	0	0	-35.3632620	149.1784556	100.00	1
+#
+# WP1: TAKEOFF East, climb to 100 m AGL.
+1	0	3	22	15.0	0	0	0	-35.3632620	149.1668924	100.00	1
+#
+# WP2: Command target speed = 15 m/s.
+# MAV_CMD_DO_CHANGE_SPEED (178): param1=0, param2=15.
 2	0	0	178	0	15.0	0	0	0	0	0	1
-3	0	3	16	0	0	0	0	-35.3632620	149.1872680	100.00	1
-4	0	3	16	0	0	0	0	-35.3632620	149.5842712	100.00	1
+#
+# WP3: Eastbound settle leg start, 500 m East of home.
+3	0	3	16	0	0	0	0	-35.3632620	149.1707448	100.00	1
+#
+# WP4: Eastbound measurement leg end, 2500 m East of home.
+# INJECTION POINT: fault/no-fault observation starts on entering seq 4.
+4	0	3	16	0	0	0	0	-35.3632620	149.1927760	100.00	1
+#
+# WP5: North offset for reciprocal turn, 500 m North / 2500 m East.
+5	0	3	16	0	0	0	0	-35.3587703	149.1927760	100.00	1
+#
+# WP6: Westbound measurement leg start, 500 m North / 2500 m East.
+6	0	3	16	0	0	0	0	-35.3587703	149.1927760	100.00	1
+#
+# WP7: Westbound measurement leg end, 500 m North / 500 m East.
+7	0	3	16	0	0	0	0	-35.3587703	149.1707448	100.00	1
+#
+# WP8: Return toward home, 500 m North of home.
+8	0	3	16	0	0	0	0	-35.3587703	149.1652370	100.00	1
+#
+# WP9: Return to launch. No landing sequence.
+9	0	3	20	0	0	0	0	0	0	0	1

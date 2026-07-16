@@ -70,6 +70,7 @@ COPTER_LIDAR_WORLD="$WORLDS_DIR/iris_lidar_obstacles.sdf"
 
 # Plane worlds  
 PLANE_WORLD="$WORLDS_DIR/mini_talon_runway.sdf"
+PLANE_GPS_WORLD="$WORLDS_DIR/mini_talon_gps_runway.sdf"
 PLANE_LIDAR_WORLD="$WORLDS_DIR/mini_talon_lidar_runway.sdf"
 PLANE_WIND_WORLD="$WORLDS_DIR/mini_talon_wind_runway.sdf"
 PLANE_WIND_SEA_LEVEL_WORLD="$WORLDS_DIR/mini_talon_wind_runway_sea_level.sdf"
@@ -213,6 +214,7 @@ cleanup() {
     pkill -9 -x arduplane 2>/dev/null || true
     pkill -9 -x arducopter 2>/dev/null || true
     pkill -9 -x mavproxy 2>/dev/null || true
+    pkill -9 -f "[m]avproxy.py" 2>/dev/null || true
     pkill -9 -f "[s]im_vehicle.py" 2>/dev/null || true
     pkill -9 -f "[l]idar_bridge" 2>/dev/null || true
     sleep 2
@@ -743,16 +745,12 @@ launch_gazebo_plane_wind() {
 }
 
 launch_gazebo_plane_gps() {
-    # GPS failure lane world. Reuses the sensor-neutral base Mini Talon runway
-    # world by reference: it provides the ArduPilot JSON FDM path and the NavSat
-    # (GPS) sensor, with no wind publisher, no WindEffects, no airspeed sensor,
-    # and no LiDAR bridge. This is a dedicated target identity (not an alias of
-    # gazebo-plane) so the GPS lane keeps its own name and future room for
-    # GPS-specific safety checks. See ADR-0021 and docs/architecture/gps_failure_lane.md.
-    print_info "Launching Gazebo GPS failure lane (base Mini Talon runway, calm, GPS/NavSat)..."
+    # Dedicated calm GPS world: sensor-neutral base model, but with the proven
+    # east-facing pose required by the behavior mission's first leg.
+    print_info "Launching Gazebo GPS failure lane (east-facing Mini Talon, calm, GPS/NavSat)..."
     print_info "Pair with: $OPERATOR_LAUNCH plane-gps"
     print_info "No wind publisher, no airspeed sensor, no LiDAR bridge; GPS fault injection is driven by SITL SIM_GPS1_* params."
-    launch_gazebo_world "$PLANE_WORLD" "Starting Gazebo GPS failure lane world (sensor-neutral base runway)..."
+    launch_gazebo_world "$PLANE_GPS_WORLD" "Starting dedicated Gazebo GPS failure lane world..."
 }
 
 launch_gazebo_plane_wind_sea_level() {
@@ -896,7 +894,7 @@ show_help() {
     echo "  gazebo-plane-lidar - Gazebo with Mini Talon + LiDAR"
     echo "  gazebo-plane-cte   - Gazebo CTE lane world (Mini Talon wind world, calm by default)"
     echo "  gazebo-plane-wind  - Alias for gazebo-plane-cte"
-    echo "  gazebo-plane-gps   - Gazebo GPS failure lane (sensor-neutral base Mini Talon runway, calm, GPS/NavSat)"
+    echo "  gazebo-plane-gps   - Gazebo GPS failure lane (east-facing sensor-neutral Mini Talon, calm, GPS/NavSat)"
     echo "  gazebo-plane-wind-sea-level - Gazebo with Mini Talon + Wind Effects at elevation 0m"
     echo "  gazebo-plane-airspeed-lidar - Gazebo with the integrated wind + staircase lane"
     echo "  gazebo-plane-altitude-wind - Gazebo with Mini Talon altitude-driven wind lane"

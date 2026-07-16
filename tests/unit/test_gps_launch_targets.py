@@ -10,8 +10,8 @@ the dedicated identities. They prove:
 - `plane-gps` loads exactly `plane_base.parm -> plane_gps.parm`, wipes EEPROM,
   exposes only the local UDP output, and never appends the airspeed overlay or
   the local plane override.
-- `gazebo-plane-gps` reuses the sensor-neutral base runway world and never
-  touches the CTE wind-control path.
+- `gazebo-plane-gps` uses a dedicated sensor-neutral, east-facing runway world
+  and never touches the CTE wind-control path.
 - The existing CTE/airspeed targets are unchanged.
 """
 from __future__ import annotations
@@ -125,14 +125,22 @@ class GpsLaunchTargetSourceTests(unittest.TestCase):
 
     # --- Gazebo structure --------------------------------------------------
 
-    def test_gazebo_plane_gps_uses_base_world_not_cte_path(self) -> None:
+    def test_gazebo_plane_gps_uses_dedicated_east_facing_world(self) -> None:
         body = _function_body(self.source, "launch_gazebo_plane_gps")
-        # Reuses the sensor-neutral base runway world by reference.
-        self.assertIn("$PLANE_WORLD", body)
+        self.assertIn("$PLANE_GPS_WORLD", body)
+        self.assertNotIn('launch_gazebo_world "$PLANE_WORLD"', body)
         # Does not use the CTE wind world or delegate to the CTE Gazebo path.
         self.assertNotIn("PLANE_WIND_WORLD", body)
         self.assertNotIn("launch_gazebo_plane_cte", body)
         self.assertIn("plane-gps", body)
+
+        world = (ROOT / "assets/worlds/mini_talon_gps_runway.sdf").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('<world name="mini_talon_gps_runway">', world)
+        self.assertIn('<pose degrees="true">0 0 0.2 0 0 0</pose>', world)
+        self.assertIn("model://mini_talon", world)
+        self.assertNotIn("mini_talon_with_airspeed", world)
 
     # --- regression: CTE lane unchanged ------------------------------------
 
