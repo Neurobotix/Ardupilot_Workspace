@@ -12,13 +12,15 @@ import math
 import sys
 import time
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Callable, Iterable, cast
 
+from ...provenance import file_provenance, parameter_file_provenance, source_tree_snapshot
 from ..core.models import AttemptRecord, AttemptStatus, VerdictClass
 from ..plugins.gps_failure import build_plugin
 from ..plugins.gps_failure import defaults, glitch
 from ..plugins.gps_failure.case_generator import GpsFailureCaseGenerator
 from ..plugins.gps_failure.config import GpsFailureConfig
+from ..plugins.gps_failure.manifest import workflow_complete_from_attempt
 from ..plugins.gps_failure.readiness import build_readiness_report
 from ..plugins.gps_failure.stimulus import build_injection_artifact
 
@@ -32,6 +34,7 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     actions.add_argument("--preflight", action="store_true")
     actions.add_argument("--phase2-smoke-plan", action="store_true")
     actions.add_argument("--live-phase2-smoke", action="store_true")
+    actions.add_argument("--live-phase2-round-robin-campaign", action="store_true")
     actions.add_argument("--live-case", dest="live_case_id")
     parser.add_argument("--case", dest="case_id")
     parser.add_argument("--campaign-root", type=Path, default=None)
@@ -42,6 +45,22 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         default=defaults.PHASE2_MONITOR_TIMEOUT_S,
     )
     parser.add_argument("--confirm-live-phase2", action="store_true")
+    parser.add_argument("--confirm-live-campaign", action="store_true")
+    parser.add_argument(
+        "--campaign-cases",
+        default=",".join(defaults.PHASE2_PROTECTED_CASE_IDS),
+        help=(
+            "Comma-separated protected GPS case IDs for the live round-robin "
+            "campaign. Defaults to the protected Phase-2 qualification set."
+        ),
+    )
+    parser.add_argument("--runs-per-case", type=int, default=5)
+    parser.add_argument("--inter-attempt-delay", type=float, default=2.0)
+    parser.add_argument(
+        "--no-force-arm",
+        action="store_true",
+        help="Run live GPS readiness and arming without MAV_CMD force-arm semantics.",
+    )
     parser.add_argument("--reference-latitude-deg", type=float, default=None)
     parser.add_argument("--preview-elapsed-s", type=float, default=None)
     args = parser.parse_args(argv)
@@ -49,12 +68,45 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         parser.error("--dry-run requires --case")
     if args.case_id and not args.dry_run:
         parser.error("--case is only valid with --dry-run")
-    if (args.live_phase2_smoke or args.live_case_id) and not args.confirm_live_phase2:
+    live_requested = (
+        args.live_phase2_smoke
+        or args.live_phase2_round_robin_campaign
+        or args.live_case_id
+    )
+    if live_requested and not args.confirm_live_phase2:
         parser.error("live Phase 2 GPS runs require --confirm-live-phase2")
+    if args.live_phase2_round_robin_campaign and not args.confirm_live_campaign:
+        parser.error(
+            "live GPS campaigns require --confirm-live-campaign in addition to "
+            "--confirm-live-phase2"
+        )
     if args.live_case_id and args.live_case_id not in defaults.PHASE2_PROTECTED_CASE_IDS:
         parser.error(
             "--live-case is restricted to protected Phase 2 smoke cases: "
             + ", ".join(defaults.PHASE2_PROTECTED_CASE_IDS)
+        )
+    args.campaign_cases = _parse_campaign_cases(parser, args.campaign_cases)
+    if not args.live_phase2_round_robin_campaign:
+        if args.runs_per_case != 5:
+            parser.error("--runs-per-case is only valid with --live-phase2-round-robin-campaign")
+        if args.inter_attempt_delay != 2.0:
+            parser.error(
+                "--inter-attempt-delay is only valid with "
+                "--live-phase2-round-robin-campaign"
+            )
+    if args.runs_per_case < 1:
+        parser.error("--runs-per-case must be >= 1")
+    if not math.isfinite(args.inter_attempt_delay) or args.inter_attempt_delay < 0:
+        parser.error("--inter-attempt-delay must be finite and >= 0")
+    unsupported_campaign_cases = [
+        case_id
+        for case_id in args.campaign_cases
+        if case_id not in defaults.PHASE2_PROTECTED_CASE_IDS
+    ]
+    if unsupported_campaign_cases:
+        parser.error(
+            "--campaign-cases is restricted to protected Phase 2 cases: "
+            + ", ".join(unsupported_campaign_cases)
         )
     if args.reference_latitude_deg is not None and not args.dry_run:
         parser.error("--reference-latitude-deg is only valid with --dry-run")
@@ -77,6 +129,24 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     return args
 
 
+def _parse_campaign_cases(
+    parser: argparse.ArgumentParser,
+    raw: str,
+) -> list[str]:
+    cases = [item.strip() for item in raw.split(",") if item.strip()]
+    if not cases:
+        parser.error("--campaign-cases must include at least one case")
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for case_id in cases:
+        if case_id in seen:
+            duplicates.append(case_id)
+        seen.add(case_id)
+    if duplicates:
+        parser.error("--campaign-cases contains duplicates: " + ", ".join(duplicates))
+    return cases
+
+
 def _config_from_args(args: argparse.Namespace) -> GpsFailureConfig:
     return GpsFailureConfig(
         campaign_root=(
@@ -85,8 +155,14 @@ def _config_from_args(args: argparse.Namespace) -> GpsFailureConfig:
             else defaults.default_campaign_root()
         ),
         mavlink_addr=args.mavlink,
-        launch_stack=bool(args.live_phase2_smoke or args.live_case_id),
+        launch_stack=bool(
+            args.live_phase2_smoke
+            or args.live_phase2_round_robin_campaign
+            or args.live_case_id
+        ),
         mission_timeout_s=args.mission_timeout,
+        force_arm=not args.no_force_arm,
+        runs_per_case=args.runs_per_case,
     )
 
 
@@ -124,7 +200,13 @@ def main(argv: Iterable[str] | None = None) -> None:
                     "live_readback_performed": False,
                     "live_cli_enabled": True,
                     "live_cli_guard": "--confirm-live-phase2 required",
-                    "strict_review_accepted_for_nominal_live_smoke": True,
+                    "strict_review_accepted_for_nominal_live_smoke": False,
+                    "strict_review_status": (
+                        "latest live attempt's declared success was rejected by "
+                        "strict review; rerun nominal for current evidence"
+                    ),
+                    "force_arm_default": True,
+                    "force_arm_disable_flag": "--no-force-arm",
                     "terminal_success_requires_cleanup": True,
                     "stop_on_first_non_accepted_record": True,
                     "protected_case_ids": list(defaults.PHASE2_PROTECTED_CASE_IDS),
@@ -160,6 +242,16 @@ def main(argv: Iterable[str] | None = None) -> None:
             config,
             list(defaults.PHASE2_PROTECTED_CASE_IDS),
             title="GPS Failure Behavior - Phase 2 protected live smoke",
+        )
+        return
+
+    if args.live_phase2_round_robin_campaign:
+        run_live_round_robin_campaign(
+            config,
+            args.campaign_cases,
+            runs_per_case=args.runs_per_case,
+            inter_attempt_delay_s=args.inter_attempt_delay,
+            title="GPS Failure Behavior - Phase 2 protected round-robin campaign",
         )
         return
 
@@ -266,6 +358,197 @@ def _accepted_live_record(record: AttemptRecord) -> bool:
         and verdict.klass is VerdictClass.SUCCESS
         and verdict.metadata.get("accepted_observation") is True
     )
+
+
+def run_live_round_robin_campaign(
+    config: GpsFailureConfig,
+    case_ids: list[str],
+    *,
+    runs_per_case: int,
+    inter_attempt_delay_s: float,
+    title: str,
+) -> None:
+    unsupported = [
+        case_id
+        for case_id in case_ids
+        if case_id not in defaults.PHASE2_PROTECTED_CASE_IDS
+    ]
+    if unsupported:
+        raise SystemExit(
+            "ERROR: live GPS campaigns are restricted to protected Phase 2 cases: "
+            + ", ".join(unsupported)
+        )
+    plugin = build_plugin(config)
+    generator = GpsFailureCaseGenerator(config)
+    cases = [generator.get_case(case_id) for case_id in case_ids]
+    runner = plugin.attempt_runner()
+
+    defaults.log("=" * 60)
+    defaults.log(title)
+    defaults.log(f"  Campaign root     : {config.campaign_root}")
+    defaults.log(f"  MAVLink           : {config.mavlink_addr}")
+    defaults.log(f"  Cases             : {', '.join(case_ids)}")
+    defaults.log(f"  Workflow runs/case: {runs_per_case}")
+    defaults.log("  Ordering          : true round robin")
+    defaults.log("  Retry policy      : zero automatic retries")
+    defaults.log("  Stop rule         : stop on workflow/cleanup/raw-log failure")
+    defaults.log("  Raw output only; no curated evidence promotion")
+    defaults.log("=" * 60)
+
+    config.campaign_root.mkdir(parents=True, exist_ok=True)
+    _write_campaign_contract(
+        config=config,
+        case_ids=case_ids,
+        runs_per_case=runs_per_case,
+        inter_attempt_delay_s=inter_attempt_delay_s,
+    )
+
+    round_index = 0
+    while True:
+        active = [
+            case
+            for case in cases
+            if _workflow_complete_count(plugin, case) < runs_per_case
+        ]
+        if not active:
+            defaults.log("[gps_campaign] done: all workflow-complete targets met")
+            return
+        round_index += 1
+        defaults.log(f"[gps_campaign] round {round_index} active={len(active)}")
+        for case in active:
+            target_run_index = _workflow_complete_count(plugin, case) + 1
+            attempt_index = next_available_attempt_index(plugin, case)
+            attempt_dir = plugin.attempt_dir_factory()(
+                plugin.manifest,
+                case,
+                attempt_index,
+            )
+            defaults.log(
+                f"[gps_campaign] {case.case_id}: workflow_run={target_run_index} "
+                f"attempt={attempt_index} root={attempt_dir}"
+            )
+            record = runner.run(
+                case=case,
+                target_run_index=target_run_index,
+                attempt_index=attempt_index,
+                attempt_dir=attempt_dir,
+                attempt_metadata={
+                    "campaign_mode": "round_robin",
+                    "campaign_round_index": round_index,
+                    "workflow_target_runs": runs_per_case,
+                },
+            )
+            if not _workflow_complete_live_record(record):
+                raise SystemExit(
+                    "ERROR: GPS round-robin campaign stopped after workflow "
+                    "failure: "
+                    f"case={case.case_id} status={record.status.value} "
+                    f"workflow_status="
+                    f"{record.plugin_manifest_fields.get('workflow_status')}"
+                )
+            if not _accepted_live_record(record):
+                defaults.log(
+                    "[gps_campaign] analysis did not accept observation; "
+                    "workflow run is preserved and campaign continues: "
+                    f"case={case.case_id} verdict="
+                    f"{record.verdict.reason if record.verdict else 'missing'}"
+                )
+            if inter_attempt_delay_s > 0:
+                time.sleep(inter_attempt_delay_s)
+
+
+def _workflow_complete_live_record(record: AttemptRecord) -> bool:
+    fields = dict(record.plugin_manifest_fields)
+    fields.setdefault("case_id", record.case_id)
+    fields.setdefault("status", record.status.value)
+    fields.setdefault("artifacts", dict(record.artifacts))
+    return workflow_complete_from_attempt(fields)
+
+
+def _workflow_complete_count(plugin: Any, case: Any) -> int:
+    counter = getattr(plugin.manifest, "workflow_complete_count", None)
+    if callable(counter):
+        typed_counter = cast(Callable[[Any], int], counter)
+        return int(typed_counter(case))
+    return 0
+
+
+def _write_campaign_contract(
+    *,
+    config: GpsFailureConfig,
+    case_ids: list[str],
+    runs_per_case: int,
+    inter_attempt_delay_s: float,
+) -> None:
+    contract_path = config.campaign_root / "campaign_contract.json"
+    payload = _campaign_contract_payload(
+        config=config,
+        case_ids=case_ids,
+        runs_per_case=runs_per_case,
+        inter_attempt_delay_s=inter_attempt_delay_s,
+    )
+    if contract_path.exists():
+        existing = defaults.read_json(contract_path)
+        comparable = dict(payload)
+        if isinstance(existing, dict):
+            comparable["created_at_utc"] = existing.get("created_at_utc")
+        if existing != comparable:
+            raise SystemExit(
+                "ERROR: campaign contract drift for existing campaign root: "
+                f"{contract_path}"
+            )
+        return
+    defaults.write_json(contract_path, payload)
+
+
+def _campaign_contract_payload(
+    *,
+    config: GpsFailureConfig,
+    case_ids: list[str],
+    runs_per_case: int,
+    inter_attempt_delay_s: float,
+) -> dict[str, Any]:
+    plugin_file = defaults.WORKSPACE_GAZEBO_PLUGIN_FILE
+    return {
+        "schema_version": "gps_failure.live_campaign_contract.v1",
+        "created_at_utc": defaults.utc_now(),
+        "campaign_root": str(config.campaign_root),
+        "suite_name": defaults.SUITE_NAME,
+        "campaign_mode": "round_robin",
+        "case_ids": list(case_ids),
+        "runs_per_case": runs_per_case,
+        "inter_attempt_delay_s": inter_attempt_delay_s,
+        "retry_policy": {
+            "automatic_retries": 0,
+            "failed_attempts_preserved": True,
+        },
+        "counting_rule": (
+            "scheduler counts workflow-complete physical attempts; behavior "
+            "acceptance is recorded by post-cleanup analysis and does not "
+            "silently consume or erase workflow attempts"
+        ),
+        "stop_rules": [
+            "readiness/source/mission/trigger/injection failure",
+            "restore/readback failure",
+            "dirty cleanup or surviving simulator process",
+            "missing or ambiguous attempt-local raw BIN",
+            "campaign contract drift",
+            "operator interrupt",
+        ],
+        "launch_targets": {
+            "sitl": defaults.SITL_TARGET,
+            "gazebo": defaults.GAZEBO_TARGET,
+        },
+        "inputs": {
+            "mission": file_provenance(config.mission_file),
+            "world": file_provenance(defaults.GAZEBO_WORLD_FILE),
+            "param_stack": parameter_file_provenance(config.effective_param_stack),
+            "workspace_gazebo_plugin": (
+                file_provenance(plugin_file) if plugin_file.is_file() else None
+            ),
+        },
+        "source_tree": source_tree_snapshot(defaults.WORKSPACE_ROOT),
+    }
 
 
 def next_available_attempt_index(plugin, case) -> int:

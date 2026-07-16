@@ -191,6 +191,11 @@ class GpsFailureCaseGenerator(CaseGenerator):
                 injection_payload=injection_payload,
                 fault_recipe=fault_recipe,
                 injection_schedule=injection_schedule,
+                min_post_injection_s=(
+                    self._config.nominal_smoke_observation_s
+                    if fault_type == "nominal"
+                    else defaults.MIN_POST_INJECTION_S
+                ),
             ),
             scenario_name=defaults.SCENARIO_NAME,
             stimulus_name=stimulus_name,
@@ -211,6 +216,7 @@ def case_metadata(
     injection_payload: dict[str, float],
     fault_recipe: dict[str, Any] | None,
     injection_schedule: list[dict[str, Any]] | None,
+    min_post_injection_s: float = defaults.MIN_POST_INJECTION_S,
 ) -> dict[str, Any]:
     validate_payload(injection_payload)
     schedule = copy.deepcopy(injection_schedule or [])
@@ -232,7 +238,10 @@ def case_metadata(
         "acceptance_requirements": {
             "injection_readback_required": fault_type != "nominal",
             "measurement_validity_only": True,
-            "min_post_injection_s": defaults.MIN_POST_INJECTION_S,
+            "min_post_injection_s": _finite_float(
+                "min_post_injection_s",
+                min_post_injection_s,
+            ),
             "required_artifacts": list(defaults.REQUIRED_ATTEMPT_ARTIFACTS),
             "bad_flight_counts_if_observation_valid": True,
         },
