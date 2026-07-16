@@ -17,6 +17,10 @@ ASSETS_ROOT = WORKSPACE_ROOT / "assets"
 CONFIG_ROOT = WORKSPACE_ROOT / "config"
 VAR_ROOT = WORKSPACE_ROOT / "var"
 VENV_PYTHON = WORKSPACE_ROOT / "env" / "bin" / "python3"
+WORKSPACE_GAZEBO_PLUGIN_DIR = WORKSPACE_ROOT / "build" / "ardupilot_gazebo"
+WORKSPACE_GAZEBO_PLUGIN_FILE = (
+    WORKSPACE_GAZEBO_PLUGIN_DIR / "libArduPilotPlugin.so"
+)
 
 SUITE_NAME = "gps_failure"
 SCENARIO_NAME = "gps_failure_behavior"
@@ -25,12 +29,14 @@ CAMPAIGN_ROOT_PREFIX = "gps_failure_behavior"
 DEFAULT_CAMPAIGN_ROOT_PARENT = VAR_ROOT / "runs"
 
 MISSION_FILE = ASSETS_ROOT / "missions" / "gps_failure_behavior_mission.waypoints"
+GAZEBO_WORLD_FILE = ASSETS_ROOT / "worlds" / "mini_talon_gps_runway.sdf"
 # Dedicated GPS failure launch identities. These are NOT the CTE/airspeed
 # targets: plane-cte/gazebo-plane-cte load plane_airspeed.parm and the local
 # plane override, which ADR-0021 rejects for GPS. plane-gps loads exactly
 # plane_base.parm -> plane_gps.parm with no airspeed overlay and no local
-# override; gazebo-plane-gps is the sensor-neutral base runway world (GPS/NavSat,
-# calm, no wind/airspeed). A future plugin-owned live launcher must use these
+# override; gazebo-plane-gps is the dedicated sensor-neutral GPS runway world
+# (GPS/NavSat, calm, no wind/airspeed) whose east-facing pose matches the
+# behavior mission. A plugin-owned live launcher must use these
 # identities and this explicit stack, never plane-cte.
 SITL_TARGET = "plane-gps"
 GAZEBO_TARGET = "gazebo-plane-gps"
@@ -41,7 +47,9 @@ INJECTION_TRIGGER = {
     "source": "MISSION_CURRENT",
     "seq": 4,
     "edge": "first seq==4 after front-half progress",
-    "front_half_required_sequences": [1, 2, 3],
+    "front_half_required_sequences": [1, 3],
+    "front_half_optional_sequences": [2],
+    "pre_trigger_ignored_sequences": [0],
     "mode": "AUTO",
     "armed_required": True,
     "heartbeat_max_age_s": 1.0,
@@ -86,9 +94,11 @@ PHASE2_PROTECTED_CASE_IDS = (
 TELEMETRY_MESSAGE_TYPES = (
     "HEARTBEAT",
     "MISSION_CURRENT",
+    "MISSION_ITEM_REACHED",
     "STATUSTEXT",
     "GLOBAL_POSITION_INT",
     "ATTITUDE",
+    "NAV_CONTROLLER_OUTPUT",
     "SIMSTATE",
     "EKF_STATUS_REPORT",
     "GPS_RAW_INT",
@@ -147,21 +157,33 @@ JAMMING_REPEAT_COUNT = 5
 JAMMING_DURATION_S = 45.0
 
 MIN_POST_INJECTION_S = 90.0
+NOMINAL_SMOKE_MIN_POST_INJECTION_S = 20.0
 PHASE2_MONITOR_TIMEOUT_S = 900.0
 SLOW_DRIFT_UPDATE_PERIOD_S = 5.0
 CLEANUP_TIMEOUT_S = 30.0
+HEARTBEAT_TIMEOUT_S = 30.0
+VEHICLE_READY_TIMEOUT_S = 120.0
 TRIGGER_HEARTBEAT_MAX_AGE_S = 1.0
 TRIGGER_SIMSTATE_MAX_AGE_S = 1.0
+TRIGGER_BOOT_TIME_MAX_AGE_S = 1.0
 MAX_ABS_ROLL_DEG = 60.0
 MAX_ABS_PITCH_DEG = 35.0
 MAX_ALTITUDE_LOSS_M = 30.0
+LOW_ALTITUDE_ABORT_M = 15.0
+PLANNED_RTL_MIN_SEQ = 8
+RTL_STABILIZE_S = 10.0
 UPLOAD_TIMEOUT_S = 60.0
 ARM_TIMEOUT_S = 60.0
 MODE_TIMEOUT_S = 30.0
 AUTO_ARM_TO_AUTO_SETTLE_S = 5.0
 FORCE_ARM_MAGIC = 21196.0
+READY_HEARTBEATS_REQUIRED = 2
+READINESS_STREAM_REFRESH_S = 5.0
+VERIFY_MISSION_ITEM_TIMEOUT_S = 5.0
 REQUIRED_ATTEMPT_ARTIFACTS = (
+    "run_config.json",
     "gps_injection.json",
+    "source_contract.json",
     "gps_behavior_summary.json",
     "ekf_innovation_metrics.json",
     "truth_vs_belief.json",

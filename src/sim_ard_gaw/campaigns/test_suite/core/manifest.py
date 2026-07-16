@@ -30,6 +30,7 @@ GENERIC_ATTEMPT_FIELDS = (
     "stimulus_result",
     "analysis_results",
     "verdict",
+    "monitor_result",
     "artifacts",
     "started_at",
     "finished_at",
@@ -100,6 +101,7 @@ def generic_attempt_view(attempt: dict[str, Any]) -> dict[str, Any]:
         "stimulus_result": _stimulus_result(attempt),
         "analysis_results": _analysis_results(attempt),
         "verdict": _verdict(attempt),
+        "monitor_result": _to_jsonable(attempt.get("monitor_result")),
         "artifacts": _artifacts(attempt),
         "started_at": attempt.get("started_at") or attempt.get("start_time_utc"),
         "finished_at": attempt.get("finished_at") or attempt.get("end_time_utc"),
@@ -120,6 +122,7 @@ def attempt_record_to_generic_fields(record: AttemptRecord) -> dict[str, Any]:
             for result in record.analysis_results
         ],
         "verdict": _record_verdict(record),
+        "monitor_result": _to_jsonable(record.monitor_result),
         "artifacts": _to_jsonable(record.artifacts),
         "started_at": record.start_time_utc or None,
         "finished_at": record.end_time_utc or None,

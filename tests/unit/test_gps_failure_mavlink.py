@@ -51,10 +51,9 @@ def _valid_trace(
     trigger_time_s: float = 100.0,
     elapsed_since_trigger_s: float = 90.0,
 ) -> list[dict[str, Any]]:
-    """A minimal armed/AUTO seq 1->2->3->4 monitor trace that authorizes a plan."""
+    """The live-observed armed/AUTO seq 1->3->4 trace that authorizes a plan."""
     return [
         _fresh_trigger_event(1),
-        _fresh_trigger_event(2),
         _fresh_trigger_event(3),
         {
             **_fresh_trigger_event(4),
@@ -102,6 +101,32 @@ class _FakeParamConnection:
         self.values[name] = value
 
     def recv_match(self, **_kwargs: Any) -> Any:
+        return None
+
+
+class _ParamValueMessage:
+    def __init__(self, name: str, value: float) -> None:
+        self.param_id = name
+        self.param_value = value
+
+
+class _ParamSetOnlyConnection:
+    """Fake the real pymavlink path, which uses PARAM_SET/PARAM_VALUE."""
+
+    def __init__(self, responses: list[_ParamValueMessage] | None = None) -> None:
+        self.responses = list(responses or [])
+        self.set_order: list[tuple[str, float]] = []
+
+    def param_set_send(self, name: str, value: float) -> None:
+        self.set_order.append((name, value))
+
+    def param_fetch_one(self, name: str) -> None:
+        _ = name
+        return None
+
+    def recv_match(self, **_kwargs: Any) -> Any:
+        if self.responses:
+            return self.responses.pop(0)
         return None
 
 
@@ -399,6 +424,45 @@ class GpsFailureBatchPreflightTests(unittest.TestCase):
         self.assertEqual({"SIM_GPS1_ENABLE": 0.0}, result.readbacks_observed)
         self.assertEqual([], result.tolerance_failures)
         self.assertEqual([], result.missing_parameters)
+
+    def test_param_set_waits_past_stale_value_until_requested_readback(self) -> None:
+        requested = 2.7727437168007744e-05
+        fake = _ParamSetOnlyConnection(
+            [
+                _ParamValueMessage("SIM_GPS1_GLTCH_Y", 0.0),
+                _ParamValueMessage("SIM_GPS1_GLTCH_Y", requested),
+            ]
+        )
+
+        write = set_one_parameter(
+            fake,
+            "SIM_GPS1_GLTCH_Y",
+            requested,
+            timeout_s=0.1,
+        )
+
+        self.assertTrue(write.ok, write.as_dict())
+        self.assertEqual(requested, write.observed_value)
+        self.assertEqual([("SIM_GPS1_GLTCH_Y", requested)], fake.set_order)
+
+    def test_batch_readback_waits_for_requested_value_not_first_same_name_value(self) -> None:
+        requested = 2.7727437168007744e-05
+        fake = _ParamSetOnlyConnection(
+            [
+                _ParamValueMessage("SIM_GPS1_GLTCH_Y", 0.0),
+                _ParamValueMessage("SIM_GPS1_GLTCH_Y", requested),
+            ]
+        )
+
+        result = set_and_read_back_parameters(
+            fake,
+            {"SIM_GPS1_GLTCH_Y": requested},
+            timeout_s=0.1,
+        )
+
+        self.assertTrue(result.success, result.as_dict())
+        self.assertEqual({"SIM_GPS1_GLTCH_Y": requested}, result.readbacks_observed)
+        self.assertEqual([], result.tolerance_failures)
 
     def test_failed_transport_after_validation_is_fail_closed(self) -> None:
         class _FailingWriteConnection(_FakeParamConnection):
@@ -766,8 +830,8 @@ class GpsFailureTriggerAuthorizationTests(unittest.TestCase):
         armed = lambda seq: {"seq": seq, "armed": True, "mode": "AUTO"}
         for trace in (
             [armed(1), armed(2), armed(3), armed(2), armed(4)],  # regression
-            [armed(1), armed(3), armed(4)],                       # skip
             [armed(1), armed(2), armed(4)],                       # jump past 3
+            [armed(1), armed(4)],                                 # jump past 3
         ):
             with self.subTest(trace=trace):
                 plan = build_authorized_injection_plan(_case("jamming_repeat_01"), trace)
@@ -776,6 +840,16 @@ class GpsFailureTriggerAuthorizationTests(unittest.TestCase):
                 result = execute_injection_plan(plan, fake)
                 self.assertFalse(result.success)
                 self._assert_no_connection_calls(fake)
+
+    def test_live_observed_trace_without_do_command_authorizes(self) -> None:
+        plan = build_authorized_injection_plan(
+            _case("jamming_repeat_01"),
+            [_fresh_trigger_event(1), _fresh_trigger_event(3), _fresh_trigger_event(4)],
+        )
+
+        self.assertTrue(plan.execution_authorized)
+        assert plan.trigger_evidence is not None
+        self.assertEqual([1, 3], plan.trigger_evidence.front_half_sequences)
 
     def test_directly_constructed_plan_cannot_forge_authorization(self) -> None:
         # A hand-built plan with a forged TriggerEvidence(validated=True) must not

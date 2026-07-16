@@ -28,7 +28,10 @@ class GpsFailureConfig:
     arm_timeout_s: float = defaults.ARM_TIMEOUT_S
     mode_timeout_s: float = defaults.MODE_TIMEOUT_S
     cleanup_timeout_s: float = defaults.CLEANUP_TIMEOUT_S
+    heartbeat_timeout_s: float = defaults.HEARTBEAT_TIMEOUT_S
+    ready_timeout_s: float = defaults.VEHICLE_READY_TIMEOUT_S
     force_arm: bool = True
+    nominal_smoke_observation_s: float = defaults.NOMINAL_SMOKE_MIN_POST_INJECTION_S
 
     def __post_init__(self) -> None:
         self.runs_per_case = _positive_int("runs_per_case", self.runs_per_case, minimum=1)
@@ -75,6 +78,18 @@ class GpsFailureConfig:
         self.cleanup_timeout_s = _positive_finite(
             "cleanup_timeout_s",
             self.cleanup_timeout_s,
+        )
+        self.heartbeat_timeout_s = _positive_finite(
+            "heartbeat_timeout_s",
+            self.heartbeat_timeout_s,
+        )
+        self.ready_timeout_s = _positive_finite(
+            "ready_timeout_s",
+            self.ready_timeout_s,
+        )
+        self.nominal_smoke_observation_s = _positive_finite(
+            "nominal_smoke_observation_s",
+            self.nominal_smoke_observation_s,
         )
 
     @property

@@ -5,106 +5,58 @@ open a MAVLink connection; callers pass an explicit connection/message object.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
 from typing import Any
 
-from . import defaults
 from .source_contract import (
     EKF_GPS_GLITCHING,
     pos_test_ratio_from_live_pos_horiz_variance,
 )
 
 
-MAV_CMD_SET_MESSAGE_INTERVAL = 511
-MAV_RESULT_ACCEPTED = 0
-MESSAGE_IDS = {
-    "HEARTBEAT": 0,
-    "GPS_RAW_INT": 24,
-    "ATTITUDE": 30,
-    "GLOBAL_POSITION_INT": 33,
-    "MISSION_CURRENT": 42,
-    "SIMSTATE": 164,
-    "EKF_STATUS_REPORT": 193,
-    "STATUSTEXT": 253,
-}
+DELIVERY_REQUIRED_MESSAGE_TYPES = (
+    "HEARTBEAT",
+    "MISSION_CURRENT",
+    "MISSION_ITEM_REACHED",
+    "GLOBAL_POSITION_INT",
+    "ATTITUDE",
+    "SIMSTATE",
+    "EKF_STATUS_REPORT",
+    "GPS_RAW_INT",
+)
+EVENT_DRIVEN_OPTIONAL_MESSAGE_TYPES = ("STATUSTEXT",)
 SAFETY_ARMED = 128
 ARDUPLANE_AUTO_MODE = 10
+ARDUPLANE_RTL_MODE = 11
 
 
-@dataclass(frozen=True)
-class TelemetryRateRequest:
-    message_type: str
-    message_id: int
-    interval_us: int
-    ok: bool
-    error: str | None = None
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "message_type": self.message_type,
-            "message_id": self.message_id,
-            "interval_us": self.interval_us,
-            "ok": self.ok,
-            "error": self.error,
-        }
-
-
-def request_telemetry_rates(
+def request_live_streams(
     connection: Any,
     *,
-    rate_hz: float = 5.0,
-    ack_timeout_s: float = 1.0,
-    message_types: tuple[str, ...] = defaults.TELEMETRY_MESSAGE_TYPES,
-) -> list[TelemetryRateRequest]:
-    if rate_hz <= 0:
-        raise ValueError("rate_hz must be > 0")
-    if ack_timeout_s <= 0:
-        raise ValueError("ack_timeout_s must be > 0")
-    interval_us = int(1_000_000 / rate_hz)
-    mav = getattr(connection, "mav", None)
-    sender = getattr(mav, "command_long_send", None)
-    if not callable(sender):
-        raise ValueError("connection.mav.command_long_send is required")
-    receiver = getattr(connection, "recv_match", None)
-    if not callable(receiver):
-        raise ValueError("connection.recv_match is required for COMMAND_ACK")
+    rate_hz: int = 5,
+) -> dict[str, Any]:
+    """Request GPS-owned Plane streams; validate success from received data.
 
-    results: list[TelemetryRateRequest] = []
-    target_system = int(getattr(connection, "target_system", 1))
-    target_component = int(getattr(connection, "target_component", 1))
-    for message_type in message_types:
-        message_id = MESSAGE_IDS[message_type]
-        try:
-            sender(
-                target_system,
-                target_component,
-                MAV_CMD_SET_MESSAGE_INTERVAL,
-                0,
-                message_id,
-                interval_us,
-                0,
-                0,
-                0,
-                0,
-                0,
-            )
-            ack = receiver(type=["COMMAND_ACK"], blocking=True, timeout=ack_timeout_s)
-            ack_error = _command_ack_error(ack)
-            results.append(
-                TelemetryRateRequest(
-                    message_type,
-                    message_id,
-                    interval_us,
-                    ack_error is None,
-                    ack_error,
-                )
-            )
-        except Exception as exc:
-            results.append(
-                TelemetryRateRequest(message_type, message_id, interval_us, False, str(exc))
-            )
-    return results
+    STATUSTEXT is event-driven and therefore must never be treated as a stream
+    request whose COMMAND_ACK is required for the monitor to proceed.
+    """
+
+    if isinstance(rate_hz, bool) or not isinstance(rate_hz, int) or rate_hz <= 0:
+        raise ValueError("rate_hz must be a positive integer")
+    from . import mavlink
+
+    mavlink.request_live_streams(connection, rate_hz=rate_hz)
+    return {
+        "method": "MAV_DATA_STREAM",
+        "implementation": "gps_failure.mavlink.request_live_streams",
+        "rate_hz": rate_hz,
+        "command_ack_required": False,
+        "delivery_required_message_types": list(DELIVERY_REQUIRED_MESSAGE_TYPES),
+        "event_driven_optional_message_types": list(
+            EVENT_DRIVEN_OPTIONAL_MESSAGE_TYPES
+        ),
+        "delivery_validation": "observed monitor message types",
+    }
 
 
 def normalize_message(msg: Any, *, arrival_monotonic_s: float) -> dict[str, Any]:
@@ -130,6 +82,8 @@ def normalize_message(msg: Any, *, arrival_monotonic_s: float) -> dict[str, Any]
             }
         )
     elif msg_type == "MISSION_CURRENT":
+        base["seq"] = _optional_int_attr(msg, "seq")
+    elif msg_type == "MISSION_ITEM_REACHED":
         base["seq"] = _optional_int_attr(msg, "seq")
     elif msg_type == "STATUSTEXT":
         text = getattr(msg, "text", "")
@@ -161,6 +115,8 @@ def normalize_message(msg: Any, *, arrival_monotonic_s: float) -> dict[str, Any]
                 "yaw_rad": _optional_finite_attr(msg, "yaw"),
             }
         )
+    elif msg_type == "NAV_CONTROLLER_OUTPUT":
+        base["wp_dist_m"] = _optional_finite_attr(msg, "wp_dist")
     elif msg_type == "EKF_STATUS_REPORT":
         variance = _optional_finite_attr(msg, "pos_horiz_variance")
         flags = _optional_int_attr(msg, "flags")
@@ -273,18 +229,6 @@ def _mode_name(custom_mode: Any) -> str | None:
         return str(custom_mode)
     if mode_number == ARDUPLANE_AUTO_MODE:
         return "AUTO"
+    if mode_number == ARDUPLANE_RTL_MODE:
+        return "RTL"
     return str(mode_number)
-
-
-def _command_ack_error(ack: Any) -> str | None:
-    if ack is None:
-        return "missing_command_ack"
-    if _message_type(ack) != "COMMAND_ACK":
-        return f"unexpected_ack_type:{_message_type(ack)}"
-    command = _optional_int_attr(ack, "command")
-    if command != MAV_CMD_SET_MESSAGE_INTERVAL:
-        return f"unexpected_ack_command:{command}"
-    result = _optional_int_attr(ack, "result")
-    if result != MAV_RESULT_ACCEPTED:
-        return f"command_ack_rejected:{result}"
-    return None

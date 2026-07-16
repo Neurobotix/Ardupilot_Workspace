@@ -5,7 +5,6 @@ Phase 2 body and fails closed until smoke work implements it.
 """
 from __future__ import annotations
 
-import hashlib
 import re
 import shlex
 import subprocess
@@ -17,7 +16,7 @@ from typing import Any
 from sim_ard_gaw.campaigns.provenance import (
     file_provenance,
     parameter_file_provenance,
-    relative_file_provenance,
+    source_tree_snapshot,
 )
 
 from . import defaults
@@ -423,7 +422,7 @@ def build_run_config(
         "param_file_provenance": parameter_file_provenance(param_stack),
         "param_stack_order_note": "Files are applied in listed order; later files override earlier ones.",
         "local_param_override_present": any(".private" in str(path) for path in param_stack),
-        "source_tree_snapshot": source_tree_snapshot(),
+        "source_tree_snapshot": source_tree_snapshot(defaults.WORKSPACE_ROOT),
         "commands": {
             "sitl_equivalent": defaults.SITL_LAUNCH_COMMAND,
             "gazebo_equivalent": defaults.GAZEBO_LAUNCH_COMMAND,
@@ -442,49 +441,6 @@ def build_run_config(
             "mtime_s": plugin_stat.st_mtime if plugin_stat is not None else None,
         },
     }
-
-
-def source_tree_snapshot() -> dict[str, Any]:
-    """Record the source snapshot used for a live smoke run."""
-    head = _git_output(["git", "rev-parse", "HEAD"])
-    status = _git_output(["git", "status", "--short"], allow_failure=True)
-    diff_stat = _git_output(["git", "diff", "--stat"], allow_failure=True)
-    diff_name_status = _git_output(["git", "diff", "--name-status"], allow_failure=True)
-    untracked = _git_output(
-        ["git", "ls-files", "--others", "--exclude-standard"],
-        allow_failure=True,
-    )
-    diff = _git_output(["git", "diff", "--binary"], allow_failure=True)
-    untracked_files = untracked.splitlines()
-    return {
-        "git_head": head,
-        "dirty": bool(status.strip()),
-        "status_short": status.splitlines(),
-        "diff_name_status": diff_name_status.splitlines(),
-        "untracked_files": untracked_files,
-        "untracked_file_provenance": relative_file_provenance(
-            defaults.WORKSPACE_ROOT,
-            untracked_files,
-        ),
-        "diff_stat": diff_stat.splitlines(),
-        "diff_sha256": hashlib.sha256(diff.encode("utf-8")).hexdigest() if diff else None,
-        "note": "Live smoke was run from this working tree snapshot, not necessarily a committed tree.",
-    }
-
-
-def _git_output(args: list[str], *, allow_failure: bool = False) -> str:
-    result = subprocess.run(
-        args,
-        cwd=defaults.WORKSPACE_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0 and not allow_failure:
-        raise RuntimeError(
-            f"{' '.join(args)} failed with {result.returncode}: {result.stderr.strip()}"
-        )
-    return result.stdout.strip()
 
 
 def _stamp() -> str:

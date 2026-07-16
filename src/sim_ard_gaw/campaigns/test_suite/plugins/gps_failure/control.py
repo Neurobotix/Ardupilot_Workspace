@@ -8,7 +8,7 @@ from typing import Any, Protocol
 from ...core.control import ControlMode, ControlStrategy
 from ...core.models import AttemptContext, TestCase
 from .config import GpsFailureConfig
-from . import defaults
+from . import defaults, mavlink as mission_mavlink
 
 
 class MissionAdapter(Protocol):
@@ -28,8 +28,8 @@ class MissionAdapter(Protocol):
 class MavlinkGpsMissionAdapter:
     """Production mission adapter around the live MAVLink master.
 
-    The actual mission protocol helpers are imported only when the adapter
-    methods run, preserving the GPS plugin's import-time no-connection contract.
+    Protocol helpers are GPS-owned and import pymavlink only when a live method
+    runs, preserving the plugin's import-time no-connection contract.
     """
 
     def __init__(self, master: Any, config: GpsFailureConfig) -> None:
@@ -38,8 +38,6 @@ class MavlinkGpsMissionAdapter:
         self._uploaded_items: list[Any] | None = None
 
     def upload_mission(self, mission_file: str) -> list[Any]:
-        from ..airspeed_failure import mavlink as mission_mavlink
-
         self._uploaded_items = mission_mavlink.upload_mission(
             self._master,
             Path(mission_file),
@@ -48,8 +46,6 @@ class MavlinkGpsMissionAdapter:
         return list(self._uploaded_items)
 
     def verify_mission(self, mission_file: str) -> None:
-        from ..airspeed_failure import mavlink as mission_mavlink
-
         if self._uploaded_items is None:
             raise RuntimeError(
                 f"mission must be uploaded before verification: {mission_file}"
@@ -61,8 +57,6 @@ class MavlinkGpsMissionAdapter:
         )
 
     def arm(self) -> None:
-        from ..airspeed_failure import mavlink as mission_mavlink
-
         mission_mavlink.arm_vehicle(
             self._master,
             self._config.arm_timeout_s,
@@ -74,8 +68,6 @@ class MavlinkGpsMissionAdapter:
         )
 
     def set_mode(self, mode: str) -> None:
-        from ..airspeed_failure import mavlink as mission_mavlink
-
         if mode != ControlMode.AUTO.name:
             raise ValueError(f"gps_failure live smoke only supports AUTO mode: {mode}")
         mission_mavlink.set_auto_mode(

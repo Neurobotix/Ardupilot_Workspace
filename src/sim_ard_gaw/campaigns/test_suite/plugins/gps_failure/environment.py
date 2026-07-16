@@ -13,6 +13,12 @@ import time
 from pathlib import Path
 from typing import Any, Protocol
 
+from sim_ard_gaw.campaigns.provenance import (
+    file_provenance,
+    parameter_file_provenance,
+    source_tree_snapshot,
+)
+
 from ...core.environment import EnvironmentAdapter
 from ...core.models import AttemptContext, TestCase
 from .config import GpsFailureConfig
@@ -22,6 +28,21 @@ from .mavlink import MavlinkConnectionFactory, connect_mavlink
 
 class LaunchFunction(Protocol):
     def __call__(self, command: list[str], *, log_path: Path) -> Any:
+        ...
+
+
+class VehicleReadinessFunction(Protocol):
+    def __call__(self, master: Any, timeout_s: float, *, force_arm: bool) -> None:
+        ...
+
+
+class GovernedCleanupFunction(Protocol):
+    def __call__(self, *, timeout_s: float) -> dict[str, Any]:
+        ...
+
+
+class ProcessScanner(Protocol):
+    def __call__(self) -> list[str]:
         ...
 
 
@@ -68,10 +89,16 @@ class GpsFailureEnvironment(EnvironmentAdapter):
         *,
         launcher: LaunchFunction | None = None,
         mavlink_factory: MavlinkConnectionFactory | None = None,
+        vehicle_readiness: VehicleReadinessFunction | None = None,
+        governed_cleanup: GovernedCleanupFunction | None = None,
+        process_scanner: ProcessScanner | None = None,
     ) -> None:
         self._config = config
         self._launcher = launcher or _popen_launcher
         self._mavlink_factory = mavlink_factory
+        self._vehicle_readiness = vehicle_readiness or _wait_for_vehicle_ready
+        self._governed_cleanup = governed_cleanup or _run_governed_cleanup
+        self._process_scanner = process_scanner or _remaining_simulation_processes
 
     def prepare_case(self, case: TestCase) -> None:
         return None
@@ -89,6 +116,18 @@ class GpsFailureEnvironment(EnvironmentAdapter):
         ctx.extra["gps_launch_plan"] = plan.as_dict()
         gazebo_log = ctx.attempt_dir / "gazebo_plane_gps.log"
         sitl_log = ctx.attempt_dir / "plane_gps.log"
+        run_config = build_run_config(
+            config=self._config,
+            case=case,
+            ctx=ctx,
+            plan=plan,
+            sitl_log=sitl_log,
+            gazebo_log=gazebo_log,
+        )
+        run_config_path = ctx.attempt_dir / "run_config.json"
+        defaults.write_json(run_config_path, run_config)
+        ctx.artifacts["run_config.json"] = run_config_path
+        ctx.extra["run_config"] = run_config
         ctx.process_handles["plane-gps"] = self._launcher(
             plan.sitl_command,
             log_path=sitl_log,
@@ -114,9 +153,26 @@ class GpsFailureEnvironment(EnvironmentAdapter):
             return None
         master = connect_mavlink(
             self._config.mavlink_addr,
+            timeout_s=self._config.heartbeat_timeout_s,
             factory=self._mavlink_factory,
         )
         ctx.extra["mavlink_master"] = master
+        self._vehicle_readiness(
+            master,
+            self._config.ready_timeout_s,
+            force_arm=self._config.force_arm,
+        )
+        ctx.extra["gps_vehicle_readiness"] = {
+            "ok": True,
+            "ready_timeout_s": self._config.ready_timeout_s,
+            "requirements": [
+                "AUTO mode available",
+                "vehicle not INITIALISING",
+                "GPS ready",
+                "EKF active",
+                "two consecutive ready heartbeats",
+            ],
+        }
         from .control import build_mission_adapter
 
         ctx.extra["mission_adapter"] = build_mission_adapter(master, self._config)
@@ -148,10 +204,25 @@ class GpsFailureEnvironment(EnvironmentAdapter):
                 except Exception as exc:
                     errors.append(f"mavlink_master: {type(exc).__name__}: {exc}")
 
+        governed_cleanup_result: dict[str, Any] | None = None
         remaining_processes: list[str] = []
         if "gps_launch_plan" in ctx.extra:
             try:
-                remaining_processes = _remaining_simulation_processes()
+                governed_cleanup_result = self._governed_cleanup(
+                    timeout_s=self._config.cleanup_timeout_s,
+                )
+                if governed_cleanup_result.get("ok") is not True:
+                    errors.append(
+                        "governed_cleanup: "
+                        + str(
+                            governed_cleanup_result.get("error")
+                            or "cleanup command did not report success"
+                        )
+                    )
+            except Exception as exc:
+                errors.append(f"governed_cleanup: {type(exc).__name__}: {exc}")
+            try:
+                remaining_processes = self._process_scanner()
             except Exception as exc:
                 errors.append(f"process_scan: {type(exc).__name__}: {exc}")
             if remaining_processes:
@@ -165,6 +236,7 @@ class GpsFailureEnvironment(EnvironmentAdapter):
             "errors": list(errors),
             "remaining_process_handles": sorted(ctx.process_handles),
             "remaining_simulation_processes": remaining_processes,
+            "governed_cleanup": governed_cleanup_result,
             "mavlink_closed": master is None or not any(
                 error.startswith("mavlink_master") for error in errors
             ),
@@ -199,6 +271,72 @@ def identify_attempt_bin(ctx: AttemptContext) -> Path | None:
     return candidates[0]
 
 
+def build_run_config(
+    *,
+    config: GpsFailureConfig,
+    case: TestCase,
+    ctx: AttemptContext,
+    plan: GpsLaunchPlan,
+    sitl_log: Path,
+    gazebo_log: Path,
+) -> dict[str, Any]:
+    """Build the sensor-neutral provenance record for one GPS attempt."""
+
+    mission_file = (case.mission_file or config.mission_file).expanduser().resolve()
+    param_stack = [
+        path.expanduser().resolve() for path in config.effective_param_stack
+    ]
+    plugin_path = defaults.WORKSPACE_GAZEBO_PLUGIN_FILE
+    plugin_provenance = file_provenance(plugin_path) if plugin_path.is_file() else None
+    return {
+        "created_at_utc": defaults.utc_now(),
+        "timezone": "UTC",
+        "case_id": case.case_id,
+        "attempt_id": defaults.case_attempt_id(
+            case.case_id,
+            ctx.target_run_index,
+            ctx.attempt_index,
+        ),
+        "attempt_index": ctx.attempt_index,
+        "target_run_index": ctx.target_run_index,
+        "campaign_root": str(config.campaign_root),
+        "attempt_dir": str(ctx.attempt_dir),
+        "mission_file": str(mission_file),
+        "mission_file_provenance": file_provenance(mission_file),
+        "gazebo_world": str(defaults.GAZEBO_WORLD_FILE),
+        "gazebo_world_provenance": file_provenance(defaults.GAZEBO_WORLD_FILE),
+        "mavlink_addr": config.mavlink_addr,
+        "launch_stack": config.launch_stack,
+        "fresh_sitl_process_per_attempt": True,
+        "param_files_loaded_at_sitl_start": [str(path) for path in param_stack],
+        "param_file_provenance": parameter_file_provenance(param_stack),
+        "param_stack_order_note": (
+            "Files are applied in listed order; later files override earlier ones."
+        ),
+        "local_param_override_present": any(
+            ".private" in path.parts for path in param_stack
+        ),
+        "source_tree_snapshot": source_tree_snapshot(defaults.WORKSPACE_ROOT),
+        "commands": {
+            "sitl": list(plan.sitl_command),
+            "gazebo": list(plan.gazebo_command),
+            "sitl_target": defaults.SITL_TARGET,
+            "gazebo_target": defaults.GAZEBO_TARGET,
+        },
+        "runtime": plan.as_dict(),
+        "logs": {
+            "sitl": str(sitl_log),
+            "gazebo": str(gazebo_log),
+        },
+        "workspace_gazebo_plugin": {
+            "policy": "workspace_build_only",
+            "path": str(plugin_path),
+            "exists": plugin_path.is_file(),
+            "provenance": plugin_provenance,
+        },
+    }
+
+
 def _bin_names(bin_dir: Path) -> set[str]:
     if not bin_dir.exists():
         return set()
@@ -222,6 +360,82 @@ def _popen_launcher(command: list[str], *, log_path: Path) -> subprocess.Popen[s
         raise
     setattr(proc, "_gps_log_handle", log_file)
     return proc
+
+
+def _wait_for_vehicle_ready(
+    master: Any,
+    timeout_s: float,
+    *,
+    force_arm: bool,
+) -> None:
+    """Apply the GPS-owned Plane readiness gate before mission I/O."""
+
+    from . import mavlink
+
+    mavlink.wait_for_vehicle_ready(
+        master,
+        timeout_s,
+        force_arm=force_arm,
+    )
+
+
+def _run_governed_cleanup(*, timeout_s: float) -> dict[str, Any]:
+    owned_cleanup_error: str | None = None
+    try:
+        _cleanup_workspace_owned_processes()
+    except Exception as exc:
+        owned_cleanup_error = f"{type(exc).__name__}: {exc}"
+    owned_cleanup = {
+        "attempted": True,
+        "implementation": "gps_failure.environment._cleanup_workspace_owned_processes",
+        "ok": owned_cleanup_error is None,
+        "error": owned_cleanup_error,
+    }
+    command = [
+        str(defaults.WORKSPACE_ROOT / "scripts" / "ops" / "launch.sh"),
+        "cleanup",
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            cwd=defaults.WORKSPACE_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "attempted": True,
+            "ok": False,
+            "command": command,
+            "returncode": None,
+            "timed_out": True,
+            "stdout": str(exc.stdout or ""),
+            "stderr": str(exc.stderr or ""),
+            "owned_cleanup": owned_cleanup,
+            "error": (
+                f"owned cleanup failed: {owned_cleanup_error}; "
+                if owned_cleanup_error is not None
+                else ""
+            ) + f"canonical cleanup timed out after {timeout_s}s",
+        }
+    errors: list[str] = []
+    if owned_cleanup_error is not None:
+        errors.append(f"owned cleanup failed: {owned_cleanup_error}")
+    if result.returncode != 0:
+        errors.append(f"cleanup command exited with status {result.returncode}")
+    return {
+        "attempted": True,
+        "ok": not errors,
+        "command": command,
+        "returncode": result.returncode,
+        "timed_out": False,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "owned_cleanup": owned_cleanup,
+        "error": "; ".join(errors) if errors else None,
+    }
 
 
 def _wait_for_log_marker(
@@ -298,6 +512,74 @@ def _terminate_process(proc: Any, *, timeout_s: float) -> None:
         wait()
     except subprocess.TimeoutExpired:
         raise RuntimeError("process remained alive after SIGKILL") from None
+
+
+def _cleanup_workspace_owned_processes() -> None:
+    """Terminate only GPS stack processes rooted in this workspace."""
+
+    pids = _workspace_owned_process_pids()
+    if not pids:
+        return
+    remaining = pids
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        signaled: list[int] = []
+        for pid in remaining:
+            try:
+                os.kill(pid, sig)
+                signaled.append(pid)
+            except ProcessLookupError:
+                continue
+            except PermissionError:
+                signaled.append(pid)
+        if sig == signal.SIGTERM:
+            time.sleep(1.0)
+            remaining = [pid for pid in signaled if _pid_exists(pid)]
+
+
+def _workspace_owned_process_pids() -> list[int]:
+    root = str(defaults.WORKSPACE_ROOT)
+    world = defaults.GAZEBO_WORLD_FILE
+    markers = (
+        "Tools/autotest/sim_vehicle.py -v ArduPlane -f JSON",
+        "build/sitl/bin/arduplane -w --model JSON",
+        "env/bin/mavproxy.py --retries",
+        f"gz sim -v4 -r {world}",
+    )
+    pids: list[int] = []
+    self_pid = os.getpid()
+    for proc in Path("/proc").iterdir():
+        if not proc.name.isdigit():
+            continue
+        pid = int(proc.name)
+        if pid == self_pid:
+            continue
+        try:
+            cmdline = (
+                proc.joinpath("cmdline")
+                .read_bytes()
+                .replace(b"\0", b" ")
+                .decode("utf-8", errors="ignore")
+            )
+        except OSError:
+            continue
+        if not cmdline or root not in cmdline:
+            continue
+        if "xterm" in cmdline and "ArduPlane" in cmdline:
+            pids.append(pid)
+            continue
+        if any(marker in cmdline for marker in markers):
+            pids.append(pid)
+    return sorted(set(pids), reverse=True)
+
+
+def _pid_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 def _remaining_simulation_processes() -> list[str]:
