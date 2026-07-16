@@ -20,7 +20,9 @@ class GpsFailureStimulus(StimulusAdapter):
     def apply(self, case: TestCase, ctx: AttemptContext) -> dict[str, Any]:
         artifact = build_injection_artifact(case)
         ctx.stimulus_result = artifact
-        defaults.write_json(ctx.attempt_dir / "gps_injection.json", artifact)
+        path = ctx.attempt_dir / "gps_injection.json"
+        defaults.write_json(path, artifact)
+        ctx.artifacts["gps_injection.json"] = path
         return artifact
 
     def verify(self, case: TestCase, ctx: AttemptContext) -> dict[str, Any]:

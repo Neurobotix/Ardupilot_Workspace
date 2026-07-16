@@ -11,6 +11,8 @@ import math
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
+from sim_ard_gaw.campaigns.provenance import file_provenance
+
 from .source_contract import pos_test_ratio_from_xkf4_sp
 
 MAX_TRUTH_BELIEF_SKEW_S = 0.1
@@ -154,16 +156,20 @@ def analyze_attempt_bin(
     """Decode and analyze only the injection-window portion of an attempt BIN."""
 
     records = decode_bin_records(bin_path, decoder=decoder)
+    anchor_kind = (
+        "live_trigger_boot_time"
+        if window_start_time_us is not None
+        else "injection_parameter_transition"
+    )
     try:
-        anchor_us = (
-            _float(window_start_time_us)
-            if window_start_time_us is not None
-            else _find_injection_window_start(
+        if window_start_time_us is not None:
+            anchor_us = _float(window_start_time_us)
+        else:
+            anchor_us = _find_injection_window_start(
                 records,
                 trigger_seq=trigger_seq,
                 injection_payload=injection_payload,
             )
-        )
     except (TypeError, ValueError):
         anchor_us = None
     if anchor_us is None:
@@ -204,7 +210,10 @@ def analyze_attempt_bin(
         "record_count": len(records),
         "window_record_count": len(window_records),
         "window_start_time_us": anchor_us,
-        "window_anchor": "mission_seq_or_injection_parameter_transition",
+        "window_anchor": anchor_kind,
+        "bin_provenance": (
+            file_provenance(bin_path) if Path(bin_path).is_file() else None
+        ),
         "mechanism": mechanism.as_dict(),
         "truth_vs_belief": truth_belief,
     }
@@ -264,10 +273,10 @@ def truth_vs_belief_from_decoded_records(
         if skew_s > max_skew_s:
             continue
         gap_m = horizontal_gap_m(
-            nearest["lat_deg_e7"],
-            nearest["lon_deg_e7"],
-            belief_sample["lat_deg_e7"],
-            belief_sample["lon_deg_e7"],
+            nearest["lat_deg"],
+            nearest["lon_deg"],
+            belief_sample["lat_deg"],
+            belief_sample["lon_deg"],
         )
         pairs.append(
             {
@@ -275,10 +284,10 @@ def truth_vs_belief_from_decoded_records(
                 "truth_time_us": nearest["time_us"],
                 "belief_time_us": belief_sample["time_us"],
                 "skew_s": skew_s,
-                "truth_lat_deg_e7": nearest["lat_deg_e7"],
-                "truth_lon_deg_e7": nearest["lon_deg_e7"],
-                "belief_lat_deg_e7": belief_sample["lat_deg_e7"],
-                "belief_lon_deg_e7": belief_sample["lon_deg_e7"],
+                "truth_lat_deg": nearest["lat_deg"],
+                "truth_lon_deg": nearest["lon_deg"],
+                "belief_lat_deg": belief_sample["lat_deg"],
+                "belief_lon_deg": belief_sample["lon_deg"],
                 "horizontal_gap_m": gap_m,
                 "segment_index": bisect.bisect_right(
                     reset_times,
@@ -310,7 +319,10 @@ def _find_injection_window_start(
     trigger_seq: int,
     injection_payload: Mapping[str, float] | None,
 ) -> float | None:
-    mission_candidates: list[float] = []
+    # DataFlash CMD rows describe mission upload contents, not mission-current
+    # execution. A live trigger boot timestamp is passed explicitly by the
+    # monitor; parameter transitions are the only safe decoded-log fallback.
+    _ = trigger_seq
     parameter_candidates: list[float] = []
     expected_payload = dict(injection_payload or {})
     for record in records:
@@ -318,12 +330,6 @@ def _find_injection_window_start(
         if time_us is None:
             continue
         record_type = _record_type(record)
-        if record_type in {"CMD", "MISSION_CURRENT"}:
-            seq = _int(
-                record.get("CNum", record.get("Seq", record.get("seq")))
-            )
-            if seq == trigger_seq:
-                mission_candidates.append(time_us)
         if record_type == "PARM" and expected_payload:
             name = str(record.get("Name", record.get("name", ""))).rstrip("\x00")
             if name not in expected_payload:
@@ -335,8 +341,6 @@ def _find_injection_window_start(
                 continue
             if math.isclose(observed, expected, rel_tol=0.0, abs_tol=1e-6):
                 parameter_candidates.append(time_us)
-    if mission_candidates:
-        return min(mission_candidates)
     if parameter_candidates:
         return min(parameter_candidates)
     return None
@@ -353,15 +357,15 @@ def _record_time_us(record: Mapping[str, Any]) -> float | None:
 
 
 def horizontal_gap_m(
-    truth_lat_e7: object,
-    truth_lon_e7: object,
-    belief_lat_e7: object,
-    belief_lon_e7: object,
+    truth_lat_deg: object,
+    truth_lon_deg: object,
+    belief_lat_deg: object,
+    belief_lon_deg: object,
 ) -> float:
-    truth_lat = _float(truth_lat_e7) / 1e7
-    truth_lon = _float(truth_lon_e7) / 1e7
-    belief_lat = _float(belief_lat_e7) / 1e7
-    belief_lon = _float(belief_lon_e7) / 1e7
+    truth_lat = _float(truth_lat_deg)
+    truth_lon = _float(truth_lon_deg)
+    belief_lat = _float(belief_lat_deg)
+    belief_lon = _float(belief_lon_deg)
     ref_lat_rad = math.radians((truth_lat + belief_lat) / 2.0)
     dn = (belief_lat - truth_lat) * 111_320.0
     de = (belief_lon - truth_lon) * 111_320.0 * math.cos(ref_lat_rad)
@@ -374,8 +378,8 @@ def _position_sample(record: Mapping[str, Any], kind: str) -> dict[str, Any]:
     return {
         "kind": kind,  # type: ignore[dict-item]
         "time_us": _float(record["TimeUS"]),
-        "lat_deg_e7": _float(record[lat_name]),
-        "lon_deg_e7": _float(record[lng_name]),
+        "lat_deg": _float(record[lat_name]),
+        "lon_deg": _float(record[lng_name]),
     }
 
 

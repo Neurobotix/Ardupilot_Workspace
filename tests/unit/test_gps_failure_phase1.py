@@ -55,6 +55,7 @@ from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.config import (  # noq
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.manifest import (  # noqa: E402
     GpsFailureManifest,
     accepted_observation_from_attempt,
+    workflow_complete_from_attempt,
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.monitor import (  # noqa: E402
     first_seq4_edge_after_armed_auto_front_half,
@@ -158,6 +159,11 @@ def _valid_observation(**updates: Any) -> dict[str, Any]:
         "attitude_in_band": True,
         "failsafe": False,
         "mode_change": False,
+        "terminal_state_reached": True,
+        "mission_complete": True,
+        "stop_reason": "planned_rtl_stabilized",
+        "max_seq_reached": 9,
+        "auto_to_rtl_transition_seq": 8,
     }
     observation.update(updates)
     return observation
@@ -165,6 +171,7 @@ def _valid_observation(**updates: Any) -> dict[str, Any]:
 
 def _accepted_attempt(**updates: Any) -> dict[str, Any]:
     attempt: dict[str, Any] = {
+        "case_id": "jamming_repeat_01",
         "verdict": {
             "class": "success",
             "reason": "loss_of_control",
@@ -177,6 +184,11 @@ def _accepted_attempt(**updates: Any) -> dict[str, Any]:
                     "accepted_observation": True,
                     "behavior_class": "loss_of_control",
                     "observation_quality_class": "valid_bad_behavior",
+                    "terminal_state_reached": True,
+                    "mission_complete": False,
+                    "stop_reason": "loss_of_control",
+                    "max_seq_reached": 4,
+                    "auto_to_rtl_transition_seq": None,
                 },
             }
         ],
@@ -186,20 +198,23 @@ def _accepted_attempt(**updates: Any) -> dict[str, Any]:
 
 
 class GpsFailurePhase1Tests(unittest.TestCase):
-    def test_mission_asset_matches_locked_five_item_geometry(self) -> None:
+    def test_mission_asset_keeps_airspeed_lifecycle_with_calm_lane_settle(self) -> None:
         mission_path = ROOT / "assets/missions/gps_failure_behavior_mission.waypoints"
         self.assertTrue(mission_path.is_file())
         header, rows = _mission_rows(mission_path)
         self.assertEqual("QGC WPL 110", header)
         self.assertTrue(all(len(row) == 12 for row in rows))
-        self.assertEqual(list(range(5)), [int(row[0]) for row in rows])
+        self.assertEqual(list(range(10)), [int(row[0]) for row in rows])
 
         template_path = (
             ROOT
-            / "assets/missions/airspeed_failure_eastbound_long_speed_15_mission.waypoints"
+            / "assets/missions/airspeed_failure_behavior_mission.waypoints"
         )
         _, template_rows = _mission_rows(template_path)
-        self.assertEqual(template_rows[1:], rows[1:])
+        self.assertEqual(
+            [int(row[3]) for row in template_rows],
+            [int(row[3]) for row in rows],
+        )
 
         by_seq = {int(row[0]): row for row in rows}
         self.assertEqual(22, int(by_seq[1][3]))
@@ -207,20 +222,47 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertEqual(15.0, float(by_seq[2][5]))
         self.assertEqual(16, int(by_seq[3][3]))
         self.assertEqual(16, int(by_seq[4][3]))
-        self.assertNotIn(20, [int(row[3]) for row in rows])
+        self.assertEqual(20, int(by_seq[9][3]))
 
         seq3 = by_seq[3]
         seq4 = by_seq[4]
+        home = by_seq[0]
+        settle_distance_m = _distance_m(
+            float(home[8]),
+            float(home[9]),
+            float(seq3[8]),
+            float(seq3[9]),
+        )
         leg_distance_m = _distance_m(
             float(seq3[8]),
             float(seq3[9]),
             float(seq4[8]),
             float(seq4[9]),
         )
-        self.assertGreaterEqual(leg_distance_m, 35_000.0)
-        self.assertLessEqual(leg_distance_m, 37_000.0)
+        # The v2 300 m settle point was behind the calm-lane aircraft when its
+        # 100 m takeoff completed around 323 m East, producing a turnback loop.
+        self.assertGreaterEqual(settle_distance_m, 450.0)
+        self.assertLessEqual(settle_distance_m, 550.0)
+        self.assertGreaterEqual(leg_distance_m, 1_950.0)
+        self.assertLessEqual(leg_distance_m, 2_050.0)
         self.assertGreater(float(seq4[9]), float(seq3[9]))
-        self.assertEqual(4, max(by_seq))
+        lane_width_m = _distance_m(
+            float(by_seq[4][8]),
+            float(by_seq[4][9]),
+            float(by_seq[5][8]),
+            float(by_seq[5][9]),
+        )
+        self.assertGreaterEqual(lane_width_m, 450.0)
+        self.assertLessEqual(lane_width_m, 550.0)
+        return_leg_distance_m = _distance_m(
+            float(by_seq[6][8]),
+            float(by_seq[6][9]),
+            float(by_seq[7][8]),
+            float(by_seq[7][9]),
+        )
+        self.assertGreaterEqual(return_leg_distance_m, 1_950.0)
+        self.assertLessEqual(return_leg_distance_m, 2_050.0)
+        self.assertEqual(9, max(by_seq))
 
     def test_defaults_and_generated_cases_use_gps_mission_asset(self) -> None:
         expected = ROOT / "assets/missions/gps_failure_behavior_mission.waypoints"
@@ -672,9 +714,16 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         )
         requirements = hard_denial.parameters["acceptance_requirements"]
         self.assertEqual(90.0, requirements["min_post_injection_s"])
+        nominal = GpsFailureCaseGenerator(GpsFailureConfig()).get_case("nominal")
+        self.assertEqual(
+            defaults.NOMINAL_SMOKE_MIN_POST_INJECTION_S,
+            nominal.parameters["acceptance_requirements"]["min_post_injection_s"],
+        )
         self.assertEqual(
             [
+                "run_config.json",
                 "gps_injection.json",
+                "source_contract.json",
                 "gps_behavior_summary.json",
                 "ekf_innovation_metrics.json",
                 "truth_vs_belief.json",
@@ -689,8 +738,11 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertEqual("MISSION_CURRENT", meta["source"])
         self.assertEqual(4, meta["seq"])
         self.assertEqual("first seq==4 after front-half progress", meta["edge"])
-        self.assertEqual([1, 2, 3], meta["front_half_required_sequences"])
+        self.assertEqual([1, 3], meta["front_half_required_sequences"])
+        self.assertEqual([2], meta["front_half_optional_sequences"])
+        self.assertEqual([0], meta["pre_trigger_ignored_sequences"])
         self.assertTrue(first_seq4_edge_after_front_half([1, 2, 3, 4]))
+        self.assertTrue(first_seq4_edge_after_front_half([1, 3, 4]))
         self.assertFalse(first_seq4_edge_after_front_half([1, 4]))
         self.assertFalse(first_seq4_edge_after_front_half([1, 2, 4]))
         self.assertFalse(first_seq4_edge_after_front_half([4, 1, 2, 3]))
@@ -699,7 +751,6 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         good = [
             _fresh_trigger_event(1),
             _fresh_trigger_event(1),
-            _fresh_trigger_event(2),
             _fresh_trigger_event(3),
             _fresh_trigger_event(4),
             _fresh_trigger_event(4),
@@ -748,7 +799,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             )
         )
 
-    def test_trigger_rejects_regressive_and_skipped_sequences(self) -> None:
+    def test_trigger_allows_optional_do_command_but_rejects_regression(self) -> None:
         armed = _fresh_trigger_event
         # A regression to a lower mission-current seq (1,2,3,2,4) is invalid.
         self.assertFalse(
@@ -756,11 +807,11 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                 [armed(1), armed(2), armed(3), armed(2), armed(4)]
             )
         )
-        # A skipped front-half seq (1,3,4) is invalid.
-        self.assertFalse(
+        # Seq 2 is DO_CHANGE_SPEED. ArduPlane may omit it from MISSION_CURRENT.
+        self.assertTrue(
             first_seq4_edge_after_armed_auto_front_half([armed(1), armed(3), armed(4)])
         )
-        # Jumping straight past the next required seq (1,2,4) is invalid.
+        # Jumping past required navigation seq 3 is invalid.
         self.assertFalse(
             first_seq4_edge_after_armed_auto_front_half([armed(1), armed(2), armed(4)])
         )
@@ -781,6 +832,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
 
     def test_artifact_schema_uses_locked_gps_names(self) -> None:
         schemas = artifact_schema()
+        self.assertIn("run_config.json", schemas)
         self.assertIn("gps_behavior_summary.json", schemas)
         self.assertIn("ekf_innovation_metrics.json", schemas)
         self.assertIn("truth_vs_belief.json", schemas)
@@ -792,7 +844,9 @@ class GpsFailurePhase1Tests(unittest.TestCase):
     def test_required_artifact_set_is_exact_and_locked(self) -> None:
         self.assertEqual(
             [
+                "run_config.json",
                 "gps_injection.json",
+                "source_contract.json",
                 "gps_behavior_summary.json",
                 "ekf_innovation_metrics.json",
                 "truth_vs_belief.json",
@@ -891,6 +945,8 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                         summary={
                             "accepted_observation": True,
                             "behavior_class": "loss_of_control",
+                            "terminal_state_reached": True,
+                            "mission_complete": False,
                         },
                     )
                 ],
@@ -952,6 +1008,15 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertEqual("analysis_incomplete", marker_only["behavior_class"])
         self.assertEqual("missing_behavior_fields", marker_only["reason"])
 
+    def test_readback_failure_is_workflow_incomplete_not_pre_injection_behavior(self) -> None:
+        summary = classify_observation(
+            _valid_observation(injection_readback_ok=False)
+        )
+
+        self.assertFalse(summary["accepted_observation"])
+        self.assertEqual("analysis_incomplete", summary["behavior_class"])
+        self.assertEqual("failed_readback", summary["reason"])
+
     def test_each_accepted_behavior_class_requires_its_own_evidence(self) -> None:
         base = _valid_observation()
         cases = [
@@ -1007,6 +1072,55 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertFalse(summary["accepted_observation"])
         self.assertEqual("analysis_incomplete", summary["behavior_class"])
         self.assertEqual("missing_mechanism_fields", summary["reason"])
+
+    def test_nominal_smoke_accepts_flight_evidence_without_mechanism_gate(self) -> None:
+        base = _valid_observation(
+            case_id="nominal",
+            fault_type="nominal",
+            post_injection_s=20.0,
+            required_post_injection_s=20.0,
+        )
+        base.pop("mechanism_evidence")
+
+        summary = classify_observation(base)
+
+        self.assertTrue(summary["accepted_observation"], summary)
+        self.assertEqual("nominal", summary["behavior_class"])
+
+    def test_nominal_smoke_rejects_minimum_window_without_mission_completion(self) -> None:
+        summary = classify_observation(
+            _valid_observation(
+                case_id="nominal",
+                fault_type="nominal",
+                post_injection_s=20.0,
+                required_post_injection_s=20.0,
+                terminal_state_reached=False,
+                mission_complete=False,
+                stop_reason="observing_post_injection",
+                max_seq_reached=4,
+                auto_to_rtl_transition_seq=None,
+            )
+        )
+
+        self.assertFalse(summary["accepted_observation"])
+        self.assertEqual("terminal_state_not_reached", summary["reason"])
+
+    def test_nominal_smoke_rejects_early_rtl_terminal(self) -> None:
+        summary = classify_observation(
+            _valid_observation(
+                case_id="nominal",
+                fault_type="nominal",
+                terminal_state_reached=True,
+                mission_complete=False,
+                stop_reason="early_rtl_stabilized",
+                max_seq_reached=4,
+                auto_to_rtl_transition_seq=4,
+                mode_change=True,
+            )
+        )
+
+        self.assertFalse(summary["accepted_observation"])
+        self.assertEqual("nominal_mission_incomplete", summary["reason"])
 
     def test_analysis_incomplete_for_short_window_and_missing_artifacts(self) -> None:
         short_window = classify_observation(
@@ -1193,6 +1307,8 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                                 "accepted_observation": True,
                                 "behavior_class": "detected_rejected",
                                 "observation_quality_class": "valid_detected_rejection",
+                                "terminal_state_reached": True,
+                                "mission_complete": False,
                             },
                         }
                     ],
@@ -1305,6 +1421,8 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                                     "summary": {
                                         "accepted_observation": True,
                                         "behavior_class": behavior,
+                                        "terminal_state_reached": True,
+                                        "mission_complete": False,
                                     },
                                 }
                             ],
@@ -1354,11 +1472,59 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                                 "accepted_observation": True,
                                 "behavior_class": "loss_of_control",
                                 "observation_quality_class": "valid_bad_behavior",
+                                "terminal_state_reached": True,
+                                "mission_complete": False,
                             },
                         }
                     ]
                 )
             )
+        )
+
+    def test_workflow_complete_is_separate_from_accepted_observation(self) -> None:
+        attempt = _accepted_attempt(
+            status="success",
+            workflow_status="complete",
+            cleanup={"ok": True},
+            artifacts={"raw_log": "/tmp/attempt.BIN"},
+            verdict={
+                "class": "failed_analysis",
+                "reason": "analysis_incomplete",
+                "metadata": {"accepted_observation": False},
+            },
+            analysis_results=[
+                {
+                    "ok": False,
+                    "summary": {
+                        "accepted_observation": False,
+                        "behavior_class": "analysis_incomplete",
+                        "terminal_state_reached": True,
+                        "mission_complete": False,
+                    },
+                }
+            ],
+            accepted_observation=False,
+        )
+
+        self.assertTrue(workflow_complete_from_attempt(attempt))
+        self.assertFalse(accepted_observation_from_attempt(attempt))
+
+    def test_workflow_complete_requires_cleanup_and_raw_log(self) -> None:
+        base = {
+            "case_id": "nominal",
+            "status": "success",
+            "workflow_status": "complete",
+            "cleanup": {"ok": True},
+            "artifacts": {"raw_log": "/tmp/attempt.BIN"},
+        }
+
+        self.assertTrue(workflow_complete_from_attempt(base))
+        self.assertFalse(
+            workflow_complete_from_attempt({**base, "cleanup": {"ok": False}})
+        )
+        self.assertFalse(workflow_complete_from_attempt({**base, "artifacts": {}}))
+        self.assertFalse(
+            workflow_complete_from_attempt({**base, "workflow_status": "incomplete"})
         )
 
     def test_config_rejects_invalid_ladders_and_repeat_contracts(self) -> None:
@@ -1394,6 +1560,10 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             GpsFailureConfig(glitch_magnitudes_m=(-1.0,))
         with self.assertRaisesRegex(ValueError, "denial_durations_s value must be > 0"):
             GpsFailureConfig(denial_durations_s=(0.0,))
+        with self.assertRaisesRegex(ValueError, "heartbeat_timeout_s must be > 0"):
+            GpsFailureConfig(heartbeat_timeout_s=0.0)
+        with self.assertRaisesRegex(ValueError, "ready_timeout_s must be finite"):
+            GpsFailureConfig(ready_timeout_s=math.inf)
 
     def test_custom_drift_values_generate_distinct_collision_free_ids(self) -> None:
         cases = _cases(GpsFailureConfig(drift_rates_mps=(0.21, 0.24)))

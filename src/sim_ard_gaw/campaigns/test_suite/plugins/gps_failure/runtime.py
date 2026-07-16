@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from ...core.models import TestCase
-from . import glitch
+from . import defaults, glitch
 from .mavlink import (
     MavlinkParameterConnection,
     ParameterBatchResult,
@@ -75,8 +75,9 @@ def validate_trigger_trace(trace: Any) -> TriggerEvidence:
     Fails closed (``validated=False``, no token) for empty, missing, malformed,
     unarmed, wrong-mode, duplicate, regressive, or out-of-order traces without
     raising. Uses only the canonical monitor helper for the ordered
-    seq-1->2->3->4 armed/AUTO contract. Only this function stamps the internal
-    authorization token.
+    seq-1->3->4 armed/AUTO navigation contract, with the seq-2 DO command
+    optional in ``MISSION_CURRENT`` telemetry. Only this function stamps the
+    internal authorization token.
     """
 
     if not isinstance(trace, (list, tuple)) or not trace:
@@ -87,12 +88,16 @@ def validate_trigger_trace(trace: Any) -> TriggerEvidence:
 
     seq4_event: dict[str, Any] | None = None
     front_half: list[int] = []
+    front_half_sequences = {
+        *defaults.INJECTION_TRIGGER["front_half_required_sequences"],
+        *defaults.INJECTION_TRIGGER["front_half_optional_sequences"],
+    }
     for event in events:
         if not isinstance(event, dict):
             return TriggerEvidence(validated=False, reason="malformed_trigger_event")
         seq = event.get("seq")
-        if seq in (1, 2, 3) and seq not in front_half:
-            front_half.append(int(seq))
+        if isinstance(seq, int) and seq in front_half_sequences and seq not in front_half:
+            front_half.append(seq)
         if seq == 4:
             seq4_event = dict(event)
             break

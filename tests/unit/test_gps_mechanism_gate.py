@@ -190,6 +190,8 @@ class GpsMechanismGateTests(unittest.TestCase):
             "injection_readback_ok": True,
             "post_injection_s": 90.0,
             "required_artifacts_present": True,
+            "terminal_state_reached": True,
+            "mission_complete": False,
             "mechanism_gate_result": mechanism,
             # Substantive behavior-tier fields, not a bare marker.
             "horizontal_gap_m": 40.0,
@@ -257,6 +259,8 @@ class GpsMechanismGateTests(unittest.TestCase):
             "injection_readback_ok": True,
             "post_injection_s": 90.0,
             "required_artifacts_present": True,
+            "terminal_state_reached": True,
+            "mission_complete": False,
             "mechanism_gate_result": mechanism,
             "fused": True,  # stale caller-forged flag
             "horizontal_gap_m": 90.0,

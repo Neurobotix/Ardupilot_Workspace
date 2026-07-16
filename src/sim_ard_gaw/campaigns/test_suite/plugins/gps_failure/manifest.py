@@ -81,6 +81,17 @@ class GpsFailureManifest(Manifest):
                 count += 1
         return count
 
+    def workflow_complete_count(self, case: TestCase) -> int:
+        count = 0
+        for attempt in self.load().get("attempts", []):
+            if not isinstance(attempt, dict):
+                continue
+            if attempt.get("case_id") != case.case_id:
+                continue
+            if workflow_complete_from_attempt(attempt):
+                count += 1
+        return count
+
     def next_attempt_index(self, case: TestCase) -> int:
         highest = 0
         for attempt in self.load().get("attempts", []):
@@ -95,6 +106,9 @@ class GpsFailureManifest(Manifest):
         manifest = self.load()
         row = attempt_record_to_generic_fields(record)
         row.update(record.plugin_manifest_fields)
+        # GPS has no legacy status vocabulary to preserve. Persist the framework
+        # terminal state explicitly so error/interrupt rows are self-describing.
+        row["status"] = record.status.value
         row["attempt_index"] = record.attempt_index
         row["target_run_index"] = record.target_run_index
         manifest.setdefault("attempts", []).append(row)
@@ -149,6 +163,12 @@ def accepted_observation_from_attempt(attempt: dict[str, Any]) -> bool:
         summary = result.get("summary")
         if not isinstance(summary, dict):
             return False
+        if summary.get("terminal_state_reached") is not True:
+            return False
+        if attempt.get("case_id") == "nominal" and summary.get(
+            "mission_complete"
+        ) is not True:
+            return False
         if _bad_analysis_summary(summary):
             return False
         if summary.get("accepted_observation") is not True:
@@ -178,6 +198,29 @@ def accepted_observation_from_attempt(attempt: dict[str, Any]) -> bool:
     if verdict_behavior != authoritative_behavior:
         return False
 
+    return True
+
+
+def workflow_complete_from_attempt(attempt: dict[str, Any]) -> bool:
+    """Return whether the physical run workflow completed.
+
+    This is deliberately narrower than accepted-observation logic. It answers
+    whether the executor completed a clean, reviewable flight package; it does
+    not decide whether the aircraft/EKF behavior was scientifically accepted.
+    """
+    if str(attempt.get("workflow_status") or "").lower() != "complete":
+        return False
+    if not _top_level_status_valid_if_present(attempt):
+        return False
+    cleanup = attempt.get("cleanup")
+    if not isinstance(cleanup, dict) or cleanup.get("ok") is not True:
+        return False
+    artifacts = attempt.get("artifacts")
+    if not isinstance(artifacts, dict):
+        return False
+    raw_log = artifacts.get("raw_log") or attempt.get("raw_log_path")
+    if not isinstance(raw_log, str) or not raw_log:
+        return False
     return True
 
 

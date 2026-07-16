@@ -3,9 +3,9 @@
 This module intentionally models exact proof and validated proxy proof
 separately. The pinned source exposes ``PV_AidingMode == AID_ABSOLUTE``
 internally, but not as a direct MAVLink/BIN field. Phase 2 therefore requires a
-validated proxy: live/source parameters selecting GPS horizontal aiding plus EKF
-status flags showing absolute horizontal position and not constant-position
-mode. Mechanism classification fails closed when that proxy is absent.
+validated proxy: live/source parameters selecting GPS horizontal aiding plus the
+EKF absolute-horizontal-position flag and not constant-position mode. Mechanism
+classification fails closed when that proxy is absent.
 """
 from __future__ import annotations
 
@@ -119,8 +119,6 @@ def validate_source_contract(
             reasons.append("ekf_const_pos_mode")
         if not estimator_flags & EKF_POS_HORIZ_ABS:
             reasons.append("ekf_pos_horiz_abs_flag_missing")
-        if not estimator_flags & EKF_PRED_POS_HORIZ_ABS:
-            reasons.append("ekf_pred_pos_horiz_abs_flag_missing")
 
     ok = not reasons
     return SourceContract(
@@ -144,7 +142,9 @@ def pos_test_ratio_from_xkf4_sp(value: object) -> float:
     parsed = _finite_float("XKF4.SP", value)
     if parsed < 0:
         raise ValueError("XKF4.SP must be non-negative")
-    return (parsed / 100.0) ** 2
+    # pymavlink's DFReader has already applied the XKF4 format multiplier.
+    # The decoded SP value is sqrt(posTestRatio), not the stored integer.
+    return parsed * parsed
 
 
 def _finite_float(name: str, value: object) -> float:

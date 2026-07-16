@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import math
+import shutil
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Sequence
 
 from ...core.analysis import Analyzer
 from ...core.models import (
     AnalysisResult,
     AttemptContext,
+    AttemptStatus,
     MonitorResult,
     TestCase,
     Verdict,
@@ -25,6 +28,20 @@ ANALYSIS_STATE_CLASS = defaults.ANALYSIS_STATE_CLASSES[0]
 
 def artifact_schema() -> dict[str, dict[str, Any]]:
     return {
+        "run_config.json": {
+            "required_fields": [
+                "created_at_utc",
+                "case_id",
+                "attempt_id",
+                "mission_file_provenance",
+                "gazebo_world_provenance",
+                "param_file_provenance",
+                "source_tree_snapshot",
+                "commands",
+                "logs",
+                "workspace_gazebo_plugin",
+            ],
+        },
         "gps_injection.json": {
             "required_fields": [
                 "case_id",
@@ -46,6 +63,23 @@ def artifact_schema() -> dict[str, dict[str, Any]]:
                 "observation_quality_class",
                 "accepted_observation",
                 "reason",
+                "terminal_state_reached",
+                "mission_complete",
+                "stop_reason",
+                "max_seq_reached",
+                "auto_to_rtl_transition_seq",
+            ],
+        },
+        "source_contract.json": {
+            "required_fields": [
+                "ok",
+                "validated_proxy",
+                "exact_aiding_proof",
+                "reasons",
+                "readbacks",
+                "estimator_flags",
+                "source",
+                "readback_results",
             ],
         },
         "ekf_innovation_metrics.json": {
@@ -106,18 +140,27 @@ def classify_observation(observation: dict[str, Any]) -> dict[str, Any]:
     if not observation.get("injection_triggered", False):
         return _result("pre_injection_failure", "pre_injection", False)
     if not observation.get("injection_readback_ok", False):
-        return _result("pre_injection_failure", "failed_readback", False)
+        return _result(ANALYSIS_STATE_CLASS, "failed_readback", False)
     window_s, window_error = _finite_number("post_injection_s", observation.get("post_injection_s"))
     if window_error is not None:
         # A malformed / non-finite observation window fails closed, never raises.
         return _result(ANALYSIS_STATE_CLASS, window_error, False)
-    if window_s < defaults.MIN_POST_INJECTION_S:
+    required_window_s, required_window_error = _finite_number(
+        "required_post_injection_s",
+        observation.get("required_post_injection_s", defaults.MIN_POST_INJECTION_S),
+    )
+    if required_window_error is not None:
+        return _result(ANALYSIS_STATE_CLASS, required_window_error, False)
+    if (
+        window_s < required_window_s
+        and observation.get("terminal_state_reached") is not True
+    ):
         return _result(ANALYSIS_STATE_CLASS, "insufficient_post_injection_window", False)
     if not observation.get("required_artifacts_present", False):
         return _result(ANALYSIS_STATE_CLASS, "missing_required_artifacts", False)
     if observation.get("behavior_measurements_complete") is False:
         return _result(ANALYSIS_STATE_CLASS, "missing_behavior_samples", False)
-    if not _explicit_evidence_present(
+    if not _is_nominal_smoke_observation(observation) and not _explicit_evidence_present(
         observation,
         primary="mechanism_evidence",
         legacy="mechanism_fields_present",
@@ -131,6 +174,12 @@ def classify_observation(observation: dict[str, Any]) -> dict[str, Any]:
     evidence, error = _behavior_evidence(observation)
     if evidence is None:
         return _result(ANALYSIS_STATE_CLASS, error or "missing_behavior_fields", False)
+    if observation.get("terminal_state_reached") is not True:
+        return _result(ANALYSIS_STATE_CLASS, "terminal_state_not_reached", False)
+    if _is_nominal_smoke_observation(observation) and observation.get(
+        "mission_complete"
+    ) is not True:
+        return _result(ANALYSIS_STATE_CLASS, "nominal_mission_incomplete", False)
     return _classify_behavior(evidence)
 
 
@@ -158,6 +207,13 @@ def _classify_behavior(evidence: "_BehaviorEvidence") -> dict[str, Any]:
     # that was neither fused nor rejected, or a contradictory nominal claim with
     # a growing gap). This is an incomplete analysis, not a silent nominal.
     return _result(ANALYSIS_STATE_CLASS, "behavior_evidence_inconclusive", False)
+
+
+def _is_nominal_smoke_observation(observation: dict[str, Any]) -> bool:
+    return (
+        observation.get("case_id") == "nominal"
+        or observation.get("fault_type") == "nominal"
+    )
 
 
 @dataclass(frozen=True)
@@ -384,7 +440,7 @@ def _result(
 
 @dataclass
 class GpsFailureAnalyzer(Analyzer):
-    name: str = "gps_failure_phase1_schema"
+    name: str = "gps_failure_post_cleanup_analysis"
 
     def analyze(self, case: TestCase, ctx: AttemptContext) -> AnalysisResult:
         observation = dict(ctx.extra.get("gps_observation") or {})
@@ -393,12 +449,304 @@ class GpsFailureAnalyzer(Analyzer):
                 "injection_triggered": False,
                 "required_artifacts_present": False,
             }
-        summary = classify_observation(observation)
+        if isinstance(ctx.extra.get("gps_launch_plan"), dict):
+            observation = _finalize_live_bin_analysis(case, ctx, observation)
+        summary = _summary_with_terminal_context(
+            classify_observation(observation), observation
+        )
+        if isinstance(ctx.extra.get("gps_launch_plan"), dict):
+            _persist_final_live_summary(ctx, observation, summary)
         return AnalysisResult(
             analyzer_name=self.name,
             ok=bool(summary["accepted_observation"]),
             summary=summary,
         )
+
+
+def _finalize_live_bin_analysis(
+    case: TestCase,
+    ctx: AttemptContext,
+    observation: dict[str, Any],
+) -> dict[str, Any]:
+    """Decode the cleanup-finalized BIN and replace live fallback metrics."""
+
+    from .bin_analysis import analyze_attempt_bin
+    from .environment import identify_attempt_bin
+
+    metrics_path = ctx.attempt_dir / "ekf_innovation_metrics.json"
+    truth_path = ctx.attempt_dir / "truth_vs_belief.json"
+    raw_metrics = defaults.read_json(metrics_path)
+    raw_truth = defaults.read_json(truth_path)
+    metrics = raw_metrics if isinstance(raw_metrics, dict) else {}
+    truth = raw_truth if isinstance(raw_truth, dict) else {}
+    source_bin_path = identify_attempt_bin(ctx)
+    if source_bin_path is None:
+        analysis: dict[str, Any] = {
+            "ok": False,
+            "reason": "single_current_attempt_bin_not_available_after_cleanup",
+        }
+    else:
+        execution = ctx.extra.get("gps_injection_execution")
+        plan = execution.get("plan") if isinstance(execution, dict) else None
+        injection_payload = (
+            plan.get("injection_payload") if isinstance(plan, dict) else None
+        )
+        analysis_bin_path = source_bin_path
+        try:
+            analysis_bin_path = _archive_attempt_bin(source_bin_path, ctx)
+            analysis = analyze_attempt_bin(
+                analysis_bin_path,
+                decoder=ctx.extra.get("gps_bin_decoder"),
+                window_start_time_us=_trigger_window_time_us(ctx),
+                trigger_seq=int(defaults.INJECTION_TRIGGER["seq"]),
+                injection_payload=(
+                    injection_payload
+                    if isinstance(injection_payload, dict)
+                    else None
+                ),
+            )
+        except Exception as exc:
+            analysis = {
+                "ok": False,
+                "bin_path": str(analysis_bin_path),
+                "reason": f"{type(exc).__name__}: {exc}",
+            }
+
+    ctx.extra["gps_bin_analysis"] = analysis
+    mechanism = analysis.get("mechanism")
+    if isinstance(mechanism, dict) and mechanism.get("ok") is True:
+        metrics = _ekf_metrics_from_bin(mechanism, fallback=metrics)
+    truth_belief = analysis.get("truth_vs_belief")
+    if isinstance(truth_belief, dict) and truth_belief.get("ok") is True:
+        truth = _truth_belief_from_bin(truth_belief, fallback=truth)
+    metrics["bin_analysis"] = analysis
+    truth["bin_analysis"] = analysis
+    defaults.write_json(metrics_path, metrics)
+    defaults.write_json(truth_path, truth)
+    ctx.artifacts["ekf_innovation_metrics.json"] = metrics_path
+    ctx.artifacts["truth_vs_belief.json"] = truth_path
+
+    ratios = [
+        float(value)
+        for value in metrics.get("pos_test_ratio", [])
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    ]
+    gaps = [
+        float(value)
+        for value in truth.get("horizontal_gap_m", [])
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    ]
+    finalized = dict(observation)
+    analysis_ok = analysis.get("ok") is True
+    mechanism_ok = isinstance(mechanism, dict) and mechanism.get("ok") is True
+    finalized.update({
+        "required_artifacts_present": all(
+            (ctx.attempt_dir / name).exists()
+            for name in defaults.REQUIRED_ATTEMPT_ARTIFACTS
+            if name != "gps_behavior_summary.json"
+        ),
+        "mechanism_evidence": bool(
+            mechanism_ok and finalized.get("source_contract_ok") is True
+        ),
+        "behavior_measurements_complete": bool(
+            finalized.get("behavior_measurements_complete") is True
+            and analysis_ok
+            and ratios
+            and len(gaps) >= 2
+        ),
+        "horizontal_gap_m": gaps[-1] if gaps else 0.0,
+        "gap_growing": bool(
+            len(gaps) >= 2
+            and gaps[-1] > 5.0
+            and gaps[-1] - gaps[0] > 1.0
+            and float(truth.get("gap_growth_rate_mps", 0.0)) > 0.0
+        ),
+        "gap_within_nominal_band": bool((gaps[-1] if gaps else 0.0) <= 5.0),
+        "fused": bool(ratios and max(ratios) < 1.0),
+        "pos_test_ratio_rejected": bool(ratios and max(ratios) >= 1.0),
+        "reset_event": bool(metrics.get("reset_events")),
+        "bin_analysis_ok": analysis_ok,
+    })
+    ctx.extra["gps_observation"] = finalized
+    return finalized
+
+
+def _archive_attempt_bin(source_bin_path: Path, ctx: AttemptContext) -> Path:
+    copied_name = "{}.BIN".format(
+        defaults.case_attempt_id(
+            ctx.case.case_id,
+            ctx.target_run_index,
+            ctx.attempt_index,
+        )
+    )
+    dest_bin_path = ctx.attempt_dir / copied_name
+    if source_bin_path.resolve(strict=False) != dest_bin_path.resolve(strict=False):
+        shutil.copy2(source_bin_path, dest_bin_path)
+    ctx.artifacts["raw_log"] = dest_bin_path
+    return dest_bin_path
+
+
+def _trigger_window_time_us(ctx: AttemptContext) -> float | None:
+    candidates: list[Any] = [ctx.extra.get("gps_trigger_event")]
+    execution = ctx.extra.get("gps_injection_execution")
+    plan = execution.get("plan") if isinstance(execution, dict) else None
+    if isinstance(plan, dict):
+        candidates.insert(0, plan.get("trigger_event"))
+    trace = ctx.extra.get("gps_trigger_trace")
+    if isinstance(trace, list):
+        trigger_seq = int(defaults.INJECTION_TRIGGER["seq"])
+        candidates.extend(
+            event
+            for event in trace
+            if isinstance(event, dict) and event.get("seq") == trigger_seq
+        )
+    for event in candidates:
+        if not isinstance(event, dict):
+            continue
+        value = event.get("trigger_time_us")
+        if (
+            event.get("trigger_boot_time_fresh") is True
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            and float(value) >= 0.0
+        ):
+            return float(value)
+    return None
+
+
+def _summary_with_terminal_context(
+    summary: dict[str, Any],
+    observation: dict[str, Any],
+) -> dict[str, Any]:
+    enriched = dict(summary)
+    for field in (
+        "terminal_state_reached",
+        "mission_complete",
+        "stop_reason",
+        "max_seq_reached",
+        "auto_to_rtl_transition_seq",
+    ):
+        enriched[field] = observation.get(field)
+    return enriched
+
+
+def _persist_final_live_summary(
+    ctx: AttemptContext,
+    observation: dict[str, Any],
+    summary: dict[str, Any],
+) -> None:
+    summary_path = ctx.attempt_dir / "gps_behavior_summary.json"
+    defaults.write_json(summary_path, summary)
+    ctx.artifacts["gps_behavior_summary.json"] = summary_path
+    ctx.extra["gps_observation"] = observation
+    fields = dict(ctx.extra.get("plugin_manifest_fields") or {})
+    workflow_complete = _workflow_complete_after_cleanup(ctx, observation)
+    if workflow_complete:
+        ctx.extra["attempt_status"] = AttemptStatus.SUCCESS
+    fields.update({
+        "behavior_class": summary["behavior_class"],
+        "observation_quality_class": summary["observation_quality_class"],
+        "accepted_observation": summary["accepted_observation"],
+        "workflow_status": "complete" if workflow_complete else "incomplete",
+        "analysis_status": "complete",
+        "terminal_state_reached": observation.get("terminal_state_reached"),
+        "mission_complete": observation.get("mission_complete"),
+        "stop_reason": observation.get("stop_reason"),
+        "max_seq_reached": observation.get("max_seq_reached"),
+        "auto_to_rtl_transition_seq": observation.get(
+            "auto_to_rtl_transition_seq"
+        ),
+        "artifacts": {name: str(path) for name, path in ctx.artifacts.items()},
+    })
+    raw_log_path = ctx.artifacts.get("raw_log")
+    if raw_log_path is not None:
+        fields["raw_log_path"] = str(raw_log_path)
+    notes = list(fields.get("notes") or [])
+    if summary["reason"] not in notes:
+        notes.append(summary["reason"])
+    fields["notes"] = notes
+    ctx.extra["plugin_manifest_fields"] = fields
+
+
+def _workflow_complete_after_cleanup(
+    ctx: AttemptContext,
+    observation: dict[str, Any],
+) -> bool:
+    cleanup = ctx.extra.get("cleanup_result")
+    raw_log = ctx.artifacts.get("raw_log")
+    return bool(
+        observation.get("injection_triggered") is True
+        and observation.get("injection_readback_ok") is True
+        and observation.get("terminal_state_reached") is True
+        and observation.get("telemetry_delivery_ok") is True
+        and isinstance(cleanup, dict)
+        and cleanup.get("ok") is True
+        and raw_log is not None
+        and Path(raw_log).is_file()
+    )
+
+
+def _ekf_metrics_from_bin(
+    mechanism: dict[str, Any],
+    *,
+    fallback: dict[str, Any],
+) -> dict[str, Any]:
+    samples = [
+        sample for sample in mechanism.get("samples", [])
+        if isinstance(sample, dict)
+    ]
+    ratios = [
+        sample.get("pos_test_ratio")
+        for sample in samples
+        if isinstance(sample.get("pos_test_ratio"), (int, float))
+    ]
+    return {
+        "pos_test_ratio": ratios,
+        "reject_flags": [
+            bool(sample.get("gps_position_rejected")) for sample in samples
+        ],
+        "reset_events": list(mechanism.get("reset_events") or []),
+        "variance": list(fallback.get("variance") or []),
+        "samples": samples,
+        "source": mechanism.get("source", "XKF4"),
+    }
+
+
+def _truth_belief_from_bin(
+    truth_belief: dict[str, Any],
+    *,
+    fallback: dict[str, Any],
+) -> dict[str, Any]:
+    samples = [
+        sample for sample in truth_belief.get("samples", [])
+        if isinstance(sample, dict)
+    ]
+    gaps = [
+        float(sample["horizontal_gap_m"])
+        for sample in samples
+        if isinstance(sample.get("horizontal_gap_m"), (int, float))
+    ]
+    growth = 0.0
+    if len(samples) >= 2 and len(gaps) >= 2:
+        first_time = samples[0].get("time_us")
+        last_time = samples[-1].get("time_us")
+        if isinstance(first_time, (int, float)) and isinstance(last_time, (int, float)):
+            dt = (last_time - first_time) / 1_000_000.0
+            if dt > 0:
+                growth = (gaps[-1] - gaps[0]) / dt
+    return {
+        "horizontal_gap_m": gaps,
+        "gap_growth_rate_mps": growth,
+        "truth_source": "SIM",
+        "belief_source": "POS",
+        "samples": samples,
+        "live_fallback_source": {
+            "truth_source": fallback.get("truth_source"),
+            "belief_source": fallback.get("belief_source"),
+        },
+        "source": truth_belief.get("source", "SIM/POS"),
+    }
 
 
 class GpsFailureVerdictPolicy(VerdictPolicy):
