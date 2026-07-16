@@ -47,6 +47,7 @@ class _LiveGpsMonitor:
         self.started_monotonic = time.monotonic()
         self.deadline = self.started_monotonic + config.mission_timeout_s
         self.trigger_trace: list[dict[str, Any]] = []
+        self.trigger_event: dict[str, Any] | None = None
         self.normalized_messages: list[dict[str, Any]] = []
         self.injection_attempted = False
         self.triggered = False
@@ -58,17 +59,34 @@ class _LiveGpsMonitor:
         self.stop_reason = "trigger_not_observed"
         self.operation_failure_reason: str | None = None
         self.observation_end_monotonic_s = self.started_monotonic
+        self.current_mode: str | None = None
+        self.current_armed = False
+        self.max_seq_reached: int | None = None
+        self.reached: list[int] = []
+        self.auto_to_rtl_transition_seq: int | None = None
+        self.rtl_transition_monotonic_s: float | None = None
+        self.terminal_state_reached = False
+        self.loss_of_control = False
+        self.timeout = False
+        self.pre_injection_estimator_flags: int | None = None
+        self._operator_status_period_s = 15.0
+        self._last_operator_status_s = self.started_monotonic
+        self._logged_clean_trigger_sequences: set[int] = set()
+        self._logged_stale_trigger_sequences: set[int] = set()
+        self._logged_mission_current_sequences: set[int] = set()
+        self._logged_reached_sequences: set[int] = set()
 
     def run(self) -> MonitorResult:
-        rate_results = telemetry.request_telemetry_rates(self.master)
-        self.ctx.extra["gps_telemetry_rate_requests"] = [
-            result.as_dict() for result in rate_results
-        ]
-        if not all(result.ok for result in rate_results):
-            self.stop_reason = "telemetry_rate_request_failed"
-            self._write_artifacts()
-            return self._monitor_result()
+        self.ctx.extra["gps_telemetry_stream_request"] = (
+            telemetry.request_live_streams(self.master)
+        )
         self._read_source_contract_parameters()
+        defaults.log(
+            f"[gps_monitor] {self.case.case_id}: monitoring live mission; "
+            f"trigger=clean armed/AUTO seq {defaults.INJECTION_TRIGGER['seq']} "
+            f"after seqs {defaults.INJECTION_TRIGGER['front_half_required_sequences']}; "
+            f"timeout={self.config.mission_timeout_s:.0f}s"
+        )
 
         while time.monotonic() < self.deadline:
             msg = self.master.recv_match(
@@ -82,7 +100,10 @@ class _LiveGpsMonitor:
             self.observation_end_monotonic_s = arrival
             normalized = telemetry.normalize_message(msg, arrival_monotonic_s=arrival)
             self.normalized_messages.append(normalized)
+            self._record_pre_injection_source_sample(normalized)
+            self._record_flight_progress(normalized, arrival)
             self._maybe_record_trigger_event(normalized)
+            self._log_periodic_operator_status(arrival)
             if not self.injection_attempted and first_seq4_edge_after_armed_auto_front_half(
                 self.trigger_trace
             ):
@@ -94,11 +115,16 @@ class _LiveGpsMonitor:
                 if self.operation_failure_reason is not None:
                     self.stop_reason = self.operation_failure_reason
                     break
-                if self._post_injection_s(arrival) >= defaults.MIN_POST_INJECTION_S:
-                    self.stop_reason = "post_injection_observation_complete"
+                if self._should_stop(arrival):
                     break
         else:
             self.stop_reason = "monitor_timeout"
+            self.timeout = True
+            defaults.log(
+                f"[gps_monitor] {self.case.case_id}: monitor timeout; "
+                f"triggered={self.triggered} max_seq={self.max_seq_reached} "
+                f"reached={self.reached} mode={self.current_mode}"
+            )
 
         self._write_artifacts()
         return self._monitor_result()
@@ -110,6 +136,8 @@ class _LiveGpsMonitor:
             raise RuntimeError("GPS injection is one-shot and was already attempted")
         self.injection_attempted = True
         plan = build_authorized_injection_plan(self.case, self.trigger_trace)
+        self.trigger_event = dict(plan.trigger_event)
+        self.ctx.extra["gps_trigger_event"] = dict(self.trigger_event)
         result = execute_injection_plan(plan, self.master)
         self.injection_result = result.as_dict()
         self.ctx.extra["gps_injection_execution"] = self.injection_result
@@ -119,8 +147,16 @@ class _LiveGpsMonitor:
         if self.triggered:
             self.injection_monotonic_s = now_s
             self.stop_reason = "observing_post_injection"
+            defaults.log(
+                f"GPS injection trigger latched at seq 4 for {self.case.case_id}; "
+                "continuing through the mission terminal state."
+            )
         else:
             self.stop_reason = result.reason
+            defaults.log(
+                f"[gps_monitor] {self.case.case_id}: trigger authorization/injection "
+                f"failed: {result.reason}; stopping attempt."
+            )
 
     def _maybe_execute_scheduled_steps(self, now_s: float) -> None:
         if self.injection_monotonic_s is None:
@@ -154,6 +190,10 @@ class _LiveGpsMonitor:
                 readback_rules=rules,
                 reason=str(step_dict.get("reason") or "restore"),
             )
+            defaults.log(
+                f"[gps_monitor] {self.case.case_id}: executing restore step "
+                f"{index} at +{elapsed_s:.1f}s: {payload}"
+            )
             result = execute_restore_step(step, self.master)
             result_dict = result.as_dict() if result is not None else None
             self.restore_results.append({
@@ -163,7 +203,15 @@ class _LiveGpsMonitor:
             })
             if not isinstance(result_dict, dict) or result_dict.get("success") is not True:
                 self.operation_failure_reason = f"restore_failed:{index}"
+                defaults.log(
+                    f"[gps_monitor] {self.case.case_id}: restore step {index} "
+                    f"failed readback; stopping attempt."
+                )
                 return
+            defaults.log(
+                f"[gps_monitor] {self.case.case_id}: restore step {index} "
+                "readback verified."
+            )
 
     def _maybe_execute_slow_drift_update(self, elapsed_s: float) -> None:
         if self.case.parameters.get("fault_type") != "slow_drift":
@@ -178,6 +226,10 @@ class _LiveGpsMonitor:
                 event["elapsed_since_trigger_s"] = elapsed_s
                 break
         plan = build_authorized_injection_plan(self.case, trace)
+        defaults.log(
+            f"[gps_monitor] {self.case.case_id}: slow-drift update due at "
+            f"+{elapsed_s:.1f}s; payload={plan.injection_payload}"
+        )
         result = execute_injection_plan(plan, self.master)
         self.ramp_update_results.append(
             {
@@ -187,13 +239,151 @@ class _LiveGpsMonitor:
         )
         if result.success is not True:
             self.operation_failure_reason = "slow_drift_update_failed"
+            defaults.log(
+                f"[gps_monitor] {self.case.case_id}: slow-drift update "
+                f"failed readback ({result.reason}); stopping attempt."
+            )
             return
+        defaults.log(
+            f"[gps_monitor] {self.case.case_id}: slow-drift update readback "
+            "verified."
+        )
         self.next_ramp_update_s += defaults.SLOW_DRIFT_UPDATE_PERIOD_S
 
     def _post_injection_s(self, now_s: float) -> float:
         if self.injection_monotonic_s is None:
             return 0.0
         return max(0.0, now_s - self.injection_monotonic_s)
+
+    def _required_post_injection_s(self) -> float:
+        requirements = self.case.parameters.get("acceptance_requirements")
+        if isinstance(requirements, dict):
+            value = requirements.get("min_post_injection_s")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                parsed = float(value)
+                if math.isfinite(parsed) and parsed > 0.0:
+                    return parsed
+        raise RuntimeError("case is missing a valid min_post_injection_s contract")
+
+    def _record_flight_progress(
+        self,
+        sample: dict[str, Any],
+        arrival_s: float,
+    ) -> None:
+        message_type = sample.get("type")
+        if message_type == "HEARTBEAT":
+            previous_mode = self.current_mode
+            mode = sample.get("mode")
+            self.current_mode = mode if isinstance(mode, str) else None
+            self.current_armed = sample.get("armed") is True
+            if (
+                self.current_mode is not None
+                and self.current_mode != previous_mode
+            ):
+                defaults.log(
+                    f"[gps_monitor] {self.case.case_id}: mode={self.current_mode} "
+                    f"armed={self.current_armed} max_seq={self.max_seq_reached}"
+                )
+            if (
+                previous_mode == "AUTO"
+                and self.current_mode == "RTL"
+                and self.rtl_transition_monotonic_s is None
+            ):
+                self.auto_to_rtl_transition_seq = self.max_seq_reached
+                self.rtl_transition_monotonic_s = arrival_s
+                defaults.log(
+                    f"[gps_monitor] {self.case.case_id}: RTL observed at "
+                    f"seq={self.auto_to_rtl_transition_seq}; waiting "
+                    f"{defaults.RTL_STABILIZE_S:.0f}s for terminal confirmation."
+                )
+            if self.triggered and sample.get("armed") is False:
+                self.loss_of_control = True
+                defaults.log(
+                    f"[gps_monitor] {self.case.case_id}: unexpected disarm "
+                    "after trigger; marking loss_of_control."
+                )
+            return
+        if message_type in {"MISSION_CURRENT", "MISSION_ITEM_REACHED"}:
+            seq = _coerce_seq(sample.get("seq"))
+            if seq is None:
+                return
+            if (
+                message_type == "MISSION_CURRENT"
+                and seq not in self._logged_mission_current_sequences
+            ):
+                self._logged_mission_current_sequences.add(seq)
+                defaults.log(
+                    f"[gps_monitor] {self.case.case_id}: mission current seq={seq} "
+                    f"(trigger seq={defaults.INJECTION_TRIGGER['seq']})"
+                )
+            self.max_seq_reached = (
+                seq if self.max_seq_reached is None else max(self.max_seq_reached, seq)
+            )
+            if message_type == "MISSION_ITEM_REACHED" and seq not in self.reached:
+                self.reached.append(seq)
+                if seq not in self._logged_reached_sequences:
+                    self._logged_reached_sequences.add(seq)
+                    defaults.log(
+                        f"[gps_monitor] {self.case.case_id}: waypoint reached "
+                        f"seq={seq}; reached={self.reached}"
+                    )
+            return
+        if message_type == "STATUSTEXT":
+            text = str(sample.get("text") or "").lower()
+            if any(token in text for token in ("crash", "terrain", "loss of control")):
+                self.loss_of_control = True
+                defaults.log(
+                    f"[gps_monitor] {self.case.case_id}: STATUSTEXT indicates "
+                    f"loss-of-control condition: {sample.get('text')}"
+                )
+            return
+        if message_type == "GLOBAL_POSITION_INT" and self.triggered:
+            relative_alt_mm = sample.get("relative_alt_mm")
+            if isinstance(relative_alt_mm, (int, float)) and not isinstance(
+                relative_alt_mm, bool
+            ):
+                relative_alt_m = float(relative_alt_mm) / 1000.0
+                if relative_alt_m < defaults.LOW_ALTITUDE_ABORT_M:
+                    self.loss_of_control = True
+                    defaults.log(
+                        f"[gps_monitor] {self.case.case_id}: low altitude after "
+                        f"trigger ({relative_alt_m:.1f}m < "
+                        f"{defaults.LOW_ALTITUDE_ABORT_M:.1f}m); stopping."
+                    )
+
+    def _should_stop(self, now_s: float) -> bool:
+        if self.loss_of_control:
+            self.terminal_state_reached = True
+            self.stop_reason = "loss_of_control"
+            defaults.log(
+                f"[gps_monitor] {self.case.case_id}: terminal stop: "
+                "loss_of_control."
+            )
+            return True
+        if self.rtl_transition_monotonic_s is None:
+            return False
+        if now_s - self.rtl_transition_monotonic_s < defaults.RTL_STABILIZE_S:
+            return False
+        self.terminal_state_reached = True
+        if self._planned_rtl_reached():
+            self.stop_reason = "planned_rtl_stabilized"
+        else:
+            self.stop_reason = "early_rtl_stabilized"
+        defaults.log(
+            f"[gps_monitor] {self.case.case_id}: terminal stop: "
+            f"{self.stop_reason} (rtl_seq={self.auto_to_rtl_transition_seq}, "
+            f"max_seq={self.max_seq_reached}, reached={self.reached})."
+        )
+        return True
+
+    def _planned_rtl_reached(self) -> bool:
+        return bool(
+            self.auto_to_rtl_transition_seq is not None
+            and self.auto_to_rtl_transition_seq >= defaults.PLANNED_RTL_MIN_SEQ
+        )
+
+    def _mission_complete(self) -> bool:
+        return bool(self.terminal_state_reached and self._planned_rtl_reached())
 
     def _write_artifacts(self) -> None:
         self.ctx.extra["gps_trigger_trace"] = list(self.trigger_trace)
@@ -205,7 +395,11 @@ class _LiveGpsMonitor:
             defaults.write_json(path, payload)
             self.ctx.artifacts[name] = path
         observation = self._observation(artifacts)
-        summary = classify_observation(observation)
+        from .analyzers import _summary_with_terminal_context
+
+        summary = _summary_with_terminal_context(
+            classify_observation(observation), observation
+        )
         summary_path = self.ctx.attempt_dir / "gps_behavior_summary.json"
         defaults.write_json(summary_path, summary)
         self.ctx.artifacts["gps_behavior_summary.json"] = summary_path
@@ -219,21 +413,39 @@ class _LiveGpsMonitor:
             "behavior_class": summary["behavior_class"],
             "observation_quality_class": summary["observation_quality_class"],
             "accepted_observation": summary["accepted_observation"],
+            "terminal_state_reached": observation.get("terminal_state_reached"),
+            "mission_complete": observation.get("mission_complete"),
+            "stop_reason": observation.get("stop_reason"),
+            "max_seq_reached": observation.get("max_seq_reached"),
+            "auto_to_rtl_transition_seq": observation.get(
+                "auto_to_rtl_transition_seq"
+            ),
             "artifacts": {name: str(path) for name, path in self.ctx.artifacts.items()},
             "parameters": dict(self.case.parameters),
             "notes": [summary["reason"], self.stop_reason],
+            "workflow_status": (
+                "pre_cleanup_complete"
+                if self._pre_cleanup_workflow_complete(observation)
+                else "pre_cleanup_incomplete"
+            ),
         }
 
     def _monitor_result(self) -> MonitorResult:
         summary = self.ctx.extra.get("plugin_manifest_fields") or {}
         return MonitorResult(
-            completed=bool(summary.get("accepted_observation")),
-            reason=str(summary.get("behavior_class") or self.stop_reason),
+            completed=summary.get("workflow_status") == "pre_cleanup_complete",
+            reason=str(self.stop_reason or summary.get("behavior_class")),
             duration_s=time.monotonic() - self.started_monotonic,
-            waypoints_seen=[
-                int(event["seq"]) for event in self.trigger_trace if "seq" in event
-            ],
+            waypoints_seen=list(self.reached),
             monitor_log_path=self.ctx.attempt_dir / "mode_timeline.json",
+        )
+
+    def _pre_cleanup_workflow_complete(self, observation: dict[str, Any]) -> bool:
+        return bool(
+            observation.get("injection_triggered") is True
+            and observation.get("injection_readback_ok") is True
+            and observation.get("terminal_state_reached") is True
+            and observation.get("telemetry_delivery_ok") is True
         )
 
     def _artifact_payloads(self) -> dict[str, dict[str, Any]]:
@@ -244,7 +456,6 @@ class _LiveGpsMonitor:
             "attitude_altitude_envelope.json": self._attitude_altitude_artifact(),
             "source_contract.json": self._source_contract_artifact(),
         }
-        self._maybe_overlay_bin_analysis(artifacts)
         return artifacts
 
     def _ekf_metrics_artifact(self) -> dict[str, Any]:
@@ -288,7 +499,41 @@ class _LiveGpsMonitor:
                 if sample["type"] in {"HEARTBEAT", "MISSION_CURRENT", "STATUSTEXT"}
             ],
             "trigger_trace": list(self.trigger_trace),
+            "telemetry_stream_request": self.ctx.extra.get(
+                "gps_telemetry_stream_request"
+            ),
+            "telemetry_delivery": self._telemetry_delivery_status(),
             "stop_reason": self.stop_reason,
+            "required_post_injection_s": self._required_post_injection_s(),
+            "terminal_state_reached": self.terminal_state_reached,
+            "mission_complete": self._mission_complete(),
+            "max_seq_reached": self.max_seq_reached,
+            "reached_sequences": list(self.reached),
+            "auto_to_rtl_transition_seq": self.auto_to_rtl_transition_seq,
+            "planned_rtl_min_seq": defaults.PLANNED_RTL_MIN_SEQ,
+            "rtl_stabilize_s": defaults.RTL_STABILIZE_S,
+        }
+
+    def _telemetry_delivery_status(self) -> dict[str, Any]:
+        observed = sorted(
+            {
+                str(sample["type"])
+                for sample in self.normalized_messages
+                if isinstance(sample.get("type"), str)
+            }
+        )
+        required = list(telemetry.DELIVERY_REQUIRED_MESSAGE_TYPES)
+        missing = [
+            message_type for message_type in required if message_type not in observed
+        ]
+        return {
+            "ok": not missing,
+            "required_message_types": required,
+            "observed_message_types": observed,
+            "missing_message_types": missing,
+            "event_driven_optional_message_types": list(
+                telemetry.EVENT_DRIVEN_OPTIONAL_MESSAGE_TYPES
+            ),
         }
 
     def _attitude_altitude_artifact(self) -> dict[str, Any]:
@@ -376,6 +621,18 @@ class _LiveGpsMonitor:
             name: result.as_dict() for name, result in results.items()
         }
 
+    def _record_pre_injection_source_sample(self, sample: dict[str, Any]) -> None:
+        if self.triggered or sample.get("type") != "EKF_STATUS_REPORT":
+            return
+        flags = sample.get("flags")
+        if isinstance(flags, bool):
+            return
+        if isinstance(flags, int):
+            self.pre_injection_estimator_flags = flags
+            return
+        if isinstance(flags, float) and flags.is_integer():
+            self.pre_injection_estimator_flags = int(flags)
+
     def _source_contract_artifact(self) -> dict[str, Any]:
         from .source_contract import validate_source_contract
 
@@ -391,9 +648,12 @@ class _LiveGpsMonitor:
                     readbacks[name] = result.get("value")
         contract = validate_source_contract(
             readbacks,
-            estimator_flags=self._latest_estimator_flags(),
+            estimator_flags=self.pre_injection_estimator_flags,
         )
         payload = contract.as_dict()
+        payload["proof_stage"] = "pre_injection"
+        payload["pre_injection_estimator_flags"] = self.pre_injection_estimator_flags
+        payload["post_injection_estimator_flags"] = self._latest_estimator_flags()
         payload["readback_results"] = raw_readbacks if isinstance(raw_readbacks, dict) else {}
         self.ctx.extra["gps_source_contract"] = payload
         return payload
@@ -410,70 +670,6 @@ class _LiveGpsMonitor:
             if isinstance(flags, float) and flags.is_integer():
                 return int(flags)
         return None
-
-    def _maybe_overlay_bin_analysis(
-        self,
-        artifacts: dict[str, dict[str, Any]],
-    ) -> None:
-        from .environment import identify_attempt_bin
-        from .bin_analysis import analyze_attempt_bin
-
-        bin_path = identify_attempt_bin(self.ctx)
-        if bin_path is None:
-            status = {
-                "ok": False,
-                "reason": "single_current_attempt_bin_not_available",
-            }
-            artifacts["ekf_innovation_metrics.json"]["bin_analysis"] = status
-            artifacts["truth_vs_belief.json"]["bin_analysis"] = status
-            return
-        decoder = self.ctx.extra.get("gps_bin_decoder")
-        injection_plan = (
-            self.injection_result.get("plan")
-            if isinstance(self.injection_result, dict)
-            else None
-        )
-        injection_payload = (
-            injection_plan.get("injection_payload")
-            if isinstance(injection_plan, dict)
-            else None
-        )
-        try:
-            analysis = analyze_attempt_bin(
-                bin_path,
-                decoder=decoder,
-                trigger_seq=int(defaults.INJECTION_TRIGGER["seq"]),
-                injection_payload=(
-                    injection_payload
-                    if isinstance(injection_payload, dict)
-                    else None
-                ),
-            )
-        except Exception as exc:
-            analysis = {
-                "ok": False,
-                "bin_path": str(bin_path),
-                "reason": f"{type(exc).__name__}: {exc}",
-            }
-        self.ctx.extra["gps_bin_analysis"] = analysis
-        mechanism = analysis.get("mechanism") if isinstance(analysis, dict) else None
-        if isinstance(mechanism, dict) and mechanism.get("ok") is True:
-            artifacts["ekf_innovation_metrics.json"] = _ekf_metrics_from_bin(
-                mechanism,
-                fallback=artifacts["ekf_innovation_metrics.json"],
-            )
-        truth_belief = (
-            analysis.get("truth_vs_belief")
-            if isinstance(analysis, dict)
-            else None
-        )
-        if isinstance(truth_belief, dict) and truth_belief.get("ok") is True:
-            artifacts["truth_vs_belief.json"] = _truth_belief_from_bin(
-                truth_belief,
-                fallback=artifacts["truth_vs_belief.json"],
-            )
-        artifacts["ekf_innovation_metrics.json"]["bin_analysis"] = analysis
-        artifacts["truth_vs_belief.json"]["bin_analysis"] = analysis
 
     def _observation(self, artifacts: dict[str, dict[str, Any]]) -> dict[str, Any]:
         post_s = (
@@ -493,6 +689,7 @@ class _LiveGpsMonitor:
         source_contract_ok = source_contract.get("ok") is True
         attitude_artifact = artifacts["attitude_altitude_envelope.json"]
         mode_samples = artifacts["mode_timeline.json"]["mode_timeline"]
+        telemetry_delivery = artifacts["mode_timeline.json"]["telemetry_delivery"]
         heartbeat_samples = [
             sample for sample in mode_samples if sample.get("type") == "HEARTBEAT"
         ]
@@ -506,11 +703,15 @@ class _LiveGpsMonitor:
         )
         mode_change = any(
             sample.get("mode") not in (None, trigger_mode)
+            and not (
+                sample.get("mode") == "RTL" and self._planned_rtl_reached()
+            )
             for sample in heartbeat_samples
         )
         reset_events = artifacts["ekf_innovation_metrics.json"].get("reset_events")
         behavior_measurements_complete = bool(
-            len(gaps) >= 2
+            telemetry_delivery.get("ok") is True
+            and len(gaps) >= 2
             and ratios
             and attitude_artifact.get("samples_complete") is True
             and heartbeat_samples
@@ -521,15 +722,20 @@ class _LiveGpsMonitor:
             if name != "gps_behavior_summary.json"
         )
         observation = {
+            "case_id": self.case.case_id,
+            "fault_type": self.case.parameters.get("fault_type"),
             "injection_triggered": self.triggered,
             "injection_readback_ok": injection_ok,
             "post_injection_s": post_s,
+            "required_post_injection_s": self._required_post_injection_s(),
             "required_artifacts_present": required_present,
             "mechanism_evidence": bool(ratios) and source_contract_ok,
             "source_contract_ok": source_contract_ok,
             "source_contract": source_contract,
             "scheduled_operations": operation_status,
             "behavior_measurements_complete": behavior_measurements_complete,
+            "telemetry_delivery_ok": telemetry_delivery.get("ok") is True,
+            "telemetry_delivery": telemetry_delivery,
             "horizontal_gap_m": gaps[-1] if gaps else 0.0,
             "gap_growing": bool(
                 len(gaps) >= 2
@@ -551,9 +757,18 @@ class _LiveGpsMonitor:
             ),
             "mode_change": mode_change,
             "loss_of_control": bool(
-                attitude_artifact["unexpected_disarm"]
+                self.loss_of_control
+                or attitude_artifact["unexpected_disarm"]
                 or attitude_artifact["threshold_crossings"]
             ),
+            "terminal_state_reached": self.terminal_state_reached,
+            "mission_complete": self._mission_complete(),
+            "max_seq_reached": self.max_seq_reached,
+            "reached_sequences": list(self.reached),
+            "auto_to_rtl_transition_seq": self.auto_to_rtl_transition_seq,
+            "planned_rtl_min_seq": defaults.PLANNED_RTL_MIN_SEQ,
+            "stop_reason": self.stop_reason,
+            "timeout": self.timeout,
         }
         self.ctx.stimulus_result["verify"] = {
             "phase": "phase2_live_terminal_verification",
@@ -655,6 +870,9 @@ class _LiveGpsMonitor:
                 "terminal_verification_pending": False,
             })
         defaults.write_json(path, payload)
+        self.ctx.artifacts["gps_injection.json"] = path
+        self.ctx.stimulus_result.clear()
+        self.ctx.stimulus_result.update(payload)
 
     def _maybe_record_trigger_event(self, sample: dict[str, Any]) -> None:
         if sample["type"] == "HEARTBEAT":
@@ -664,6 +882,14 @@ class _LiveGpsMonitor:
             return
         seq = sample.get("seq")
         if seq is None:
+            return
+        if (
+            not self.trigger_trace
+            and seq in defaults.INJECTION_TRIGGER["pre_trigger_ignored_sequences"]
+        ):
+            # MISSION_CURRENT reports the home row before navigation begins.
+            # It is not trigger evidence. Once seq 1 is recorded, a later seq 0
+            # is retained so the validator rejects that regression.
             return
         mission_arrival = sample.get("arrival_monotonic_s")
         if not isinstance(mission_arrival, (int, float)):
@@ -676,21 +902,96 @@ class _LiveGpsMonitor:
         )
         heartbeat_age = _sample_age(mission_arrival, heartbeat_arrival)
         latitude_fields = self._trigger_latitude_field(float(mission_arrival))
-        self.trigger_trace.append(
-            {
-                "seq": seq,
-                "armed": isinstance(heartbeat, dict) and heartbeat.get("armed") is True,
-                "mode": heartbeat.get("mode") if isinstance(heartbeat, dict) else None,
-                "mission_arrival_monotonic_s": float(mission_arrival),
-                "heartbeat_age_s": heartbeat_age,
-                "heartbeat_fresh": bool(
-                    heartbeat_age is not None
-                    and heartbeat_age <= defaults.TRIGGER_HEARTBEAT_MAX_AGE_S
-                ),
-                "trigger_time_s": sample["arrival_monotonic_s"] - self.started_monotonic,
-                "elapsed_since_trigger_s": 0.0,
-                **latitude_fields,
-            }
+        boot_time_fields = self._trigger_boot_time_fields(float(mission_arrival))
+        event = {
+            "seq": seq,
+            "armed": isinstance(heartbeat, dict) and heartbeat.get("armed") is True,
+            "mode": heartbeat.get("mode") if isinstance(heartbeat, dict) else None,
+            "mission_arrival_monotonic_s": float(mission_arrival),
+            "heartbeat_age_s": heartbeat_age,
+            "heartbeat_fresh": bool(
+                heartbeat_age is not None
+                and heartbeat_age <= defaults.TRIGGER_HEARTBEAT_MAX_AGE_S
+            ),
+            "trigger_time_s": sample["arrival_monotonic_s"] - self.started_monotonic,
+            "elapsed_since_trigger_s": 0.0,
+            **latitude_fields,
+            **boot_time_fields,
+        }
+        self.trigger_trace.append(event)
+        self._log_trigger_evidence_event(event)
+
+    def _log_trigger_evidence_event(self, event: dict[str, Any]) -> None:
+        seq = _coerce_seq(event.get("seq"))
+        if seq is None:
+            return
+        required = set(defaults.INJECTION_TRIGGER["front_half_required_sequences"])
+        trigger_seq = int(defaults.INJECTION_TRIGGER["seq"])
+        optional = set(defaults.INJECTION_TRIGGER["front_half_optional_sequences"])
+        if seq not in required and seq != trigger_seq and seq not in optional:
+            return
+        fresh = bool(
+            event.get("heartbeat_fresh") is True
+            and event.get("simstate_fresh") is True
+            and event.get("armed") is True
+            and event.get("mode") == defaults.INJECTION_TRIGGER["mode"]
+        )
+        if fresh:
+            if seq in self._logged_clean_trigger_sequences:
+                return
+            self._logged_clean_trigger_sequences.add(seq)
+            if seq == trigger_seq:
+                defaults.log(
+                    f"[gps_monitor] {self.case.case_id}: clean seq-{seq} "
+                    "trigger edge observed; authorizing injection/no-op."
+                )
+            else:
+                defaults.log(
+                    f"[gps_monitor] {self.case.case_id}: clean trigger progress "
+                    f"seq={seq}; waiting for seq {trigger_seq}."
+                )
+            return
+        if seq in self._logged_stale_trigger_sequences:
+            return
+        self._logged_stale_trigger_sequences.add(seq)
+        defaults.log(
+            f"[gps_monitor] {self.case.case_id}: ignoring stale/incomplete "
+            f"trigger evidence seq={seq} "
+            f"(armed={event.get('armed')}, mode={event.get('mode')}, "
+            f"heartbeat_fresh={event.get('heartbeat_fresh')}, "
+            f"heartbeat_age={_format_optional_seconds(event.get('heartbeat_age_s'))}, "
+            f"simstate_fresh={event.get('simstate_fresh')}, "
+            f"simstate_age={_format_optional_seconds(event.get('simstate_age_s'))}); "
+            "waiting for a fresh sample."
+        )
+
+    def _log_periodic_operator_status(self, now_s: float) -> None:
+        if now_s - self._last_operator_status_s < self._operator_status_period_s:
+            return
+        self._last_operator_status_s = now_s
+        remaining_s = max(0.0, self.deadline - now_s)
+        if not self.triggered:
+            defaults.log(
+                f"[gps_monitor] {self.case.case_id}: still waiting for clean "
+                f"seq-{defaults.INJECTION_TRIGGER['seq']} trigger; "
+                f"max_seq={self.max_seq_reached}, reached={self.reached}, "
+                f"mode={self.current_mode}, deadline_in={remaining_s:.0f}s"
+            )
+            return
+        post_s = self._post_injection_s(now_s)
+        rtl_wait = ""
+        if self.rtl_transition_monotonic_s is not None:
+            rtl_wait_s = max(
+                0.0,
+                defaults.RTL_STABILIZE_S
+                - (now_s - self.rtl_transition_monotonic_s),
+            )
+            rtl_wait = f", rtl_stabilize_remaining={rtl_wait_s:.0f}s"
+        defaults.log(
+            f"[gps_monitor] {self.case.case_id}: observing post-trigger "
+            f"+{post_s:.1f}s/{self._required_post_injection_s():.1f}s; "
+            f"mode={self.current_mode}, max_seq={self.max_seq_reached}, "
+            f"reached={self.reached}{rtl_wait}, deadline_in={remaining_s:.0f}s"
         )
 
     def _trigger_latitude_field(self, mission_arrival_s: float) -> dict[str, Any]:
@@ -707,13 +1008,49 @@ class _LiveGpsMonitor:
                 }
         return {"simstate_age_s": None, "simstate_fresh": False}
 
+    def _trigger_boot_time_fields(self, mission_arrival_s: float) -> dict[str, Any]:
+        preferred_types = {"ATTITUDE", "GLOBAL_POSITION_INT"}
+        candidates = [
+            sample
+            for sample in reversed(self.normalized_messages)
+            if sample.get("type") in preferred_types
+            and isinstance(sample.get("time_boot_ms"), (int, float))
+        ]
+        for sample in candidates:
+            age = _sample_age(
+                mission_arrival_s,
+                sample.get("arrival_monotonic_s"),
+            )
+            if age is None or age > defaults.TRIGGER_BOOT_TIME_MAX_AGE_S:
+                continue
+            boot_ms = float(sample["time_boot_ms"])
+            if not math.isfinite(boot_ms) or boot_ms < 0.0:
+                continue
+            return {
+                "trigger_time_boot_ms": boot_ms,
+                "trigger_time_us": boot_ms * 1000.0,
+                "trigger_time_source": str(sample.get("type")),
+                "trigger_boot_sample_age_s": age,
+                "trigger_boot_time_fresh": True,
+            }
+        return {
+            "trigger_boot_sample_age_s": None,
+            "trigger_boot_time_fresh": False,
+        }
+
 
 def trigger_metadata() -> dict[str, object]:
     return dict(defaults.INJECTION_TRIGGER)
 
 
 def first_seq4_edge_after_front_half(sequences: Iterable[int]) -> bool:
-    """Schema-level helper requiring seq 1, 2, and 3 before first seq 4."""
+    """Require the navigation front half before the first seq-4 edge.
+
+    Seq 2 is ``DO_CHANGE_SPEED`` and ArduPlane may execute it without ever
+    publishing it as ``MISSION_CURRENT``. Mission upload/identity verification
+    proves the command exists; live progress therefore requires nav seqs 1 and
+    3 and permits, but does not require, an observed seq 2.
+    """
     seen_front_half: set[int] = set()
     required = set(defaults.INJECTION_TRIGGER["front_half_required_sequences"])
     trigger_seq = int(defaults.INJECTION_TRIGGER["seq"])
@@ -734,14 +1071,18 @@ def first_seq4_edge_after_armed_auto_front_half(
     """Validate ADR-0020 trigger preconditions from no-SITL event records.
 
     Fails closed for malformed events and for any mission-current evidence that
-    is not a clean, monotonic seq 1->2->3->4 progression. A regression to a lower
-    seq or a skipped front-half seq is rejected. Repeated ``MISSION_CURRENT``
-    events for the *current* seq are benign telemetry and allowed (the stream
-    reports the same seq repeatedly), but every front-half seq must be observed
+    is not a clean, monotonic navigation progression from seq 1 through seq 3
+    to seq 4. Seq 2 is an optional ``DO_CHANGE_SPEED`` current report. A
+    regression to a lower seq or a skipped required navigation seq is rejected.
+    Repeated ``MISSION_CURRENT`` events for the *current* seq are benign
+    telemetry and allowed, but every required navigation seq must be observed
     in order, armed and in AUTO, before the first seq-4 edge.
     """
     expected_order = list(
         defaults.INJECTION_TRIGGER["front_half_required_sequences"]
+    )
+    optional_sequences = set(
+        defaults.INJECTION_TRIGGER["front_half_optional_sequences"]
     )
     trigger_seq = int(defaults.INJECTION_TRIGGER["seq"])
     trigger_mode = defaults.INJECTION_TRIGGER["mode"]
@@ -756,6 +1097,26 @@ def first_seq4_edge_after_armed_auto_front_half(
             return False
         armed = event.get("armed") is True
         mode = event.get("mode") == trigger_mode
+        if last_seq is not None and seq < last_seq:
+            # Any regression to a lower mission-current seq is invalid evidence.
+            return False
+        if seq == last_seq:
+            # A repeat of the current seq is benign telemetry, not progression.
+            # It does not need to carry fresh co-temporal HEARTBEAT/SIMSTATE.
+            continue
+        is_next_required = (
+            next_required_index < len(expected_order)
+            and seq == expected_order[next_required_index]
+        )
+        is_context_valid_optional = (
+            seq in optional_sequences
+            and next_required_index == 1
+        )
+        is_candidate_progress = (
+            is_next_required
+            or is_context_valid_optional
+            or seq == trigger_seq
+        )
         heartbeat_age = _finite_nonnegative(event.get("heartbeat_age_s"))
         simstate_age = _finite_nonnegative(event.get("simstate_age_s"))
         if (
@@ -766,33 +1127,38 @@ def first_seq4_edge_after_armed_auto_front_half(
             or simstate_age is None
             or simstate_age > defaults.TRIGGER_SIMSTATE_MAX_AGE_S
         ):
+            if is_candidate_progress:
+                # During live runs ArduPlane can publish the next
+                # MISSION_CURRENT value before fresh co-temporal HEARTBEAT and
+                # SIMSTATE samples arrive. That sample is not valid progress
+                # evidence, but it must not poison the whole trace; wait for a
+                # clean sample at the same progression point. Out-of-contract
+                # jumps still fail closed below.
+                continue
             return False
-
-        if last_seq is not None and seq < last_seq:
-            # Any regression to a lower mission-current seq is invalid evidence.
-            return False
-
-        if seq == last_seq:
-            # A repeat of the current seq is benign telemetry, not progression.
-            continue
 
         if seq == trigger_seq:
             # The seq-4 edge is valid only once the full ordered front half has
             # been observed and this event is itself armed and in AUTO.
             return next_required_index == len(expected_order) and armed and mode
 
-        if (
-            next_required_index < len(expected_order)
-            and seq == expected_order[next_required_index]
-        ):
+        if is_next_required:
             if not (armed and mode):
                 return False
             next_required_index += 1
             last_seq = seq
             continue
 
+        if seq in optional_sequences:
+            # The optional DO command is valid only after the first required
+            # navigation item and must carry the same fresh armed/AUTO state.
+            if next_required_index != 1 or not (armed and mode):
+                return False
+            last_seq = seq
+            continue
+
         # Any other seq (a skip ahead, an out-of-contract value, or a jump past
-        # the next required front-half seq) invalidates the trace.
+        # the next required navigation seq) invalidates the trace.
         return False
 
     return False
@@ -822,6 +1188,13 @@ def _finite_nonnegative(value: object) -> float | None:
     if not math.isfinite(parsed) or parsed < 0.0:
         return None
     return parsed
+
+
+def _format_optional_seconds(value: object) -> str:
+    parsed = _finite_nonnegative(value)
+    if parsed is None:
+        return "n/a"
+    return f"{parsed:.2f}s"
 
 
 def _sample_age(newer: object, older: object) -> float | None:
@@ -877,68 +1250,6 @@ def _pair_live_truth_belief(samples: list[dict[str, Any]]) -> list[dict[str, Any
             }
         )
     return paired
-
-
-def _ekf_metrics_from_bin(
-    mechanism: dict[str, Any],
-    *,
-    fallback: dict[str, Any],
-) -> dict[str, Any]:
-    samples = [
-        sample for sample in mechanism.get("samples", [])
-        if isinstance(sample, dict)
-    ]
-    ratios = [
-        sample.get("pos_test_ratio")
-        for sample in samples
-        if isinstance(sample.get("pos_test_ratio"), (int, float))
-    ]
-    return {
-        "pos_test_ratio": ratios,
-        "reject_flags": [
-            bool(sample.get("gps_position_rejected")) for sample in samples
-        ],
-        "reset_events": list(mechanism.get("reset_events") or []),
-        "variance": list(fallback.get("variance") or []),
-        "samples": samples,
-        "source": mechanism.get("source", "XKF4"),
-    }
-
-
-def _truth_belief_from_bin(
-    truth_belief: dict[str, Any],
-    *,
-    fallback: dict[str, Any],
-) -> dict[str, Any]:
-    samples = [
-        sample for sample in truth_belief.get("samples", [])
-        if isinstance(sample, dict)
-    ]
-    gaps: list[float] = []
-    for sample in samples:
-        gap = sample.get("horizontal_gap_m")
-        if isinstance(gap, (int, float)):
-            gaps.append(float(gap))
-    growth = 0.0
-    if len(samples) >= 2 and len(gaps) >= 2:
-        first_time = samples[0].get("time_us")
-        last_time = samples[-1].get("time_us")
-        if isinstance(first_time, (int, float)) and isinstance(last_time, (int, float)):
-            dt = (last_time - first_time) / 1_000_000.0
-            if dt > 0:
-                growth = (gaps[-1] - gaps[0]) / dt
-    return {
-        "horizontal_gap_m": gaps,
-        "gap_growth_rate_mps": growth,
-        "truth_source": "SIM",
-        "belief_source": "POS",
-        "samples": samples,
-        "live_fallback_source": {
-            "truth_source": fallback.get("truth_source"),
-            "belief_source": fallback.get("belief_source"),
-        },
-        "source": truth_belief.get("source", "SIM/POS"),
-    }
 
 
 def _horizontal_gap_m(
