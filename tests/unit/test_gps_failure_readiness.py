@@ -1,9 +1,9 @@
-"""Phase-1 Chunk 6 integration-readiness tests for the gps_failure lane.
+"""Integration-readiness tests for the gps_failure lane.
 
 These are no-SITL tests. They prove the GPS lane is wired into the shared suite
 path far enough to run and that the readiness report faithfully reports the
-Phase-1 no-SITL posture and the live blockers. Nothing here launches SITL or
-opens a MAVLink connection.
+no-live preflight posture and the Phase A-G gates. Nothing here launches SITL
+or opens a MAVLink connection.
 """
 from __future__ import annotations
 
@@ -30,7 +30,6 @@ from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.plugin import (  # noq
     build_plugin,
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.readiness import (  # noqa: E402
-    LIVE_BLOCKERS,
     PHASE_H_GATE_ORDER,
     PHASE_H_GATE_PROOFS,
     build_readiness_report,
@@ -44,7 +43,7 @@ class ReadinessReportTests(unittest.TestCase):
         self.report = build_readiness_report()
 
     def test_report_is_no_live_preflight_but_protected_live_ready(self) -> None:
-        self.assertEqual(self.report["phase"], "phase1_no_sitl")
+        self.assertEqual(self.report["phase"], "no_live_preflight")
         self.assertFalse(self.report["launch_stack"])
         self.assertFalse(self.report["launch_performed"])
         self.assertFalse(self.report["live_readback_performed"])
@@ -113,13 +112,14 @@ class ReadinessReportTests(unittest.TestCase):
         self.assertTrue(stack[0].endswith("plane_base.parm"))
         self.assertTrue(stack[1].endswith("plane_gps.parm"))
 
-    def test_live_blockers_are_cleared_when_phase_h_gates_are_satisfied(self) -> None:
-        self.assertEqual([], self.report["live_blockers"])
-        historical_components = {item["component"] for item in LIVE_BLOCKERS}
-        self.assertIn("environment.GpsFailureEnvironment", historical_components)
-        self.assertIn("control.GpsFailureMissionControl", historical_components)
-        self.assertIn("monitor.GpsFailureMonitor", historical_components)
-        self.assertNotIn("strict_review", historical_components)
+    def test_readiness_gates_live_run_on_phase_h_gates_only(self) -> None:
+        # ready_for_live_run must be exactly the Phase A-G gate result; there is
+        # no separate live-blocker list to fall out of sync with it.
+        self.assertNotIn("live_blockers", self.report)
+        self.assertEqual(
+            self.report["ready_for_live_run"],
+            self.report["phase_h_no_live_gates"]["all_gates_satisfied"],
+        )
 
     def test_phase2_report_exposes_strict_trigger_and_terminal_guards(self) -> None:
         smoke = self.report["phase2_protected_smoke"]
@@ -132,7 +132,8 @@ class ReadinessReportTests(unittest.TestCase):
             smoke["trigger_simstate_max_age_s"],
         )
         self.assertTrue(smoke["terminal_success_requires_cleanup"])
-        self.assertTrue(smoke["stop_on_first_non_accepted_record"])
+        self.assertTrue(smoke["stop_on_first_non_accepted_repetition"])
+        self.assertNotIn("stop_on_first_non_accepted_record", smoke)
 
     def test_phase_h_gate_report_fails_until_every_gate_has_explicit_proof(self) -> None:
         for missing_gate in PHASE_H_GATE_ORDER:
@@ -226,7 +227,7 @@ class ReadinessReportTests(unittest.TestCase):
     def test_report_is_json_serializable_without_nan(self) -> None:
         # allow_nan=False raises on any non-finite value leaking into the report.
         dumped = json.dumps(self.report, allow_nan=False, sort_keys=True)
-        self.assertIn("phase1_no_sitl", dumped)
+        self.assertIn("no_live_preflight", dumped)
 
 
 class ReadinessCliTests(unittest.TestCase):
@@ -248,7 +249,7 @@ class ReadinessCliTests(unittest.TestCase):
         result = self._run_cli("--preflight")
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
-        self.assertEqual(report["phase"], "phase1_no_sitl")
+        self.assertEqual(report["phase"], "no_live_preflight")
         self.assertTrue(report["ready_for_live_run"])
         self.assertEqual(report["suite_path"]["registry_key"], "gps_failure")
         self.assertTrue(report["phase_h_no_live_gates"]["all_gates_satisfied"])

@@ -201,7 +201,7 @@ class GpsFailureCaseGenerator(CaseGenerator):
                 fault_recipe=fault_recipe,
                 injection_schedule=injection_schedule,
                 min_post_injection_s=(
-                    self._config.nominal_smoke_observation_s
+                    self._config.nominal_observation_s
                     if fault_type == "nominal"
                     else defaults.MIN_POST_INJECTION_S
                 ),

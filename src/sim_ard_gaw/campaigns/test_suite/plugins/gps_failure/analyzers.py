@@ -1,4 +1,4 @@
-"""GPS behavior analysis helpers and Phase-1 classifier."""
+"""GPS behavior analysis helpers and observation classifier."""
 from __future__ import annotations
 
 import math
@@ -326,10 +326,9 @@ def classify_observation(observation: dict[str, Any]) -> dict[str, Any]:
         return _result(ANALYSIS_STATE_CLASS, "missing_required_artifacts", False)
     if observation.get("behavior_measurements_complete") is False:
         return _result(ANALYSIS_STATE_CLASS, "missing_behavior_samples", False)
-    if not _is_nominal_smoke_observation(observation) and not _explicit_evidence_present(
-        observation,
-        primary="mechanism_evidence",
-        legacy="mechanism_fields_present",
+    if (
+        not _is_nominal_observation(observation)
+        and observation.get("mechanism_evidence") is not True
     ):
         return _result(ANALYSIS_STATE_CLASS, "missing_mechanism_fields", False)
 
@@ -342,7 +341,7 @@ def classify_observation(observation: dict[str, Any]) -> dict[str, Any]:
         return _result(ANALYSIS_STATE_CLASS, error or "missing_behavior_fields", False)
     if observation.get("terminal_state_reached") is not True:
         return _result(ANALYSIS_STATE_CLASS, "terminal_state_not_reached", False)
-    if _is_nominal_smoke_observation(observation) and observation.get(
+    if _is_nominal_observation(observation) and observation.get(
         "mission_complete"
     ) is not True:
         return _result(ANALYSIS_STATE_CLASS, "nominal_mission_incomplete", False)
@@ -375,7 +374,7 @@ def _classify_behavior(evidence: "_BehaviorEvidence") -> dict[str, Any]:
     return _result(ANALYSIS_STATE_CLASS, "behavior_evidence_inconclusive", False)
 
 
-def _is_nominal_smoke_observation(observation: dict[str, Any]) -> bool:
+def _is_nominal_observation(observation: dict[str, Any]) -> bool:
     return (
         observation.get("case_id") == "nominal"
         or observation.get("fault_type") == "nominal"
@@ -576,19 +575,6 @@ def _mechanism_result_dict(observation: dict[str, Any]) -> dict[str, Any] | None
         if isinstance(value, dict):
             return value
     return None
-
-
-def _explicit_evidence_present(
-    observation: dict[str, Any],
-    *,
-    primary: str,
-    legacy: str,
-) -> bool:
-    if primary in observation:
-        return observation.get(primary) is True
-    if legacy in observation:
-        return observation.get(legacy) is True
-    return False
 
 
 def _result(
@@ -1425,7 +1411,6 @@ def _analysis_axes_from_observation(
         "max_pos_test_ratio": max_ratio,
         "max_full_window_truth_belief_gap_m": full_max_gap,
         "classifier_sample_scope": truth.get("sample_scope"),
-        "legacy_behavior_classifier_still_emitted": True,
     }
 
 

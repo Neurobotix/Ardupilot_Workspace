@@ -31,7 +31,7 @@ class GpsFailureConfig:
     heartbeat_timeout_s: float = defaults.HEARTBEAT_TIMEOUT_S
     ready_timeout_s: float = defaults.VEHICLE_READY_TIMEOUT_S
     force_arm: bool = True
-    nominal_smoke_observation_s: float = defaults.NOMINAL_SMOKE_MIN_POST_INJECTION_S
+    nominal_observation_s: float = defaults.NOMINAL_MIN_POST_INJECTION_S
 
     def __post_init__(self) -> None:
         self.runs_per_case = _positive_int("runs_per_case", self.runs_per_case, minimum=1)
@@ -87,15 +87,15 @@ class GpsFailureConfig:
             "ready_timeout_s",
             self.ready_timeout_s,
         )
-        self.nominal_smoke_observation_s = _positive_finite(
-            "nominal_smoke_observation_s",
-            self.nominal_smoke_observation_s,
+        self.nominal_observation_s = _positive_finite(
+            "nominal_observation_s",
+            self.nominal_observation_s,
         )
 
     @property
     def effective_param_stack(self) -> list[Path]:
         if self.param_file_stack is None:
-            return defaults.phase1_param_files()
+            return defaults.default_param_files()
         return [Path(path) for path in self.param_file_stack]
 
 

@@ -60,15 +60,16 @@ from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.manifest import (  # n
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.monitor import (  # noqa: E402
     first_seq4_edge_after_armed_auto_front_half,
-    first_seq4_edge_after_front_half,
     trigger_metadata,
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.plugin import (  # noqa: E402
     build_plugin,
 )
+from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.runtime import (  # noqa: E402
+    build_live_injection_plan,
+)
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.stimulus import (  # noqa: E402
     build_injection_artifact,
-    build_live_plan_preview,
     compare_readback,
 )
 
@@ -429,7 +430,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             capture_output=True,
         )
         data = json.loads(proc.stdout)
-        self.assertEqual("phase1_no_sitl", data["phase"])
+        self.assertEqual("no_sitl_dry_run", data["phase"])
         self.assertTrue(data["plugin_constructed"])
         self.assertFalse(data["launch_performed"])
         self.assertFalse(data["live_readback_performed"])
@@ -440,7 +441,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         )
         self.assertEqual(
             [str(path) for path in EXPECTED_PARAM_STACK],
-            data["parameter_schema"]["phase1_param_stack"],
+            data["parameter_schema"]["static_param_stack"],
         )
 
     def test_probe_schema_reports_two_file_default_stack(self) -> None:
@@ -462,7 +463,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         schema = json.loads(proc.stdout)
         self.assertEqual(
             [str(path) for path in EXPECTED_PARAM_STACK],
-            schema["phase1_param_stack"],
+            schema["static_param_stack"],
         )
 
     def test_cli_list_cases_outputs_case_ids_only(self) -> None:
@@ -626,7 +627,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         case = GpsFailureCaseGenerator(GpsFailureConfig()).get_case(
             "slow_drift_0p5_mps"
         )
-        plan = build_live_plan_preview(
+        plan = build_live_injection_plan(
             case,
             {
                 "trigger_latitude_deg": 0.0,
@@ -716,7 +717,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertNotIn("planned_param_stack", schema)
         self.assertEqual(
             [str(path) for path in EXPECTED_PARAM_STACK],
-            schema["phase1_param_stack"],
+            schema["static_param_stack"],
         )
         defaults.validate_required_param_names(schema["required_names"])
         with self.assertRaisesRegex(ValueError, "Missing required"):
@@ -734,7 +735,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertEqual(90.0, requirements["min_post_injection_s"])
         nominal = GpsFailureCaseGenerator(GpsFailureConfig()).get_case("nominal")
         self.assertEqual(
-            defaults.NOMINAL_SMOKE_MIN_POST_INJECTION_S,
+            defaults.NOMINAL_MIN_POST_INJECTION_S,
             nominal.parameters["acceptance_requirements"]["min_post_injection_s"],
         )
         self.assertEqual(
@@ -761,11 +762,6 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertEqual([1, 3], meta["front_half_required_sequences"])
         self.assertEqual([2], meta["front_half_optional_sequences"])
         self.assertEqual([0], meta["pre_trigger_ignored_sequences"])
-        self.assertTrue(first_seq4_edge_after_front_half([1, 2, 3, 4]))
-        self.assertTrue(first_seq4_edge_after_front_half([1, 3, 4]))
-        self.assertFalse(first_seq4_edge_after_front_half([1, 4]))
-        self.assertFalse(first_seq4_edge_after_front_half([1, 2, 4]))
-        self.assertFalse(first_seq4_edge_after_front_half([4, 1, 2, 3]))
 
     def test_structured_trigger_requires_armed_auto_front_half_before_seq4(self) -> None:
         good = [

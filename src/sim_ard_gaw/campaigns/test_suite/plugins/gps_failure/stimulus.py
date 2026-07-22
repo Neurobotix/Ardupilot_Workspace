@@ -1,4 +1,4 @@
-"""GPS fault stimulus metadata for the Phase-1 no-SITL plugin."""
+"""GPS fault stimulus metadata for the gps_failure plugin."""
 from __future__ import annotations
 
 import copy
@@ -10,7 +10,6 @@ from ...core.models import AttemptContext, TestCase
 from ...core.stimulus import StimulusAdapter
 from . import defaults
 from .config import GpsFailureConfig
-from .runtime import GpsInjectionPlan, build_live_injection_plan
 
 
 @dataclass
@@ -27,7 +26,7 @@ class GpsFailureStimulus(StimulusAdapter):
 
     def verify(self, case: TestCase, ctx: AttemptContext) -> dict[str, Any]:
         if not self.config.launch_stack:
-            return {"phase": "phase1_no_sitl", "live_readback_performed": False}
+            return {"phase": "no_sitl_dry_run", "live_readback_performed": False}
         return {
             "phase": "phase2_live_pending_monitor_verification",
             "live_readback_performed": False,
@@ -71,15 +70,6 @@ def build_injection_artifact(case: TestCase) -> dict[str, Any]:
             "live_readback_performed": False,
         },
     }
-
-
-def build_live_plan_preview(
-    case: TestCase,
-    trigger_event: dict[str, Any],
-) -> GpsInjectionPlan:
-    """Build a live injection plan without executing MAVLink writes."""
-
-    return build_live_injection_plan(case, trigger_event)
 
 
 def payload_resolution_status(fault_recipe: dict[str, Any] | None) -> dict[str, Any]:

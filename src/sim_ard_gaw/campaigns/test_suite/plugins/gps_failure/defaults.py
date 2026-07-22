@@ -184,7 +184,7 @@ PHASE2_NON_JAMMING_CAMPAIGN_CASE_IDS = (
 )
 
 MIN_POST_INJECTION_S = 90.0
-NOMINAL_SMOKE_MIN_POST_INJECTION_S = 20.0
+NOMINAL_MIN_POST_INJECTION_S = 20.0
 PHASE2_MONITOR_TIMEOUT_S = 1800.0
 SLOW_DRIFT_UPDATE_PERIOD_S = 5.0
 CLEANUP_TIMEOUT_S = 30.0
@@ -290,7 +290,7 @@ def sitl_state_dir(root: Path, case_id: str, attempt_index: int) -> Path:
     return root / "_sitl_state" / case_id / f"attempt_{attempt_index:03d}"
 
 
-def phase1_param_files() -> list[Path]:
+def default_param_files() -> list[Path]:
     return [PLANE_BASE_PARAM_FILE, PLANE_GPS_PARAM_FILE]
 
 
@@ -322,12 +322,16 @@ def parameter_schema() -> dict[str, Any]:
         "launch_target_note": (
             "dedicated GPS identities; plane-gps loads plane_base.parm -> "
             "plane_gps.parm only (no airspeed overlay, no local override); "
-            "not yet live-smoke verified (Phase 2)"
+            "exercised by governed raw validation runs, no curated Phase-2 "
+            "evidence yet"
         ),
-        "phase1_param_stack": [str(path) for path in phase1_param_files()],
-        "phase1_probe_mode": "name-existence validation only; live SITL probe is Phase 2",
+        "static_param_stack": [str(path) for path in default_param_files()],
+        "static_probe_mode": (
+            "static name-existence validation only; live readback is "
+            "re-verified on every live attempt"
+        ),
         "overlay_status": (
             "plane_gps.parm is checked in and statically validated; "
-            "live parameter readback remains Phase 2"
+            "live readback is re-verified on every live attempt"
         ),
     }

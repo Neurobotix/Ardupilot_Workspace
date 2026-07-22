@@ -1,8 +1,11 @@
-"""No-SITL schema, dry-run, and case-list CLI for the gps_failure plugin.
+"""CLI for the gps_failure plugin.
 
-Phase 1 never starts SITL or Gazebo. This entry point validates the case schema,
-constructs the plugin, and prints the requested payload and parameter-stack
-metadata.
+The default actions (`--list-cases`, `--dry-run`, `--probe-schema`,
+`--preflight`, `--phase2-validation-rerun-plan`) are no-SITL: they validate the
+case schema, construct the plugin, and print plan/readiness JSON without
+starting SITL/Gazebo or opening MAVLink. Live actions are explicit and
+confirmation-guarded (`--live-case`, `--live-phase2-validation-rerun`,
+`--live-phase2-round-robin-campaign`).
 """
 from __future__ import annotations
 
@@ -39,9 +42,7 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     actions.add_argument("--dry-run", action="store_true")
     actions.add_argument("--probe-schema", action="store_true")
     actions.add_argument("--preflight", action="store_true")
-    actions.add_argument("--phase2-smoke-plan", action="store_true")
     actions.add_argument("--phase2-validation-rerun-plan", action="store_true")
-    actions.add_argument("--live-phase2-smoke", action="store_true")
     actions.add_argument("--live-phase2-validation-rerun", action="store_true")
     actions.add_argument("--live-phase2-round-robin-campaign", action="store_true")
     actions.add_argument("--live-case", dest="live_case_id")
@@ -79,8 +80,7 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     if args.case_id and not args.dry_run:
         parser.error("--case is only valid with --dry-run")
     live_requested = (
-        args.live_phase2_smoke
-        or args.live_phase2_validation_rerun
+        args.live_phase2_validation_rerun
         or args.live_phase2_round_robin_campaign
         or args.live_case_id
     )
@@ -98,7 +98,7 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         )
     if args.live_case_id and args.live_case_id not in defaults.PHASE2_PROTECTED_CASE_IDS:
         parser.error(
-            "--live-case is restricted to protected Phase 2 smoke cases: "
+            "--live-case is restricted to the protected Phase 2 case set: "
             + ", ".join(defaults.PHASE2_PROTECTED_CASE_IDS)
         )
     args.campaign_cases = _parse_campaign_cases(parser, args.campaign_cases)
@@ -172,8 +172,7 @@ def _config_from_args(args: argparse.Namespace) -> GpsFailureConfig:
         ),
         mavlink_addr=args.mavlink,
         launch_stack=bool(
-            args.live_phase2_smoke
-            or args.live_phase2_validation_rerun
+            args.live_phase2_validation_rerun
             or args.live_phase2_round_robin_campaign
             or args.live_case_id
         ),
@@ -203,57 +202,6 @@ def main(argv: Iterable[str] | None = None) -> None:
             print(case.case_id)
         return
 
-    if args.phase2_smoke_plan:
-        cases = {
-            case.case_id: case
-            for case in plugin.case_generator.iter_cases()
-            if case.case_id in defaults.PHASE2_PROTECTED_CASE_IDS
-        }
-        print(
-            json.dumps(
-                {
-                    "phase": "phase2_implementation_no_live_run",
-                    "launch_performed": False,
-                    "live_readback_performed": False,
-                    "live_cli_enabled": True,
-                    "live_cli_guard": "--confirm-live-phase2 required",
-                    "strict_review_accepted_for_nominal_live_smoke": False,
-                    "strict_review_status": (
-                        "latest live attempt's declared success was rejected by "
-                        "strict review; rerun nominal for current evidence"
-                    ),
-                    "force_arm_default": True,
-                    "force_arm_disable_flag": "--no-force-arm",
-                    "terminal_success_requires_cleanup": True,
-                    "stop_on_first_non_accepted_repetition": True,
-                    "protected_case_ids": list(defaults.PHASE2_PROTECTED_CASE_IDS),
-                    "cases": {
-                        case_id: {
-                            "case_id": case.case_id,
-                            "fault_type": case.parameters.get("fault_type"),
-                            "mission_file": str(case.mission_file),
-                            "injection_schedule": case.parameters.get(
-                                "injection_schedule", []
-                            ),
-                            "fault_recipe": case.parameters.get("fault_recipe"),
-                        }
-                        for case_id, case in sorted(cases.items())
-                    },
-                    "required_live_readbacks": list(defaults.LIVE_READBACK_PARAMS),
-                    "telemetry_message_types": list(defaults.TELEMETRY_MESSAGE_TYPES),
-                    "ready_for_live_run": False,
-                    "note": (
-                        "Plan-only output for later authorized live smoke; this CLI "
-                        "action does not start SITL/Gazebo or open MAVLink."
-                    ),
-                },
-                indent=2,
-                sort_keys=True,
-                allow_nan=False,
-            )
-        )
-        return
-
     if args.phase2_validation_rerun_plan:
         print(
             json.dumps(
@@ -262,14 +210,6 @@ def main(argv: Iterable[str] | None = None) -> None:
                 sort_keys=True,
                 allow_nan=False,
             )
-        )
-        return
-
-    if args.live_phase2_smoke:
-        run_live_cases(
-            config,
-            list(defaults.PHASE2_PROTECTED_CASE_IDS),
-            title="GPS Failure Behavior - Phase 2 protected live smoke",
         )
         return
 
@@ -315,7 +255,7 @@ def main(argv: Iterable[str] | None = None) -> None:
         except ValueError as exc:
             sys.exit(f"ERROR: {exc}")
         dry_run = {
-            "phase": "phase1_no_sitl",
+            "phase": "no_sitl_dry_run",
             "plugin_constructed": True,
             "effective_param_stack": [
                 str(path) for path in config.effective_param_stack
@@ -359,7 +299,7 @@ def run_live_cases(
     ]
     if unsupported:
         raise SystemExit(
-            "ERROR: live GPS Phase 2 cases are restricted to protected smoke cases: "
+            "ERROR: live GPS Phase 2 cases are restricted to the protected case set: "
             + ", ".join(unsupported)
         )
     plugin = build_plugin(config)

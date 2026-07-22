@@ -1,9 +1,8 @@
-"""Phase-1 integration-readiness report for the gps_failure lane.
+"""No-live integration-readiness report for the gps_failure lane.
 
-Chunk 6 originally proved the GPS lane was wired into the shared suite path
-without launching SITL/Gazebo. The report remains deterministic and no-live: it
-shows what a suite run would schedule, the manifest/artifact contract, the
-effective parameter stack, and the current protected-live readiness gates.
+The report is deterministic and no-live: it shows what a suite run would
+schedule, the manifest/artifact contract, the effective parameter stack, and
+the Phase A-G no-live gates that guard the next protected live action.
 
 Nothing here opens a MAVLink connection, starts a stack, or reads a BIN log.
 """
@@ -16,34 +15,6 @@ from . import analyzers, defaults
 from .config import GpsFailureConfig
 from .plugin import GpsFailurePlugin, build_plugin
 
-
-LIVE_BLOCKERS: tuple[dict[str, str], ...] = (
-    {
-        "component": "environment.GpsFailureEnvironment",
-        "blocker": "live launch adapter implemented but not executed or smoke-verified",
-        "phase": "phase2_live_smoke",
-    },
-    {
-        "component": "control.GpsFailureMissionControl",
-        "blocker": "mission adapter contract implemented but not executed or smoke-verified",
-        "phase": "phase2_live_smoke",
-    },
-    {
-        "component": "monitor.GpsFailureMonitor",
-        "blocker": "telemetry/injection monitor implemented but not executed or smoke-verified",
-        "phase": "phase2_live_smoke",
-    },
-    {
-        "component": "mavlink/runtime",
-        "blocker": "real connection factory is explicit but no live readback has been performed",
-        "phase": "phase2_live_smoke",
-    },
-    {
-        "component": "bin_analysis",
-        "blocker": "decoded-record extraction implemented but no real BIN has been parsed",
-        "phase": "phase3_full_campaign",
-    },
-)
 
 PHASE_H_GATE_ORDER = (
     "vehicle_time_scheduling",
@@ -205,7 +176,7 @@ def build_readiness_report(
     validation_plan = build_phase_h_validation_plan(phase_h_gates=phase_h_gates)
     protected_live_ready = bool(validation_plan.get("live_command_available"))
     return {
-        "phase": "phase1_no_sitl",
+        "phase": "no_live_preflight",
         "lane": defaults.LANE_NAME,
         "suite_name": defaults.SUITE_NAME,
         "plugin_constructed": True,
@@ -227,11 +198,9 @@ def build_readiness_report(
             "trigger_simstate_max_age_s": defaults.TRIGGER_SIMSTATE_MAX_AGE_S,
             "terminal_success_requires_cleanup": True,
             "stop_on_first_non_accepted_repetition": True,
-            "stop_on_first_non_accepted_record": True,
         },
         "phase_h_no_live_gates": phase_h_gates,
         "phase_h_validation_rerun": validation_plan,
-        "live_blockers": [] if protected_live_ready else [dict(item) for item in LIVE_BLOCKERS],
         "ready_for_live_run": protected_live_ready,
     }
 
@@ -409,10 +378,11 @@ def _parameter_stack(config: GpsFailureConfig) -> dict[str, Any]:
         "local_override_excluded": True,
         "airspeed_overlay_excluded": True,
         "launch_target_note": (
-            "dedicated GPS identities plane-gps / gazebo-plane-gps; structurally "
-            "implemented, not yet live-smoke verified (Phase 2)"
+            "dedicated GPS identities plane-gps / gazebo-plane-gps; exercised "
+            "by governed raw validation runs; no curated Phase-2 evidence yet"
         ),
-        "phase1_probe_mode": (
-            "name-existence validation only; live SITL probe is Phase 2"
+        "static_probe_mode": (
+            "static name-existence validation only; live readback is "
+            "re-verified on every live attempt"
         ),
     }

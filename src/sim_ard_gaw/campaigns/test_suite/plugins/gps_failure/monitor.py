@@ -22,7 +22,7 @@ class GpsFailureMonitor(CompletionMonitor):
         if not self.config.launch_stack:
             return MonitorResult(
                 completed=False,
-                reason="phase1_no_sitl_monitor_not_run",
+                reason="no_sitl_monitor_not_run",
                 duration_s=0.0,
             )
         master = ctx.extra.get("mavlink_master")
@@ -1329,28 +1329,6 @@ class _LiveGpsMonitor:
 
 def trigger_metadata() -> dict[str, object]:
     return dict(defaults.INJECTION_TRIGGER)
-
-
-def first_seq4_edge_after_front_half(sequences: Iterable[int]) -> bool:
-    """Require the navigation front half before the first seq-4 edge.
-
-    Seq 2 is ``DO_CHANGE_SPEED`` and ArduPlane may execute it without ever
-    publishing it as ``MISSION_CURRENT``. Mission upload/identity verification
-    proves the command exists; live progress therefore requires nav seqs 1 and
-    3 and permits, but does not require, an observed seq 2.
-    """
-    seen_front_half: set[int] = set()
-    required = set(defaults.INJECTION_TRIGGER["front_half_required_sequences"])
-    trigger_seq = int(defaults.INJECTION_TRIGGER["seq"])
-    for raw_seq in sequences:
-        seq = _coerce_seq(raw_seq)
-        if seq is None:
-            return False
-        if seq in required:
-            seen_front_half.add(seq)
-        if seq == trigger_seq:
-            return required.issubset(seen_front_half)
-    return False
 
 
 def first_seq4_edge_after_armed_auto_front_half(
