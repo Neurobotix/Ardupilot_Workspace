@@ -1,11 +1,12 @@
 """Source-verified EKF/GPS contract checks for gps_failure.
 
-This module intentionally models exact proof and validated proxy proof
-separately. The pinned source exposes ``PV_AidingMode == AID_ABSOLUTE``
-internally, but not as a direct MAVLink/BIN field. Phase 2 therefore requires a
-validated proxy: live/source parameters selecting GPS horizontal aiding plus the
-EKF absolute-horizontal-position flag and not constant-position mode. Mechanism
-classification fails closed when that proxy is absent.
+This module intentionally separates exact internal proof, BIN-observable proof,
+and validated proxy proof. The pinned source exposes
+``PV_AidingMode == AID_ABSOLUTE`` internally, but not as a direct MAVLink/BIN
+field. Phase 2 therefore requires a validated proxy: live/source parameters
+selecting GPS horizontal aiding plus the EKF absolute-horizontal-position flag
+and not constant-position mode. Mechanism classification fails closed when that
+proxy is absent.
 """
 from __future__ import annotations
 
@@ -39,25 +40,70 @@ EXPECTED_KNEE_READBACKS = {
 @dataclass(frozen=True)
 class SourceContract:
     ok: bool
-    validated_proxy: bool
-    exact_aiding_proof: bool
+    exact_internal_proof: bool
+    bin_observable_proof: bool
+    validated_proxy_proof: bool
     reasons: list[str] = field(default_factory=list)
     readbacks: dict[str, float] = field(default_factory=dict)
     estimator_flags: int | None = None
 
     def as_dict(self) -> dict[str, Any]:
+        proxy_reason = (
+            "PV_AidingMode == AID_ABSOLUTE is internal and unavailable as a "
+            "direct live or BIN field; this contract uses checked EK3 source "
+            "configuration plus EKF absolute-position status flags as a "
+            "validated proxy."
+        )
         return {
             "ok": self.ok,
-            "validated_proxy": self.validated_proxy,
-            "exact_aiding_proof": self.exact_aiding_proof,
+            "exact_internal_proof": self.exact_internal_proof,
+            "bin_observable_proof": self.bin_observable_proof,
+            "validated_proxy_proof": self.validated_proxy_proof,
+            "proxy_reason": proxy_reason,
+            "proof_levels": {
+                "exact_internal_proof": {
+                    "available": self.exact_internal_proof,
+                    "reason": (
+                        "No directly logged exact EKF PV_AidingMode field is "
+                        "available in the live/BIN contract."
+                    ),
+                },
+                "bin_observable_proof": {
+                    "available": self.bin_observable_proof,
+                    "fields": [
+                        "XKF4.PI",
+                        "XKF4.SP",
+                        "XKF4.GPS",
+                        "XKF4.TS",
+                        "XKF4.OFN",
+                        "XKF4.OFE",
+                        "GPS.Status",
+                        "GPS.NSats",
+                    ],
+                    "reason": (
+                        "BIN-observable mechanism context is emitted by "
+                        "post-cleanup BIN analysis, not by this pre-injection "
+                        "live readback artifact."
+                    ),
+                },
+                "validated_proxy_proof": {
+                    "available": self.validated_proxy_proof,
+                    "reason": proxy_reason,
+                },
+            },
             "reasons": list(self.reasons),
             "readbacks": dict(self.readbacks),
             "estimator_flags": self.estimator_flags,
+            "configuration_proof": {
+                "role": "configuration_precondition",
+                "exact_runtime_internal_proof": False,
+                "readback_names": sorted(self.readbacks),
+            },
             "source": {
                 "absolute_aiding": (
                     "PV_AidingMode == AID_ABSOLUTE is internal; live Phase 2 "
                     "uses EK3_SRC1_POSXY/VELXY GPS plus EKF absolute-position "
-                    "status flags as a named proxy"
+                    "status flags as validated proxy proof"
                 ),
                 "glitch_radius": "EK3_GLITCH_RAD must be > 0",
                 "primary_core": "BIN XKF4.PI is frontend->getPrimaryCoreIndex()",
@@ -123,8 +169,9 @@ def validate_source_contract(
     ok = not reasons
     return SourceContract(
         ok=ok,
-        validated_proxy=ok,
-        exact_aiding_proof=False,
+        exact_internal_proof=False,
+        bin_observable_proof=False,
+        validated_proxy_proof=ok,
         reasons=reasons,
         readbacks=parsed,
         estimator_flags=estimator_flags,

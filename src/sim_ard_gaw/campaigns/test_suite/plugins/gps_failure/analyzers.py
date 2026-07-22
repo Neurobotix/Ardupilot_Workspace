@@ -60,21 +60,58 @@ def artifact_schema() -> dict[str, dict[str, Any]]:
         "gps_behavior_summary.json": {
             "required_fields": [
                 "behavior_class",
+                "scientific_behavior_label",
+                "scientific_behavior_components",
                 "observation_quality_class",
                 "accepted_observation",
                 "reason",
+                "analysis_axes",
+                "reset_metrics",
+                "truth_terminal_metrics",
                 "terminal_state_reached",
                 "mission_complete",
                 "stop_reason",
                 "max_seq_reached",
                 "auto_to_rtl_transition_seq",
+                "hard_denial_transient",
+            ],
+        },
+        "stimulus_fidelity.json": {
+            "required_fields": [
+                "case_id",
+                "fault_type",
+                "status",
+                "reason",
+                "source",
+                "requested",
+                "realized",
+                "tolerances",
+                "evidence_refs",
+                "missing_evidence",
+            ],
+        },
+        "gps_lifecycle_windows.json": {
+            "required_fields": [
+                "case_id",
+                "fault_type",
+                "status",
+                "reason",
+                "source",
+                "required_order",
+                "windows",
+                "hard_denial_transient",
+                "missing_evidence",
             ],
         },
         "source_contract.json": {
             "required_fields": [
                 "ok",
-                "validated_proxy",
-                "exact_aiding_proof",
+                "exact_internal_proof",
+                "bin_observable_proof",
+                "validated_proxy_proof",
+                "proxy_reason",
+                "proof_levels",
+                "configuration_proof",
                 "reasons",
                 "readbacks",
                 "estimator_flags",
@@ -101,12 +138,22 @@ def artifact_schema() -> dict[str, dict[str, Any]]:
         "mode_timeline.json": {"required_fields": ["mode_timeline"]},
         "attitude_altitude_envelope.json": {
             "required_fields": [
+                "status",
+                "reason",
+                "source",
+                "altitude_source",
+                "attitude_source",
+                "sampling_limits",
+                "evidence_quality",
+                "final_evidence_quality",
+                "runtime_guard_quality",
                 "post_injection_min_alt_m",
                 "altitude_loss_m",
                 "attitude_excursions",
                 "threshold_crossings",
                 "unexpected_disarm",
                 "samples_complete",
+                "missing_evidence",
                 "limits",
             ],
         },
@@ -130,7 +177,126 @@ def validate_artifact_against_schema(
     schema = artifact_schema().get(artifact_name)
     if schema is None:
         return [f"<unknown-artifact:{artifact_name}>"]
-    return [field for field in schema["required_fields"] if field not in artifact]
+    missing = [field for field in schema["required_fields"] if field not in artifact]
+    if artifact_name == "gps_lifecycle_windows.json":
+        missing.extend(_validate_lifecycle_windows_artifact(artifact))
+    if artifact_name == "source_contract.json":
+        missing.extend(_validate_source_contract_artifact(artifact))
+    return missing
+
+
+def _validate_source_contract_artifact(artifact: dict[str, Any]) -> list[str]:
+    missing: list[str] = []
+    if "validated_proxy" in artifact:
+        missing.append("legacy_field:validated_proxy")
+    if "exact_aiding_proof" in artifact:
+        missing.append("legacy_field:exact_aiding_proof")
+    if artifact.get("exact_internal_proof") is not False:
+        missing.append("exact_internal_proof.must_be_false_without_logged_signal")
+    if artifact.get("bin_observable_proof") is not False:
+        missing.append("bin_observable_proof.must_be_false_in_pre_injection_contract")
+
+    ok = artifact.get("ok")
+    proxy = artifact.get("validated_proxy_proof")
+    if not isinstance(ok, bool):
+        missing.append("ok")
+    if isinstance(ok, bool) and proxy is not ok:
+        missing.append("validated_proxy_proof.must_match_ok")
+    elif not isinstance(proxy, bool):
+        missing.append("validated_proxy_proof")
+
+    proof_levels = artifact.get("proof_levels")
+    if not isinstance(proof_levels, dict):
+        missing.append("proof_levels")
+    else:
+        exact = proof_levels.get("exact_internal_proof")
+        if not isinstance(exact, dict) or exact.get("available") is not False:
+            missing.append("proof_levels.exact_internal_proof.available")
+        bin_proof = proof_levels.get("bin_observable_proof")
+        if not isinstance(bin_proof, dict) or bin_proof.get("available") is not False:
+            missing.append("proof_levels.bin_observable_proof.available")
+        proxy_proof = proof_levels.get("validated_proxy_proof")
+        if not isinstance(proxy_proof, dict) or proxy_proof.get("available") is not proxy:
+            missing.append("proof_levels.validated_proxy_proof.available")
+
+    configuration = artifact.get("configuration_proof")
+    if not isinstance(configuration, dict):
+        missing.append("configuration_proof")
+    else:
+        if configuration.get("exact_runtime_internal_proof") is not False:
+            missing.append("configuration_proof.exact_runtime_internal_proof")
+        if not isinstance(configuration.get("readback_names"), list):
+            missing.append("configuration_proof.readback_names")
+    return missing
+
+
+def _validate_lifecycle_windows_artifact(artifact: dict[str, Any]) -> list[str]:
+    required_order = [
+        "pre_trigger_baseline",
+        "trigger",
+        "injection",
+        "fault_active",
+        "ekf_response",
+        "recovery_or_continuation",
+        "terminal",
+    ]
+    required_window_fields = {
+        "name",
+        "start_time_us",
+        "end_time_us",
+        "duration_s",
+        "source",
+        "status",
+        "summary",
+        "metrics",
+        "evidence_refs",
+    }
+    missing: list[str] = []
+    if artifact.get("required_order") != required_order:
+        missing.append("required_order")
+    windows = artifact.get("windows")
+    if not isinstance(windows, list):
+        return [*missing, "windows"]
+    names = [
+        window.get("name")
+        for window in windows
+        if isinstance(window, dict)
+    ]
+    if names != required_order:
+        missing.append("windows.order")
+    if len(windows) != len(required_order):
+        missing.append("windows.count")
+    transient = artifact.get("hard_denial_transient")
+    if not isinstance(transient, dict):
+        missing.append("hard_denial_transient")
+    else:
+        transient_status = transient.get("status")
+        if transient_status not in {"pass", "fail", "not_applicable"}:
+            missing.append("hard_denial_transient.status")
+        if "sample_scope" not in transient:
+            missing.append("hard_denial_transient.sample_scope")
+        if not isinstance(transient.get("missing_evidence"), list):
+            missing.append("hard_denial_transient.missing_evidence")
+    for index, window in enumerate(windows):
+        prefix = f"windows[{index}]"
+        if not isinstance(window, dict):
+            missing.append(prefix)
+            continue
+        missing.extend(
+            f"{prefix}.{field}"
+            for field in sorted(required_window_fields - set(window))
+        )
+        source = window.get("source")
+        if source not in {"BIN", "live_telemetry", "hybrid"}:
+            missing.append(f"{prefix}.source")
+        status = window.get("status")
+        if status not in {"pass", "fail", "not_applicable"}:
+            missing.append(f"{prefix}.status")
+        if not isinstance(window.get("metrics"), dict):
+            missing.append(f"{prefix}.metrics")
+        if not isinstance(window.get("evidence_refs"), list):
+            missing.append(f"{prefix}.evidence_refs")
+    return missing
 
 
 def classify_observation(observation: dict[str, Any]) -> dict[str, Any]:
@@ -452,7 +618,7 @@ class GpsFailureAnalyzer(Analyzer):
         if isinstance(ctx.extra.get("gps_launch_plan"), dict):
             observation = _finalize_live_bin_analysis(case, ctx, observation)
         summary = _summary_with_terminal_context(
-            classify_observation(observation), observation
+            classify_observation(observation), observation, case=case
         )
         if isinstance(ctx.extra.get("gps_launch_plan"), dict):
             _persist_final_live_summary(ctx, observation, summary)
@@ -470,27 +636,51 @@ def _finalize_live_bin_analysis(
 ) -> dict[str, Any]:
     """Decode the cleanup-finalized BIN and replace live fallback metrics."""
 
-    from .bin_analysis import analyze_attempt_bin
+    from .bin_analysis import (
+        analyze_attempt_bin,
+        attitude_altitude_envelope_from_decoded_records,
+        lifecycle_windows_missing_bin_artifact,
+        stimulus_fidelity_missing_bin_artifact,
+    )
     from .environment import identify_attempt_bin
 
     metrics_path = ctx.attempt_dir / "ekf_innovation_metrics.json"
     truth_path = ctx.attempt_dir / "truth_vs_belief.json"
+    fidelity_path = ctx.attempt_dir / "stimulus_fidelity.json"
+    lifecycle_path = ctx.attempt_dir / "gps_lifecycle_windows.json"
     raw_metrics = defaults.read_json(metrics_path)
     raw_truth = defaults.read_json(truth_path)
+    envelope_path = ctx.attempt_dir / "attitude_altitude_envelope.json"
+    raw_envelope = defaults.read_json(envelope_path)
     metrics = raw_metrics if isinstance(raw_metrics, dict) else {}
     truth = raw_truth if isinstance(raw_truth, dict) else {}
+    live_envelope = raw_envelope if isinstance(raw_envelope, dict) else {}
+    fault_recipe = case.parameters.get("fault_recipe")
+    recipe = fault_recipe if isinstance(fault_recipe, dict) else None
     source_bin_path = identify_attempt_bin(ctx)
     if source_bin_path is None:
         analysis: dict[str, Any] = {
             "ok": False,
             "reason": "single_current_attempt_bin_not_available_after_cleanup",
         }
+        stimulus_fidelity = stimulus_fidelity_missing_bin_artifact(
+            case_id=case.case_id,
+            fault_type=str(case.parameters.get("fault_type", "")),
+            fault_recipe=recipe,
+            reason="single_current_attempt_bin_not_available_after_cleanup",
+        )
+        lifecycle_windows = lifecycle_windows_missing_bin_artifact(
+            case_id=case.case_id,
+            fault_type=str(case.parameters.get("fault_type", "")),
+            reason="single_current_attempt_bin_not_available_after_cleanup",
+        )
     else:
         execution = ctx.extra.get("gps_injection_execution")
         plan = execution.get("plan") if isinstance(execution, dict) else None
         injection_payload = (
             plan.get("injection_payload") if isinstance(plan, dict) else None
         )
+        trigger_event = plan.get("trigger_event") if isinstance(plan, dict) else None
         analysis_bin_path = source_bin_path
         try:
             analysis_bin_path = _archive_attempt_bin(source_bin_path, ctx)
@@ -504,15 +694,81 @@ def _finalize_live_bin_analysis(
                     if isinstance(injection_payload, dict)
                     else None
                 ),
+                case_id=case.case_id,
+                fault_type=str(case.parameters.get("fault_type", "")),
+                fault_recipe=recipe,
+                trigger_event=(
+                    trigger_event if isinstance(trigger_event, dict) else None
+                ),
+                injection_execution=(
+                    execution if isinstance(execution, dict) else None
+                ),
+                source_contract=(
+                    metrics_source_contract
+                    if isinstance((metrics_source_contract := _source_contract(ctx)), dict)
+                    else None
+                ),
+                terminal_context=_terminal_lifecycle_context(ctx, observation),
+                wall_elapsed_s=_finite_observation_number(
+                    observation.get("post_injection_wall_elapsed_s")
+                ),
+                clock_ratio=_finite_observation_number(
+                    observation.get("post_injection_clock_ratio")
+                    or observation.get("clock_ratio")
+                ),
+                live_attitude_altitude_envelope=live_envelope,
             )
+            stimulus_fidelity = analysis.get("stimulus_fidelity")
+            if not isinstance(stimulus_fidelity, dict):
+                stimulus_fidelity = stimulus_fidelity_missing_bin_artifact(
+                    case_id=case.case_id,
+                    fault_type=str(case.parameters.get("fault_type", "")),
+                    fault_recipe=recipe,
+                    reason="stimulus_fidelity_not_emitted",
+                )
+            lifecycle_windows = analysis.get("lifecycle_windows")
+            if not isinstance(lifecycle_windows, dict):
+                lifecycle_windows = lifecycle_windows_missing_bin_artifact(
+                    case_id=case.case_id,
+                    fault_type=str(case.parameters.get("fault_type", "")),
+                    reason="lifecycle_windows_not_emitted",
+                )
         except Exception as exc:
             analysis = {
                 "ok": False,
                 "bin_path": str(analysis_bin_path),
                 "reason": f"{type(exc).__name__}: {exc}",
             }
+            stimulus_fidelity = stimulus_fidelity_missing_bin_artifact(
+                case_id=case.case_id,
+                fault_type=str(case.parameters.get("fault_type", "")),
+                fault_recipe=recipe,
+                reason=f"{type(exc).__name__}: {exc}",
+            )
+            lifecycle_windows = lifecycle_windows_missing_bin_artifact(
+                case_id=case.case_id,
+                fault_type=str(case.parameters.get("fault_type", "")),
+                reason=f"{type(exc).__name__}: {exc}",
+            )
+    envelope = analysis.get("attitude_altitude_envelope")
+    if not isinstance(envelope, dict):
+        envelope = attitude_altitude_envelope_from_decoded_records(
+            [],
+            window_start_time_us=None,
+            live_artifact=live_envelope,
+            reason="attitude_altitude_envelope_not_emitted",
+        )
 
     ctx.extra["gps_bin_analysis"] = analysis
+    ctx.extra["gps_stimulus_fidelity"] = stimulus_fidelity
+    ctx.extra["gps_lifecycle_windows"] = lifecycle_windows
+    ctx.extra["gps_attitude_altitude_envelope"] = envelope
+    defaults.write_json(fidelity_path, stimulus_fidelity)
+    defaults.write_json(lifecycle_path, lifecycle_windows)
+    defaults.write_json(envelope_path, envelope)
+    ctx.artifacts["stimulus_fidelity.json"] = fidelity_path
+    ctx.artifacts["gps_lifecycle_windows.json"] = lifecycle_path
+    ctx.artifacts["attitude_altitude_envelope.json"] = envelope_path
     mechanism = analysis.get("mechanism")
     if isinstance(mechanism, dict) and mechanism.get("ok") is True:
         metrics = _ekf_metrics_from_bin(mechanism, fallback=metrics)
@@ -539,6 +795,9 @@ def _finalize_live_bin_analysis(
     finalized = dict(observation)
     analysis_ok = analysis.get("ok") is True
     mechanism_ok = isinstance(mechanism, dict) and mechanism.get("ok") is True
+    lifecycle_ok = lifecycle_windows.get("status") == "pass"
+    envelope_ok = envelope.get("status") == "pass"
+    hard_denial_transient = lifecycle_windows.get("hard_denial_transient")
     finalized.update({
         "required_artifacts_present": all(
             (ctx.attempt_dir / name).exists()
@@ -551,6 +810,8 @@ def _finalize_live_bin_analysis(
         "behavior_measurements_complete": bool(
             finalized.get("behavior_measurements_complete") is True
             and analysis_ok
+            and lifecycle_ok
+            and envelope_ok
             and ratios
             and len(gaps) >= 2
         ),
@@ -565,7 +826,36 @@ def _finalize_live_bin_analysis(
         "fused": bool(ratios and max(ratios) < 1.0),
         "pos_test_ratio_rejected": bool(ratios and max(ratios) >= 1.0),
         "reset_event": bool(metrics.get("reset_events")),
+        "attitude_in_band": bool(
+            envelope_ok and not envelope.get("threshold_crossings")
+        ),
+        "attitude_altitude_envelope_status": envelope.get("status"),
+        "attitude_altitude_envelope_reason": envelope.get("reason"),
         "bin_analysis_ok": analysis_ok,
+        "stimulus_fidelity_status": stimulus_fidelity.get("status"),
+        "stimulus_fidelity_reason": stimulus_fidelity.get("reason"),
+        "lifecycle_windows_status": lifecycle_windows.get("status"),
+        "lifecycle_windows_reason": lifecycle_windows.get("reason"),
+        "hard_denial_transient": (
+            hard_denial_transient
+            if isinstance(hard_denial_transient, dict)
+            else None
+        ),
+    })
+    reset_metrics = _reset_metrics_from_observation(metrics)
+    truth_terminal_metrics = _truth_terminal_metrics_from_observation(case, truth)
+    finalized.update({
+        "reset_metrics": reset_metrics,
+        "truth_gap_summary": _truth_gap_summary_from_observation(truth),
+        "truth_terminal_metrics": truth_terminal_metrics,
+        "analysis_axes": _analysis_axes_from_observation(
+            case=case,
+            observation=finalized,
+            ratios=ratios,
+            reset_metrics=reset_metrics,
+            truth_terminal_metrics=truth_terminal_metrics,
+            truth=truth,
+        ),
     })
     ctx.extra["gps_observation"] = finalized
     return finalized
@@ -615,19 +905,75 @@ def _trigger_window_time_us(ctx: AttemptContext) -> float | None:
     return None
 
 
+def _source_contract(ctx: AttemptContext) -> dict[str, Any] | None:
+    raw = ctx.extra.get("gps_source_contract")
+    if isinstance(raw, dict):
+        return raw
+    path = ctx.attempt_dir / "source_contract.json"
+    if not path.exists():
+        return None
+    loaded = defaults.read_json(path)
+    return loaded if isinstance(loaded, dict) else None
+
+
+def _terminal_lifecycle_context(
+    ctx: AttemptContext,
+    observation: dict[str, Any],
+) -> dict[str, Any]:
+    required_json = [
+        name
+        for name in defaults.REQUIRED_ATTEMPT_ARTIFACTS
+        if name != "gps_lifecycle_windows.json"
+    ]
+    raw_log_path = ctx.artifacts.get("raw_log")
+    return {
+        "terminal_state_reached": observation.get("terminal_state_reached"),
+        "mission_complete": observation.get("mission_complete"),
+        "stop_reason": observation.get("stop_reason"),
+        "max_seq_reached": observation.get("max_seq_reached"),
+        "auto_to_rtl_transition_seq": observation.get("auto_to_rtl_transition_seq"),
+        "cleanup_result": ctx.extra.get("cleanup_result"),
+        "raw_log_path": str(raw_log_path) if raw_log_path is not None else None,
+        "raw_bin_archived": bool(raw_log_path is not None and Path(raw_log_path).is_file()),
+        "required_json_artifacts": required_json,
+        "required_json_artifacts_present": all(
+            (ctx.attempt_dir / name).exists()
+            for name in required_json
+        ),
+    }
+
+
 def _summary_with_terminal_context(
     summary: dict[str, Any],
     observation: dict[str, Any],
+    *,
+    case: TestCase,
 ) -> dict[str, Any]:
     enriched = dict(summary)
     for field in (
+        "analysis_axes",
+        "reset_metrics",
+        "truth_gap_summary",
+        "truth_terminal_metrics",
         "terminal_state_reached",
         "mission_complete",
         "stop_reason",
         "max_seq_reached",
         "auto_to_rtl_transition_seq",
+        "stimulus_fidelity_status",
+        "stimulus_fidelity_reason",
+        "lifecycle_windows_status",
+        "lifecycle_windows_reason",
+        "hard_denial_transient",
     ):
         enriched[field] = observation.get(field)
+    label, components = _scientific_behavior_label_and_components(
+        case=case,
+        summary=enriched,
+        observation=observation,
+    )
+    enriched["scientific_behavior_label"] = label
+    enriched["scientific_behavior_components"] = components
     return enriched
 
 
@@ -642,13 +988,27 @@ def _persist_final_live_summary(
     ctx.extra["gps_observation"] = observation
     fields = dict(ctx.extra.get("plugin_manifest_fields") or {})
     workflow_complete = _workflow_complete_after_cleanup(ctx, observation)
+    behavior_accepted = summary["accepted_observation"] is True
+    stimulus_passed = observation.get("stimulus_fidelity_status") == "pass"
+    accepted_observation = bool(workflow_complete and behavior_accepted)
+    accepted_repetition = bool(accepted_observation and stimulus_passed)
     if workflow_complete:
         ctx.extra["attempt_status"] = AttemptStatus.SUCCESS
     fields.update({
         "behavior_class": summary["behavior_class"],
+        "scientific_behavior_label": summary.get("scientific_behavior_label"),
+        "scientific_behavior_components": summary.get(
+            "scientific_behavior_components"
+        ),
         "observation_quality_class": summary["observation_quality_class"],
-        "accepted_observation": summary["accepted_observation"],
+        "accepted_observation": accepted_observation,
+        "accepted_repetition": accepted_repetition,
+        "stimulus_fidelity_status": observation.get("stimulus_fidelity_status"),
+        "stimulus_fidelity_reason": observation.get("stimulus_fidelity_reason"),
+        "lifecycle_windows_status": observation.get("lifecycle_windows_status"),
+        "lifecycle_windows_reason": observation.get("lifecycle_windows_reason"),
         "workflow_status": "complete" if workflow_complete else "incomplete",
+        "behavior_status": "accepted" if behavior_accepted else "incomplete",
         "analysis_status": "complete",
         "terminal_state_reached": observation.get("terminal_state_reached"),
         "mission_complete": observation.get("mission_complete"),
@@ -657,6 +1017,9 @@ def _persist_final_live_summary(
         "auto_to_rtl_transition_seq": observation.get(
             "auto_to_rtl_transition_seq"
         ),
+        "analysis_axes": observation.get("analysis_axes"),
+        "reset_metrics": observation.get("reset_metrics"),
+        "truth_terminal_metrics": observation.get("truth_terminal_metrics"),
         "artifacts": {name: str(path) for name, path in ctx.artifacts.items()},
     })
     raw_log_path = ctx.artifacts.get("raw_log")
@@ -667,6 +1030,123 @@ def _persist_final_live_summary(
         notes.append(summary["reason"])
     fields["notes"] = notes
     ctx.extra["plugin_manifest_fields"] = fields
+
+
+def _scientific_behavior_label_and_components(
+    *,
+    case: TestCase,
+    summary: dict[str, Any],
+    observation: dict[str, Any],
+) -> tuple[str, dict[str, str]]:
+    axes_obj = summary.get("analysis_axes")
+    axes = axes_obj if isinstance(axes_obj, dict) else {}
+    terminal = _scientific_terminal_component(
+        str(axes.get("truth_terminal_severity") or "")
+    )
+    response = _scientific_response_component(
+        fault_type=str(case.parameters.get("fault_type") or ""),
+        estimator_response=str(axes.get("estimator_response") or ""),
+        recovery_outcome=str(axes.get("recovery_outcome") or ""),
+        reset_count=int(axes.get("reset_count") or 0),
+    )
+    stimulus = _scientific_stimulus_component(case)
+    acceptance = _scientific_acceptance_component(
+        summary=summary,
+        observation=observation,
+    )
+    components = {
+        "terminal_truth": terminal,
+        "estimator_fault_response": response,
+        "stimulus_profile": stimulus,
+        "acceptance": acceptance,
+    }
+    return (
+        " + ".join(
+            [
+                components["terminal_truth"],
+                components["estimator_fault_response"],
+                components["stimulus_profile"],
+                components["acceptance"],
+            ]
+        ),
+        components,
+    )
+
+
+def _scientific_terminal_component(severity: str) -> str:
+    mapping = {
+        "nominal_terminal_band": "true_terminal",
+        "mild_false_terminal": "false_terminal_mild",
+        "material_false_terminal": "false_terminal_material",
+        "severe_false_terminal": "false_terminal_severe",
+    }
+    return mapping.get(severity, "terminal_truth_unknown")
+
+
+def _scientific_response_component(
+    *,
+    fault_type: str,
+    estimator_response: str,
+    recovery_outcome: str,
+    reset_count: int,
+) -> str:
+    if fault_type == "hard_denial":
+        if recovery_outcome == "transient_denial_recovered_no_reset":
+            return "transient_denial_recovered_no_reset"
+        if recovery_outcome == "transient_denial_recovered_with_reset":
+            return "transient_denial_reset_recovered"
+        return "transient_denial_unresolved"
+    if fault_type == "slow_drift":
+        if estimator_response == "fused_below_gate":
+            return "gps_fused_silent"
+        if estimator_response == "repeated_resets":
+            return "reset_loop"
+        if reset_count == 1:
+            return "reset_capture_drift"
+        if estimator_response == "detected_rejection_without_reset":
+            return "gps_rejected_drift"
+        return "drift_response_unknown"
+    if fault_type == "step_glitch":
+        if reset_count > 0:
+            return "reset_capture_fixed_offset"
+        if estimator_response == "detected_rejection_without_reset":
+            return "gps_rejected_fixed_offset"
+        if estimator_response == "fused_below_gate":
+            return "gps_fused_fixed_offset"
+        return "fixed_offset_response_unknown"
+    if fault_type == "nominal":
+        return "gps_nominal"
+    return "estimator_response_unknown"
+
+
+def _scientific_stimulus_component(case: TestCase) -> str:
+    fault_type = str(case.parameters.get("fault_type") or "")
+    if fault_type == "slow_drift":
+        if case.case_id == "slow_drift_accumulation_ramp":
+            return "accumulation_ramp"
+        return "stepped_ramp"
+    if fault_type == "step_glitch":
+        return "fixed_step"
+    if fault_type == "hard_denial":
+        return "denial_window"
+    if fault_type == "nominal":
+        return "no_fault"
+    return "stimulus_unknown"
+
+
+def _scientific_acceptance_component(
+    *,
+    summary: dict[str, Any],
+    observation: dict[str, Any],
+) -> str:
+    if (
+        summary.get("accepted_observation") is True
+        and observation.get("stimulus_fidelity_status") == "pass"
+    ):
+        return "accepted"
+    if summary.get("accepted_observation") is True:
+        return "accepted_observation_bad_stimulus"
+    return "analyzer_rejected"
 
 
 def _workflow_complete_after_cleanup(
@@ -685,6 +1165,13 @@ def _workflow_complete_after_cleanup(
         and raw_log is not None
         and Path(raw_log).is_file()
     )
+
+
+def _finite_observation_number(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    parsed = float(value)
+    return parsed if math.isfinite(parsed) else None
 
 
 def _ekf_metrics_from_bin(
@@ -741,12 +1228,261 @@ def _truth_belief_from_bin(
         "truth_source": "SIM",
         "belief_source": "POS",
         "samples": samples,
+        "sample_scope": truth_belief.get("sample_scope"),
+        "all_sample_count": truth_belief.get("all_sample_count"),
+        "active_segment_index": truth_belief.get("active_segment_index"),
+        "reset_event_times_us": list(truth_belief.get("reset_event_times_us") or []),
+        "full_window_gap_summary": truth_belief.get("full_window_gap_summary"),
+        "active_segment_gap_summary": truth_belief.get(
+            "active_segment_gap_summary"
+        ),
+        "mission_terminal_event": truth_belief.get("mission_terminal_event"),
+        "mission_terminal_sample": truth_belief.get("mission_terminal_sample"),
+        "full_window_terminal_sample": truth_belief.get(
+            "full_window_terminal_sample"
+        ),
+        "active_segment_terminal_sample": truth_belief.get(
+            "active_segment_terminal_sample"
+        ),
+        "full_window_max_gap_sample": truth_belief.get("full_window_max_gap_sample"),
+        "sample_scope_labels": truth_belief.get("sample_scope_labels"),
         "live_fallback_source": {
             "truth_source": fallback.get("truth_source"),
             "belief_source": fallback.get("belief_source"),
         },
         "source": truth_belief.get("source", "SIM/POS"),
     }
+
+
+def _reset_metrics_from_observation(metrics: dict[str, Any]) -> dict[str, Any]:
+    events = [
+        event for event in metrics.get("reset_events", [])
+        if isinstance(event, dict)
+    ]
+    times = [
+        _finite_observation_number(event.get("time_us"))
+        for event in events
+    ]
+    times = [value for value in times if value is not None]
+    return {
+        "reset_count": len(events),
+        "first_reset_time_us": min(times) if times else None,
+        "last_reset_time_us": max(times) if times else None,
+        "reset_events": events,
+    }
+
+
+def _truth_gap_summary_from_observation(truth: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "classifier_sample_scope": truth.get("sample_scope"),
+        "classifier_gap_count": len(truth.get("horizontal_gap_m") or []),
+        "classifier_gap_growth_rate_mps": truth.get("gap_growth_rate_mps"),
+        "full_window_gap_summary": truth.get("full_window_gap_summary"),
+        "active_segment_gap_summary": truth.get("active_segment_gap_summary"),
+        "sample_scope_labels": truth.get("sample_scope_labels"),
+    }
+
+
+def _truth_terminal_metrics_from_observation(
+    case: TestCase,
+    truth: dict[str, Any],
+) -> dict[str, Any]:
+    terminal_sample = truth.get("mission_terminal_sample")
+    terminal_sample_scope = "sample_nearest_mission_terminal_event"
+    terminal_event = truth.get("mission_terminal_event")
+    if not isinstance(terminal_sample, dict):
+        terminal_sample = truth.get("full_window_terminal_sample")
+        terminal_sample_scope = "full_post_trigger_window"
+        terminal_event = None
+    if not isinstance(terminal_sample, dict):
+        return {
+            "status": "unavailable",
+            "reason": "missing_mission_or_full_window_terminal_sample",
+        }
+    waypoint = _mission_waypoint_lat_lon(case.mission_file or defaults.MISSION_FILE, 8)
+    if waypoint is None:
+        return {
+            "status": "unavailable",
+            "reason": "missing_wp8_mission_waypoint",
+            "terminal_sample": terminal_sample,
+        }
+    truth_lat = _finite_observation_number(terminal_sample.get("truth_lat_deg"))
+    truth_lon = _finite_observation_number(terminal_sample.get("truth_lon_deg"))
+    belief_lat = _finite_observation_number(terminal_sample.get("belief_lat_deg"))
+    belief_lon = _finite_observation_number(terminal_sample.get("belief_lon_deg"))
+    if (
+        truth_lat is None
+        or truth_lon is None
+        or belief_lat is None
+        or belief_lon is None
+    ):
+        return {
+            "status": "unavailable",
+            "reason": "malformed_full_window_terminal_sample",
+            "terminal_sample": terminal_sample,
+            "waypoint": waypoint,
+        }
+    sim_to_wp8 = _lat_lon_gap_m(
+        truth_lat,
+        truth_lon,
+        waypoint["lat_deg"],
+        waypoint["lon_deg"],
+    )
+    pos_to_wp8 = _lat_lon_gap_m(
+        belief_lat,
+        belief_lon,
+        waypoint["lat_deg"],
+        waypoint["lon_deg"],
+    )
+    pos_sim_gap = _finite_observation_number(
+        terminal_sample.get("horizontal_gap_m")
+    )
+    severity = _false_terminal_severity(sim_to_wp8)
+    return {
+        "status": "available",
+        "sample_scope": terminal_sample_scope,
+        "mission_terminal_event": terminal_event if isinstance(terminal_event, dict) else None,
+        "terminal_time_us": terminal_sample.get("time_us"),
+        "terminal_sample": terminal_sample,
+        "target_waypoint": {"seq": 8, **waypoint},
+        "sim_to_wp8_m": sim_to_wp8,
+        "pos_to_wp8_m": pos_to_wp8,
+        "pos_sim_horizontal_gap_m": pos_sim_gap,
+        "truth_position_outcome": (
+            "true_terminal_band"
+            if severity == "nominal_terminal_band"
+            else "false_terminal_progress"
+        ),
+        "truth_terminal_severity": severity,
+        "terminal_band_m": 50.0,
+    }
+
+
+def _analysis_axes_from_observation(
+    *,
+    case: TestCase,
+    observation: dict[str, Any],
+    ratios: list[float],
+    reset_metrics: dict[str, Any],
+    truth_terminal_metrics: dict[str, Any],
+    truth: dict[str, Any],
+) -> dict[str, Any]:
+    fault_type = str(case.parameters.get("fault_type") or observation.get("fault_type") or "")
+    reset_count = int(reset_metrics.get("reset_count") or 0)
+    max_ratio = max(ratios) if ratios else None
+    if reset_count > 1:
+        estimator_response = "repeated_resets"
+    elif reset_count == 1:
+        estimator_response = "single_reset"
+    elif max_ratio is not None and max_ratio >= 1.0:
+        estimator_response = "detected_rejection_without_reset"
+    elif max_ratio is not None and max_ratio < 1.0:
+        estimator_response = "fused_below_gate"
+    else:
+        estimator_response = "estimator_response_unavailable"
+
+    if observation.get("terminal_state_reached") is not True:
+        mission_progress = "terminal_not_reached"
+    elif observation.get("mission_complete") is True:
+        mission_progress = "planned_rtl_terminal_reached_by_belief"
+    else:
+        mission_progress = "terminal_state_reached_without_nominal_completion"
+
+    truth_position = truth_terminal_metrics.get("truth_position_outcome")
+    if not isinstance(truth_position, str):
+        truth_position = "truth_terminal_unavailable"
+
+    if fault_type == "hard_denial" and observation.get("stimulus_fidelity_status") == "pass":
+        if truth_position == "true_terminal_band" and reset_count == 0:
+            recovery = "transient_denial_recovered_no_reset"
+        elif truth_position == "true_terminal_band" and reset_count > 0:
+            recovery = "transient_denial_recovered_with_reset"
+        else:
+            recovery = "hard_denial_terminal_truth_unresolved"
+    elif reset_count > 0:
+        recovery = "reset_after_fault"
+    elif observation.get("terminal_state_reached") is True:
+        recovery = "terminal_reached_without_reset"
+    else:
+        recovery = "recovery_unavailable"
+
+    full_gap = truth.get("full_window_gap_summary")
+    full_max_gap = (
+        full_gap.get("max_horizontal_gap_m")
+        if isinstance(full_gap, dict)
+        else None
+    )
+    return {
+        "stimulus_fidelity": observation.get("stimulus_fidelity_status"),
+        "estimator_response": estimator_response,
+        "mission_progress_outcome": mission_progress,
+        "truth_position_outcome": truth_position,
+        "truth_terminal_severity": truth_terminal_metrics.get(
+            "truth_terminal_severity"
+        ),
+        "recovery_outcome": recovery,
+        "reset_count": reset_count,
+        "max_pos_test_ratio": max_ratio,
+        "max_full_window_truth_belief_gap_m": full_max_gap,
+        "classifier_sample_scope": truth.get("sample_scope"),
+        "legacy_behavior_classifier_still_emitted": True,
+    }
+
+
+def _false_terminal_severity(distance_m: float) -> str:
+    if distance_m <= 50.0:
+        return "nominal_terminal_band"
+    if distance_m <= 150.0:
+        return "mild_false_terminal"
+    if distance_m <= 500.0:
+        return "material_false_terminal"
+    return "severe_false_terminal"
+
+
+def _mission_waypoint_lat_lon(path: Path, seq: int) -> dict[str, float] | None:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or stripped.startswith("QGC "):
+            continue
+        fields = stripped.split()
+        if len(fields) < 11:
+            continue
+        try:
+            row_seq = int(fields[0])
+        except ValueError:
+            continue
+        if row_seq != seq:
+            continue
+        lat = _finite_observation_number(_parse_float(fields[8]))
+        lon = _finite_observation_number(_parse_float(fields[9]))
+        if lat is None or lon is None or (lat == 0.0 and lon == 0.0):
+            return None
+        return {"lat_deg": lat, "lon_deg": lon}
+    return None
+
+
+def _parse_float(value: str) -> float | None:
+    try:
+        parsed = float(value)
+    except ValueError:
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _lat_lon_gap_m(
+    a_lat_deg: float,
+    a_lon_deg: float,
+    b_lat_deg: float,
+    b_lon_deg: float,
+) -> float:
+    ref_lat_rad = math.radians((a_lat_deg + b_lat_deg) / 2.0)
+    dn = (b_lat_deg - a_lat_deg) * 111_320.0
+    de = (b_lon_deg - a_lon_deg) * 111_320.0 * math.cos(ref_lat_rad)
+    return math.hypot(dn, de)
 
 
 class GpsFailureVerdictPolicy(VerdictPolicy):
@@ -756,10 +1492,15 @@ class GpsFailureVerdictPolicy(VerdictPolicy):
         monitor_result: MonitorResult,
         analysis_results: Sequence[AnalysisResult],
     ) -> Verdict:
-        accepted = bool(analysis_results) and all(
+        accepted_observation = bool(analysis_results) and all(
             result.ok and result.summary.get("accepted_observation") is True
             for result in analysis_results
         )
+        stimulus_passed = bool(analysis_results) and all(
+            result.summary.get("stimulus_fidelity_status") == "pass"
+            for result in analysis_results
+        )
+        accepted_repetition = bool(accepted_observation and stimulus_passed)
         behavior = next(
             (
                 str(result.summary.get("behavior_class"))
@@ -768,16 +1509,27 @@ class GpsFailureVerdictPolicy(VerdictPolicy):
             ),
             monitor_result.reason,
         )
-        if accepted:
+        if accepted_observation:
             return Verdict(
                 klass=VerdictClass.SUCCESS,
                 reason=behavior,
                 retryable=False,
-                metadata={"accepted_observation": True},
+                metadata={
+                    "accepted_observation": True,
+                    "accepted_repetition": accepted_repetition,
+                    "stimulus_fidelity_status": (
+                        "pass" if stimulus_passed else "fail"
+                    ),
+                    "behavior_status": "accepted",
+                },
             )
         return Verdict(
             klass=VerdictClass.ANALYSIS_FAILED,
             reason=behavior,
             retryable=True,
-            metadata={"accepted_observation": False},
+            metadata={
+                "accepted_observation": False,
+                "accepted_repetition": False,
+                "behavior_status": "incomplete",
+            },
         )

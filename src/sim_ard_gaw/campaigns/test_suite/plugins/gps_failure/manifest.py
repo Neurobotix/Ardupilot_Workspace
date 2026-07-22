@@ -71,13 +71,14 @@ class GpsFailureManifest(Manifest):
         defaults.write_json(self._root / "manifest.json", manifest)
 
     def accepted_count(self, case: TestCase) -> int:
+        """Count accepted repetitions for scheduler/campaign target semantics."""
         count = 0
         for attempt in self.load().get("attempts", []):
             if not isinstance(attempt, dict):
                 continue
             if attempt.get("case_id") != case.case_id:
                 continue
-            if accepted_observation_from_attempt(attempt):
+            if accepted_repetition_from_attempt(attempt):
                 count += 1
         return count
 
@@ -111,6 +112,7 @@ class GpsFailureManifest(Manifest):
         row["status"] = record.status.value
         row["attempt_index"] = record.attempt_index
         row["target_run_index"] = record.target_run_index
+        _fill_three_verdict_fields(row)
         manifest.setdefault("attempts", []).append(row)
         self.save(manifest)
 
@@ -119,16 +121,79 @@ class GpsFailureManifest(Manifest):
 
 
 def accepted_observation_from_attempt(attempt: dict[str, Any]) -> bool:
-    """Authoritative Phase-1 GPS observation acceptance rule.
+    """Return whether the attempt is a useful behavior observation.
 
-    Accepted means the measurement was valid enough to characterize behavior. It
-    does not mean the aircraft behaved nominally: adverse but measurement-valid
-    behaviors (``loss_of_control``, ``autopilot_contained``, ...) can still be
-    accepted. Every acceptance-bearing signal must *agree*; a contradiction
-    between the verdict's behavior and the authoritative analysis behavior, an
-    analysis-incomplete state, a pre-injection failure, conflicting top-level or
-    verdict metadata, multiple incompatible behavior classes, or an unknown
-    behavior class all fail closed.
+    Observation acceptance means workflow completed and the behavior evidence is
+    explicit enough to characterize. It does not mean the requested physical GPS
+    stimulus was realized; bad-dose runs may still be observations but are never
+    accepted repetitions.
+    """
+    if not workflow_complete_from_attempt(attempt):
+        return False
+    if (
+        "behavior_status" in attempt
+        and str(attempt.get("behavior_status") or "").lower() != "accepted"
+    ):
+        return False
+    return _behavior_accepted_from_attempt(attempt)
+
+
+def accepted_repetition_from_attempt(attempt: dict[str, Any]) -> bool:
+    """Return whether the attempt counts as a valid requested-recipe repetition."""
+    if (
+        "accepted_repetition" in attempt
+        and attempt.get("accepted_repetition") is not True
+    ):
+        return False
+    verdict = attempt.get("verdict")
+    if isinstance(verdict, dict):
+        metadata = verdict.get("metadata")
+        if (
+            isinstance(metadata, dict)
+            and "accepted_repetition" in metadata
+            and metadata.get("accepted_repetition") is not True
+        ):
+            return False
+    if not accepted_observation_from_attempt(attempt):
+        return False
+    return _stimulus_fidelity_passes_from_attempt(attempt)
+
+
+def workflow_complete_from_attempt(attempt: dict[str, Any]) -> bool:
+    """Return whether the physical run workflow completed.
+
+    This is deliberately separate from behavior and stimulus logic. It answers
+    whether the executor completed a clean, reviewable flight package.
+    """
+    if str(attempt.get("workflow_status") or "").lower() != "complete":
+        return False
+    if not _top_level_status_valid_if_present(attempt):
+        return False
+    return _workflow_completion_evidence_present(attempt)
+
+
+def _fill_three_verdict_fields(row: dict[str, Any]) -> None:
+    if "workflow_status" not in row:
+        row["workflow_status"] = (
+            "complete" if _workflow_completion_evidence_present(row) else "incomplete"
+        )
+    if "behavior_status" not in row:
+        row["behavior_status"] = (
+            "accepted" if _behavior_accepted_from_attempt(row) else "incomplete"
+        )
+    if "accepted_observation" not in row:
+        row["accepted_observation"] = accepted_observation_from_attempt(row)
+    if "accepted_repetition" not in row:
+        row["accepted_repetition"] = accepted_repetition_from_attempt(row)
+
+
+def _behavior_accepted_from_attempt(attempt: dict[str, Any]) -> bool:
+    """Authoritative GPS behavior-observation acceptance rule.
+
+    Adverse but measurement-valid behaviors (``loss_of_control``,
+    ``autopilot_contained``, ...) can still be accepted behavior observations.
+    Every acceptance-bearing signal must *agree*; contradictions between the
+    verdict, analysis summary, and top-level fields fail closed.
     """
     if not _top_level_status_valid_if_present(attempt):
         return False
@@ -146,6 +211,15 @@ def accepted_observation_from_attempt(attempt: dict[str, Any]) -> bool:
     metadata = verdict.get("metadata")
     # The verdict must carry explicit accepted-observation metadata set to True.
     if not isinstance(metadata, dict) or metadata.get("accepted_observation") is not True:
+        return False
+
+    top_level_behavior = attempt.get("behavior_class")
+    if top_level_behavior is not None and top_level_behavior not in _ACCEPTABLE_BEHAVIOR_CLASSES:
+        return False
+    top_level_quality = attempt.get("observation_quality_class")
+    if top_level_quality is not None and top_level_quality not in _ACCEPTED_QUALITY_CLASSES:
+        return False
+    if _top_level_terminal_context_contradicts_analysis(attempt):
         return False
 
     results = attempt.get("analysis_results")
@@ -197,21 +271,74 @@ def accepted_observation_from_attempt(attempt: dict[str, Any]) -> bool:
         return False
     if verdict_behavior != authoritative_behavior:
         return False
+    if top_level_behavior is not None and top_level_behavior != authoritative_behavior:
+        return False
 
     return True
 
 
-def workflow_complete_from_attempt(attempt: dict[str, Any]) -> bool:
-    """Return whether the physical run workflow completed.
+def _stimulus_fidelity_passes_from_attempt(attempt: dict[str, Any]) -> bool:
+    statuses: list[str] = []
+    top_level = attempt.get("stimulus_fidelity_status")
+    if top_level is not None:
+        if not isinstance(top_level, str):
+            return False
+        statuses.append(top_level.lower())
 
-    This is deliberately narrower than accepted-observation logic. It answers
-    whether the executor completed a clean, reviewable flight package; it does
-    not decide whether the aircraft/EKF behavior was scientifically accepted.
-    """
-    if str(attempt.get("workflow_status") or "").lower() != "complete":
+    verdict = attempt.get("verdict")
+    metadata = verdict.get("metadata") if isinstance(verdict, dict) else None
+    if isinstance(metadata, dict) and "stimulus_fidelity_status" in metadata:
+        metadata_status = metadata.get("stimulus_fidelity_status")
+        if not isinstance(metadata_status, str):
+            return False
+        statuses.append(metadata_status.lower())
+
+    results = attempt.get("analysis_results")
+    if not isinstance(results, list) or not results:
         return False
-    if not _top_level_status_valid_if_present(attempt):
-        return False
+    for result in results:
+        if not isinstance(result, dict):
+            return False
+        summary = result.get("summary")
+        if not isinstance(summary, dict):
+            return False
+        if "stimulus_fidelity_status" not in summary:
+            return False
+        summary_status = summary.get("stimulus_fidelity_status")
+        if not isinstance(summary_status, str):
+            return False
+        statuses.append(summary_status.lower())
+
+    return bool(statuses) and all(status == "pass" for status in statuses)
+
+
+def _top_level_terminal_context_contradicts_analysis(attempt: dict[str, Any]) -> bool:
+    results = attempt.get("analysis_results")
+    if not isinstance(results, list):
+        return True
+    comparable_fields = (
+        "terminal_state_reached",
+        "mission_complete",
+        "stop_reason",
+        "max_seq_reached",
+        "auto_to_rtl_transition_seq",
+    )
+    for field in comparable_fields:
+        if field not in attempt:
+            continue
+        top_value = attempt.get(field)
+        for result in results:
+            if not isinstance(result, dict):
+                return True
+            summary = result.get("summary")
+            if not isinstance(summary, dict):
+                return True
+            if field in summary and summary.get(field) != top_value:
+                return True
+    return False
+
+
+def _workflow_completion_evidence_present(attempt: dict[str, Any]) -> bool:
     cleanup = attempt.get("cleanup")
     if not isinstance(cleanup, dict) or cleanup.get("ok") is not True:
         return False

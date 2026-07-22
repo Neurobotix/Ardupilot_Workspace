@@ -116,7 +116,10 @@ PARAMETER_METADATA = {
             "Latitude glitch offset. slow_drift and step_glitch convert north metres "
             "to degrees explicitly with the gps_failure.glitch helpers."
         ),
-        "readback_tolerance": 1e-9,
+        # MAVLink PARAM_VALUE carries float precision. At large slow-drift
+        # offsets, 1e-9 deg can fail on harmless float rounding. 1e-8 deg is
+        # still sub-millimetre scale for this lane's geography.
+        "readback_tolerance": 1e-8,
     },
     "SIM_GPS1_GLTCH_Y": {
         "units": "degrees longitude offset",
@@ -124,7 +127,10 @@ PARAMETER_METADATA = {
             "Longitude glitch offset. slow_drift and step_glitch convert east metres "
             "to degrees explicitly at the vehicle/reference latitude."
         ),
-        "readback_tolerance": 1e-9,
+        # MAVLink PARAM_VALUE carries float precision. At large slow-drift
+        # offsets, 1e-9 deg can fail on harmless float rounding. 1e-8 deg is
+        # still sub-millimetre scale for this lane's geography.
+        "readback_tolerance": 1e-8,
     },
     "SIM_GPS1_GLTCH_Z": {
         "units": "metres altitude offset",
@@ -156,9 +162,30 @@ DENIAL_DURATIONS_S = (5, 15, 30, 60)
 JAMMING_REPEAT_COUNT = 5
 JAMMING_DURATION_S = 45.0
 
+PHASE2_NON_JAMMING_CAMPAIGN_CASE_IDS = (
+    "nominal",
+    "slow_drift_0p2_mps",
+    "slow_drift_0p5_mps",
+    "slow_drift_1p0_mps",
+    "slow_drift_2p0_mps",
+    "slow_drift_4p0_mps",
+    "slow_drift_8p0_mps",
+    "slow_drift_accumulation_ramp",
+    "step_glitch_010m",
+    "step_glitch_025m",
+    "step_glitch_050m",
+    "step_glitch_100m",
+    "step_glitch_200m",
+    "step_glitch_500m",
+    "hard_denial_05s",
+    "hard_denial_15s",
+    "hard_denial_30s",
+    "hard_denial_60s",
+)
+
 MIN_POST_INJECTION_S = 90.0
 NOMINAL_SMOKE_MIN_POST_INJECTION_S = 20.0
-PHASE2_MONITOR_TIMEOUT_S = 900.0
+PHASE2_MONITOR_TIMEOUT_S = 1800.0
 SLOW_DRIFT_UPDATE_PERIOD_S = 5.0
 CLEANUP_TIMEOUT_S = 30.0
 HEARTBEAT_TIMEOUT_S = 30.0
@@ -169,6 +196,8 @@ TRIGGER_BOOT_TIME_MAX_AGE_S = 1.0
 MAX_ABS_ROLL_DEG = 60.0
 MAX_ABS_PITCH_DEG = 35.0
 MAX_ALTITUDE_LOSS_M = 30.0
+BIN_LIVE_ALTITUDE_TOLERANCE_M = 5.0
+BIN_LIVE_ATTITUDE_TOLERANCE_DEG = 5.0
 LOW_ALTITUDE_ABORT_M = 15.0
 PLANNED_RTL_MIN_SEQ = 8
 RTL_STABILIZE_S = 10.0
@@ -184,6 +213,8 @@ REQUIRED_ATTEMPT_ARTIFACTS = (
     "run_config.json",
     "gps_injection.json",
     "source_contract.json",
+    "stimulus_fidelity.json",
+    "gps_lifecycle_windows.json",
     "gps_behavior_summary.json",
     "ekf_innovation_metrics.json",
     "truth_vs_belief.json",
@@ -255,6 +286,10 @@ def attempt_dir(root: Path, case_id: str, attempt_index: int) -> Path:
     return root / case_id / "runs" / f"attempt_{attempt_index:03d}"
 
 
+def sitl_state_dir(root: Path, case_id: str, attempt_index: int) -> Path:
+    return root / "_sitl_state" / case_id / f"attempt_{attempt_index:03d}"
+
+
 def phase1_param_files() -> list[Path]:
     return [PLANE_BASE_PARAM_FILE, PLANE_GPS_PARAM_FILE]
 
@@ -273,6 +308,9 @@ def parameter_schema() -> dict[str, Any]:
         "knee_readback_names": list(KNEE_READBACK_PARAMS),
         "source_contract_names": list(SOURCE_CONTRACT_PARAMS),
         "phase2_protected_case_ids": list(PHASE2_PROTECTED_CASE_IDS),
+        "phase2_non_jamming_campaign_case_ids": list(
+            PHASE2_NON_JAMMING_CAMPAIGN_CASE_IDS
+        ),
         "telemetry_message_types": list(TELEMETRY_MESSAGE_TYPES),
         "source_defaults": dict(SOURCE_DEFAULTS),
         "metadata": copy.deepcopy(PARAMETER_METADATA),

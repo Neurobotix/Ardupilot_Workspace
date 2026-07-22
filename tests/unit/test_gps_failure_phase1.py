@@ -55,6 +55,7 @@ from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.config import (  # noq
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.manifest import (  # noqa: E402
     GpsFailureManifest,
     accepted_observation_from_attempt,
+    accepted_repetition_from_attempt,
     workflow_complete_from_attempt,
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.monitor import (  # noqa: E402
@@ -175,7 +176,10 @@ def _accepted_attempt(**updates: Any) -> dict[str, Any]:
         "verdict": {
             "class": "success",
             "reason": "loss_of_control",
-            "metadata": {"accepted_observation": True},
+            "metadata": {
+                "accepted_observation": True,
+                "accepted_repetition": True,
+            },
         },
         "analysis_results": [
             {
@@ -186,19 +190,27 @@ def _accepted_attempt(**updates: Any) -> dict[str, Any]:
                     "observation_quality_class": "valid_bad_behavior",
                     "terminal_state_reached": True,
                     "mission_complete": False,
+                    "stimulus_fidelity_status": "pass",
                     "stop_reason": "loss_of_control",
                     "max_seq_reached": 4,
                     "auto_to_rtl_transition_seq": None,
                 },
             }
         ],
+        "workflow_status": "complete",
+        "stimulus_fidelity_status": "pass",
+        "behavior_status": "accepted",
+        "accepted_observation": True,
+        "accepted_repetition": True,
+        "cleanup": {"ok": True},
+        "artifacts": {"raw_log": "/tmp/attempt.BIN"},
     }
     attempt.update(updates)
     return attempt
 
 
 class GpsFailurePhase1Tests(unittest.TestCase):
-    def test_mission_asset_keeps_airspeed_lifecycle_with_calm_lane_settle(self) -> None:
+    def test_mission_asset_uses_final_science_observation_geometry(self) -> None:
         mission_path = ROOT / "assets/missions/gps_failure_behavior_mission.waypoints"
         self.assertTrue(mission_path.is_file())
         header, rows = _mission_rows(mission_path)
@@ -206,62 +218,65 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertTrue(all(len(row) == 12 for row in rows))
         self.assertEqual(list(range(10)), [int(row[0]) for row in rows])
 
-        template_path = (
-            ROOT
-            / "assets/missions/airspeed_failure_behavior_mission.waypoints"
-        )
-        _, template_rows = _mission_rows(template_path)
-        self.assertEqual(
-            [int(row[3]) for row in template_rows],
-            [int(row[3]) for row in rows],
-        )
-
         by_seq = {int(row[0]): row for row in rows}
         self.assertEqual(22, int(by_seq[1][3]))
         self.assertEqual(178, int(by_seq[2][3]))
         self.assertEqual(15.0, float(by_seq[2][5]))
         self.assertEqual(16, int(by_seq[3][3]))
         self.assertEqual(16, int(by_seq[4][3]))
+        self.assertEqual(16, int(by_seq[5][3]))
+        self.assertEqual(19, int(by_seq[6][3]))
+        self.assertEqual(30.0, float(by_seq[6][4]))
+        self.assertEqual(16, int(by_seq[7][3]))
+        self.assertEqual(16, int(by_seq[8][3]))
         self.assertEqual(20, int(by_seq[9][3]))
 
+        home = by_seq[0]
         seq3 = by_seq[3]
         seq4 = by_seq[4]
-        home = by_seq[0]
-        settle_distance_m = _distance_m(
+        seq5 = by_seq[5]
+        seq6 = by_seq[6]
+        seq7 = by_seq[7]
+        seq8 = by_seq[8]
+        baseline_distance_m = _distance_m(
             float(home[8]),
             float(home[9]),
             float(seq3[8]),
             float(seq3[9]),
         )
-        leg_distance_m = _distance_m(
+        fault_observation_distance_m = _distance_m(
             float(seq3[8]),
             float(seq3[9]),
             float(seq4[8]),
             float(seq4[9]),
         )
-        # The v2 300 m settle point was behind the calm-lane aircraft when its
-        # 100 m takeoff completed around 323 m East, producing a turnback loop.
-        self.assertGreaterEqual(settle_distance_m, 450.0)
-        self.assertLessEqual(settle_distance_m, 550.0)
-        self.assertGreaterEqual(leg_distance_m, 1_950.0)
-        self.assertLessEqual(leg_distance_m, 2_050.0)
+        recovery_distance_m = _distance_m(
+            float(seq4[8]),
+            float(seq4[9]),
+            float(seq5[8]),
+            float(seq5[9]),
+        )
+        terminal_distance_m = _distance_m(
+            float(seq7[8]),
+            float(seq7[9]),
+            float(seq8[8]),
+            float(seq8[9]),
+        )
+        self.assertGreaterEqual(baseline_distance_m, 950.0)
+        self.assertLessEqual(baseline_distance_m, 1_050.0)
+        self.assertGreaterEqual(fault_observation_distance_m, 5_900.0)
+        self.assertLessEqual(fault_observation_distance_m, 6_100.0)
+        self.assertGreaterEqual(recovery_distance_m, 950.0)
+        self.assertLessEqual(recovery_distance_m, 1_050.0)
+        self.assertGreaterEqual(terminal_distance_m, 450.0)
+        self.assertLessEqual(terminal_distance_m, 550.0)
+        self.assertEqual(seq5[8:11], seq6[8:11])
         self.assertGreater(float(seq4[9]), float(seq3[9]))
-        lane_width_m = _distance_m(
-            float(by_seq[4][8]),
-            float(by_seq[4][9]),
-            float(by_seq[5][8]),
-            float(by_seq[5][9]),
-        )
-        self.assertGreaterEqual(lane_width_m, 450.0)
-        self.assertLessEqual(lane_width_m, 550.0)
-        return_leg_distance_m = _distance_m(
-            float(by_seq[6][8]),
-            float(by_seq[6][9]),
-            float(by_seq[7][8]),
-            float(by_seq[7][9]),
-        )
-        self.assertGreaterEqual(return_leg_distance_m, 1_950.0)
-        self.assertLessEqual(return_leg_distance_m, 2_050.0)
+        self.assertGreater(float(seq5[9]), float(seq4[9]))
+        self.assertGreater(float(seq8[9]), float(seq7[9]))
+        observation_s_at_do15 = fault_observation_distance_m / 15.0
+        self.assertGreaterEqual(observation_s_at_do15, 390.0)
+        self.assertGreaterEqual(observation_s_at_do15 * 0.2, 75.0)
         self.assertEqual(9, max(by_seq))
 
     def test_defaults_and_generated_cases_use_gps_mission_asset(self) -> None:
@@ -653,7 +668,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                 self.assertNotIn("NaN", proc.stdout)
                 self.assertNotIn("Infinity", proc.stdout)
 
-    def test_continuous_accumulation_case_is_metadata_only_no_reset(self) -> None:
+    def test_continuous_accumulation_case_declares_executable_max_rate_no_reset(self) -> None:
         case = GpsFailureCaseGenerator(GpsFailureConfig()).get_case(
             "slow_drift_accumulation_ramp"
         )
@@ -665,6 +680,9 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertTrue(recipe["fresh_flight_required"])
         self.assertTrue(recipe["requires_live_resolution"])
         self.assertEqual(list(defaults.DRIFT_RATES_MPS), recipe["drift_rates_mps"])
+        self.assertEqual(max(defaults.DRIFT_RATES_MPS), recipe["selected_drift_rate_mps"])
+        self.assertEqual(recipe["selected_drift_rate_mps"], recipe["drift_rate_mps"])
+        self.assertIn("selected max drift rate", recipe["schedule_status"])
         self.assertIn("accumulation/endurance", recipe["measurement_role"])
         self.assertIn("not independent knee points", recipe["measurement_role"])
         self.assertEqual([], case.parameters["injection_schedule"])
@@ -724,6 +742,8 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                 "run_config.json",
                 "gps_injection.json",
                 "source_contract.json",
+                "stimulus_fidelity.json",
+                "gps_lifecycle_windows.json",
                 "gps_behavior_summary.json",
                 "ekf_innovation_metrics.json",
                 "truth_vs_belief.json",
@@ -834,6 +854,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         schemas = artifact_schema()
         self.assertIn("run_config.json", schemas)
         self.assertIn("gps_behavior_summary.json", schemas)
+        self.assertIn("stimulus_fidelity.json", schemas)
         self.assertIn("ekf_innovation_metrics.json", schemas)
         self.assertIn("truth_vs_belief.json", schemas)
         self.assertIn("mode_timeline.json", schemas)
@@ -847,6 +868,8 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                 "run_config.json",
                 "gps_injection.json",
                 "source_contract.json",
+                "stimulus_fidelity.json",
+                "gps_lifecycle_windows.json",
                 "gps_behavior_summary.json",
                 "ekf_innovation_metrics.json",
                 "truth_vs_belief.json",
@@ -911,6 +934,55 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             validate_artifact_against_schema("not_a_real_artifact.json", {}),
         )
 
+    def test_source_contract_schema_rejects_exact_or_legacy_proxy_overclaims(self) -> None:
+        artifact = {
+            "ok": True,
+            "exact_internal_proof": False,
+            "bin_observable_proof": False,
+            "validated_proxy_proof": True,
+            "proxy_reason": "PV_AidingMode is internal; this is proxy proof",
+            "proof_levels": {
+                "exact_internal_proof": {"available": False},
+                "bin_observable_proof": {"available": False},
+                "validated_proxy_proof": {"available": True},
+            },
+            "configuration_proof": {
+                "role": "configuration_precondition",
+                "exact_runtime_internal_proof": False,
+                "readback_names": ["EK3_SRC1_POSXY"],
+            },
+            "reasons": [],
+            "readbacks": {"EK3_SRC1_POSXY": 3.0},
+            "estimator_flags": 16,
+            "source": {},
+            "readback_results": {},
+        }
+        self.assertEqual(
+            [],
+            validate_artifact_against_schema("source_contract.json", artifact),
+        )
+
+        exact = dict(artifact)
+        exact["exact_internal_proof"] = True
+        self.assertIn(
+            "exact_internal_proof.must_be_false_without_logged_signal",
+            validate_artifact_against_schema("source_contract.json", exact),
+        )
+
+        legacy = dict(artifact)
+        legacy["validated_proxy"] = True
+        legacy["exact_aiding_proof"] = False
+        missing = validate_artifact_against_schema("source_contract.json", legacy)
+        self.assertIn("legacy_field:validated_proxy", missing)
+        self.assertIn("legacy_field:exact_aiding_proof", missing)
+
+        mismatch = dict(artifact)
+        mismatch["validated_proxy_proof"] = False
+        self.assertIn(
+            "validated_proxy_proof.must_match_ok",
+            validate_artifact_against_schema("source_contract.json", mismatch),
+        )
+
     def test_plugin_constructs_through_registry_without_launch(self) -> None:
         self.assertIn("gps_failure", PLUGINS)
         plugin = cast(Any, PLUGINS["gps_failure"](launch_stack=False))
@@ -918,7 +990,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
         self.assertEqual(defaults.SUITE_NAME, first_case.suite_name)
         self.assertFalse(plugin.config.launch_stack)
 
-    def test_manifest_accepted_count_counts_accepted_observations_only(self) -> None:
+    def test_manifest_accepted_count_counts_accepted_repetitions_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             manifest = GpsFailureManifest(root)
@@ -936,7 +1008,10 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                     klass=VerdictClass.SUCCESS,
                     reason="loss_of_control",
                     retryable=False,
-                    metadata={"accepted_observation": True},
+                    metadata={
+                        "accepted_observation": True,
+                        "accepted_repetition": True,
+                    },
                 ),
                 analysis_results=[
                     AnalysisResult(
@@ -947,16 +1022,67 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                             "behavior_class": "loss_of_control",
                             "terminal_state_reached": True,
                             "mission_complete": False,
+                            "stimulus_fidelity_status": "pass",
                         },
                     )
                 ],
+                artifacts={"raw_log": "/tmp/accepted.BIN"},
+                plugin_manifest_fields={
+                    "workflow_status": "complete",
+                    "stimulus_fidelity_status": "pass",
+                    "behavior_status": "accepted",
+                    "accepted_observation": True,
+                    "accepted_repetition": True,
+                    "cleanup": {"ok": True},
+                    "artifacts": {"raw_log": "/tmp/accepted.BIN"},
+                },
+            )
+            bad_dose_observation = AttemptRecord(
+                attempt_id="bad_dose_observation",
+                suite_name=case.suite_name,
+                case_id=case.case_id,
+                target_run_index=1,
+                attempt_index=2,
+                status=AttemptStatus.SUCCESS,
+                verdict=Verdict(
+                    klass=VerdictClass.SUCCESS,
+                    reason="loss_of_control",
+                    retryable=False,
+                    metadata={
+                        "accepted_observation": True,
+                        "accepted_repetition": False,
+                    },
+                ),
+                analysis_results=[
+                    AnalysisResult(
+                        analyzer_name="gps",
+                        ok=True,
+                        summary={
+                            "accepted_observation": True,
+                            "behavior_class": "loss_of_control",
+                            "terminal_state_reached": True,
+                            "mission_complete": False,
+                            "stimulus_fidelity_status": "fail",
+                        },
+                    )
+                ],
+                artifacts={"raw_log": "/tmp/bad_dose.BIN"},
+                plugin_manifest_fields={
+                    "workflow_status": "complete",
+                    "stimulus_fidelity_status": "fail",
+                    "behavior_status": "accepted",
+                    "accepted_observation": True,
+                    "accepted_repetition": False,
+                    "cleanup": {"ok": True},
+                    "artifacts": {"raw_log": "/tmp/bad_dose.BIN"},
+                },
             )
             rejected = AttemptRecord(
                 attempt_id="rejected",
                 suite_name=case.suite_name,
                 case_id=case.case_id,
                 target_run_index=1,
-                attempt_index=2,
+                attempt_index=3,
                 status=AttemptStatus.ANALYSIS_FAILED,
                 verdict=Verdict(
                     klass=VerdictClass.ANALYSIS_FAILED,
@@ -966,8 +1092,18 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                 ),
             )
             manifest.append_attempt(accepted)
+            manifest.append_attempt(bad_dose_observation)
             manifest.append_attempt(rejected)
             self.assertEqual(1, manifest.accepted_count(case))
+            stored = manifest.load()["attempts"]
+            self.assertTrue(stored[1]["accepted_observation"])
+            self.assertFalse(stored[1]["accepted_repetition"])
+            generic_bad_dose = manifest.generic_view()["attempts"][1]
+            self.assertEqual("complete", generic_bad_dose["workflow_status"])
+            self.assertEqual("fail", generic_bad_dose["stimulus_fidelity_status"])
+            self.assertEqual("accepted", generic_bad_dose["behavior_status"])
+            self.assertTrue(generic_bad_dose["accepted_observation"])
+            self.assertFalse(generic_bad_dose["accepted_repetition"])
 
     def test_behavior_class_is_characterized_not_gated(self) -> None:
         base = _valid_observation()
@@ -1481,6 +1617,153 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             )
         )
 
+    def test_three_verdict_model_acceptance_matrix(self) -> None:
+        good = _accepted_attempt()
+
+        bad_dose = _accepted_attempt(
+            stimulus_fidelity_status="fail",
+            accepted_repetition=False,
+            verdict={
+                "class": "success",
+                "reason": "loss_of_control",
+                "metadata": {
+                    "accepted_observation": True,
+                    "accepted_repetition": False,
+                },
+            },
+            analysis_results=[
+                {
+                    "ok": True,
+                    "summary": {
+                        "accepted_observation": True,
+                        "behavior_class": "loss_of_control",
+                        "observation_quality_class": "valid_bad_behavior",
+                        "terminal_state_reached": True,
+                        "mission_complete": False,
+                        "stimulus_fidelity_status": "fail",
+                    },
+                }
+            ],
+        )
+        self.assertTrue(accepted_observation_from_attempt(bad_dose))
+        self.assertFalse(accepted_repetition_from_attempt(bad_dose))
+
+        workflow_failed = _accepted_attempt(
+            workflow_status="incomplete",
+            accepted_observation=False,
+            accepted_repetition=False,
+        )
+        self.assertFalse(accepted_observation_from_attempt(workflow_failed))
+        self.assertFalse(accepted_repetition_from_attempt(workflow_failed))
+
+        behavior_incomplete = _accepted_attempt(
+            behavior_status="incomplete",
+            accepted_observation=False,
+            accepted_repetition=False,
+            verdict={
+                "class": "failed_analysis",
+                "reason": "analysis_incomplete",
+                "metadata": {
+                    "accepted_observation": False,
+                    "accepted_repetition": False,
+                },
+            },
+            analysis_results=[
+                {
+                    "ok": False,
+                    "summary": {
+                        "accepted_observation": False,
+                        "behavior_class": "analysis_incomplete",
+                        "observation_quality_class": "analysis_incomplete",
+                        "terminal_state_reached": True,
+                        "mission_complete": False,
+                        "stimulus_fidelity_status": "pass",
+                    },
+                }
+            ],
+        )
+        self.assertTrue(workflow_complete_from_attempt(behavior_incomplete))
+        self.assertFalse(accepted_observation_from_attempt(behavior_incomplete))
+        self.assertFalse(accepted_repetition_from_attempt(behavior_incomplete))
+
+        self.assertTrue(workflow_complete_from_attempt(good))
+        self.assertTrue(accepted_observation_from_attempt(good))
+        self.assertTrue(accepted_repetition_from_attempt(good))
+
+    def test_manifest_rejects_malformed_accepted_repetition(self) -> None:
+        for bad in ("true", 1, "1", [True]):
+            with self.subTest(top_level=bad):
+                self.assertFalse(
+                    accepted_repetition_from_attempt(
+                        _accepted_attempt(accepted_repetition=bad)
+                    )
+                )
+
+    def test_accepted_repetition_requires_stimulus_status_agreement(self) -> None:
+        smuggled_bad_dose = _accepted_attempt(
+            stimulus_fidelity_status="pass",
+            verdict={
+                "class": "success",
+                "reason": "loss_of_control",
+                "metadata": {
+                    "accepted_observation": True,
+                    "accepted_repetition": True,
+                    "stimulus_fidelity_status": "fail",
+                },
+            },
+            analysis_results=[
+                {
+                    "ok": True,
+                    "summary": {
+                        "accepted_observation": True,
+                        "behavior_class": "loss_of_control",
+                        "observation_quality_class": "valid_bad_behavior",
+                        "terminal_state_reached": True,
+                        "mission_complete": False,
+                        "stimulus_fidelity_status": "fail",
+                    },
+                }
+            ],
+        )
+
+        self.assertTrue(accepted_observation_from_attempt(smuggled_bad_dose))
+        self.assertFalse(accepted_repetition_from_attempt(smuggled_bad_dose))
+
+        missing_summary_status = _accepted_attempt(
+            analysis_results=[
+                {
+                    "ok": True,
+                    "summary": {
+                        "accepted_observation": True,
+                        "behavior_class": "loss_of_control",
+                        "observation_quality_class": "valid_bad_behavior",
+                        "terminal_state_reached": True,
+                        "mission_complete": False,
+                    },
+                }
+            ],
+        )
+
+        self.assertTrue(accepted_observation_from_attempt(missing_summary_status))
+        self.assertFalse(accepted_repetition_from_attempt(missing_summary_status))
+
+    def test_manifest_rejects_top_level_behavior_and_terminal_contradictions(self) -> None:
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(terminal_state_reached=False)
+            )
+        )
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(behavior_class="nominal")
+            )
+        )
+        self.assertFalse(
+            accepted_observation_from_attempt(
+                _accepted_attempt(observation_quality_class="unknown_quality")
+            )
+        )
+
     def test_workflow_complete_is_separate_from_accepted_observation(self) -> None:
         attempt = _accepted_attempt(
             status="success",
@@ -1490,7 +1773,10 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             verdict={
                 "class": "failed_analysis",
                 "reason": "analysis_incomplete",
-                "metadata": {"accepted_observation": False},
+                "metadata": {
+                    "accepted_observation": False,
+                    "accepted_repetition": False,
+                },
             },
             analysis_results=[
                 {
@@ -1504,6 +1790,8 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                 }
             ],
             accepted_observation=False,
+            accepted_repetition=False,
+            behavior_status="incomplete",
         )
 
         self.assertTrue(workflow_complete_from_attempt(attempt))
