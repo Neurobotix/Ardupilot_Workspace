@@ -42,14 +42,11 @@
   measurement smoke accepted 2026-06-06; tailwind healthy gate and corrected
   two-attempt P130 pulse interpretation recorded through 2026-06-23):
   `governance/runbooks/features/airspeed_failure_behavior/`
-- GPS failure behavior feature runbook (Phase 0 design lock accepted 2026-07-06;
-  Phase 1 no-SITL foundation Chunks 1-6 accepted 2026-07-13 by a final no-SITL
-  review, including scaffold, payload semantics, static mission/overlay
-  integration, synthetic mechanism-gate evaluation, a fake-testable
-  runtime/MAVLink contract, and integration-readiness wiring into the shared
-  suite path (`--preflight`); Phase 2 live smoke is next and remains unverified;
-  no live SITL, real parameter readback, BIN/log parsing, campaign execution, or
-  evidence claim exists):
+- GPS failure behavior feature runbook (Phase 0 design lock accepted
+  2026-07-06; Phase 1 no-SITL foundation accepted 2026-07-13; corrected
+  protected nominal passed reviewed raw validation 2026-07-14 and the
+  framework was live-validated on v4/v5 on 2026-07-16; mission v6 is active
+  but unflown; Phase 2 remains open with no curated evidence promoted):
   `governance/runbooks/features/gps_failure_behavior/`
 - GPS failure behavior design decisions (Proposed 2026-07-06; full reasoning in
   `governance/runbooks/features/gps_failure_behavior/design_adrs.md` and
@@ -132,10 +129,10 @@
 - Troubleshooting guide: `docs/operations/troubleshooting.md`
 - Simulation lanes and flight modes: `docs/architecture/simulation_lanes.md`
 - Airspeed failure behavior lane (behavior characterization; Phase 2 measurement smoke accepted 2026-06-06; Phase 4A ratio/ramp/pulse characterization accepted 2026-06-14; fixed-case Phase 4B remains open): `docs/architecture/airspeed_failure_lane.md`
-- GPS failure behavior lane (behavior characterization under degraded/corrupted GPS; EKF innovation-gate "knee"; Phase 0 design lock accepted 2026-07-06; Phase 1 no-SITL foundation accepted 2026-07-13; Phase 2 live smoke next and unverified; live runs deferred): `docs/architecture/gps_failure_lane.md`
+- GPS failure behavior lane (behavior characterization under degraded/corrupted GPS; EKF innovation-gate "knee"; Phase 1 accepted 2026-07-13; framework raw/live-validated through v5; mission v6 active but unflown; Phase 2 open, no curated evidence): `docs/architecture/gps_failure_lane.md`
 - Launch target status: `docs/operations/launch_targets.md`
 - Airspeed failure behavior — verified no-SITL commands, stack, output paths, live-run gate: `docs/operations/airspeed_failure_runbook.md`
-- GPS failure behavior — no-SITL stack/CLI and live-run gate; live validation deferred: `docs/operations/gps_failure_runbook.md`
+- GPS failure behavior — current evidence contracts, stack, CLI, and live-run gate: `docs/operations/gps_failure_runbook.md`
 - SITL/Gazebo runtime notes: `docs/operations/sitl_gazebo_runtime.md`
 - Vehicle status: `docs/vehicles/status.md`
 - Wind matrix campaign status: `docs/campaigns/wind_matrix.md`

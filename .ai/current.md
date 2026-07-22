@@ -369,6 +369,21 @@ lifecycle-window, raw-log archival, or cleanup failure. The guarded live action
 requires both `--confirm-live-phase2` and `--confirm-validation-rerun`. This is
 framework validation only and does not authorize the full science campaign.
 
+On 2026-07-22, a no-live GPS lane cleanup removed transitional Phase-1/smoke
+surfaces that contradicted the current state: the superseded
+`--phase2-smoke-plan` and `--live-phase2-smoke` CLI actions (superseded by
+`--preflight` and the Phase H validation rerun; `--live-case` and the guarded
+campaign/rerun actions remain), the stale readiness `LIVE_BLOCKERS`
+list/`live_blockers` field (readiness is now exactly the Phase A-G gate
+result), the unused `stop_on_first_non_accepted_record` flag, a dead
+sequence-only trigger helper, the unused `build_live_plan_preview` wrapper,
+and the dead `mechanism_fields_present` legacy alias plus the
+`legacy_behavior_classifier_still_emitted` marker in analysis axes. Stale
+"phase1"/"smoke" naming was updated (`static_param_stack`,
+`nominal_observation_s`, `no_live_preflight`, `no_sitl_dry_run`) and the GPS
+lane doc/runbook were corrected to the current v6/Phase-H state. No scientific
+behavior changed; all GPS suites and pyright pass.
+
 Additional active feature work: the `test_suite` migration completed its Phase 3 sequence
 (3A–3G) on 2026-06-01. The staged `wind_matrix` plugin is fully zero-legacy
 (environment, MAVLink control/monitor, and wind injection all plugin-owned) and

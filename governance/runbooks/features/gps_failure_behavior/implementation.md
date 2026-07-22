@@ -55,7 +55,7 @@ claimed.
 | --- | --- |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/mavlink.py` | Fake-testable parameter adapter and helpers for deterministic set/read, batch writes, injected-parameter readback, tolerance comparison, missing/non-finite rejection, and structured write/readback results. |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/runtime.py` | Plan-only runtime bridge from `TestCase` plus trigger metadata to resolved GPS injection payloads, readback rules, restore plans, and explicit fail-closed execution results when no connection is supplied. |
-| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/stimulus.py` | Stimulus artifact now records the plan-only live contract and exposes a `build_live_plan_preview()` helper without executing MAVLink writes. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/stimulus.py` | Stimulus artifact records the plan-only live contract; live plan previews come from `runtime.build_live_injection_plan` (never execution-authorized). |
 | `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | Dry-run JSON explicitly reports `launch_performed=false` and `live_readback_performed=false`. |
 | `tests/unit/test_gps_failure_mavlink.py` | Focused no-SITL tests for fake-connection parameter I/O, readback failures, runtime plan resolution, restore plans, fail-closed missing metadata, and no dependency on real MAVLink/SITL. |
 
@@ -63,9 +63,9 @@ claimed.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/readiness.py` | No-SITL integration-readiness report: builds the plugin (optionally via the shared registry), iterates the full case catalog, and reports the SuiteRunner seams, manifest/artifact contract, effective parameter stack, trigger, and the explicit live blockers with `ready_for_live_run=false`. Opens no connection and writes no manifest. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/readiness.py` | No-SITL integration-readiness report: builds the plugin (optionally via the shared registry), iterates the full case catalog, and reports the SuiteRunner seams, manifest/artifact contract, effective parameter stack, and trigger. Opens no connection and writes no manifest. Since 2026-07-22, `ready_for_live_run` is exactly the Phase A-G no-live gate result; the original Chunk-6 static `LIVE_BLOCKERS` list is removed. |
 | `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | Adds the `--preflight` action emitting the readiness report as deterministic JSON. |
-| `tests/unit/test_gps_failure_readiness.py` | No-SITL tests for the readiness report (suite seams, case counts, manifest/artifact contract, param stack, live blockers, registry consistency, narrowed-config counts, JSON safety) and the `--preflight` CLI (valid JSON, mutual exclusion). |
+| `tests/unit/test_gps_failure_readiness.py` | No-SITL tests for the readiness report (suite seams, case counts, manifest/artifact contract, param stack, Phase A-G gate consistency, registry consistency, narrowed-config counts, JSON safety) and the `--preflight` CLI (valid JSON, mutual exclusion). |
 
 Chunk 6 is integration-readiness only. It proves the lane is wired into the
 shared suite path far enough to run and reports its own Phase-1 no-SITL posture;
@@ -98,7 +98,7 @@ amendment and `design_adrs.md`.
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/environment.py` | Later-live launch plan uses only `plane-gps` / `gazebo-plane-gps`, routes attempt runtime under `var/`, records a required `run_config.json` with mission/world/parameter/plugin/source-tree provenance, snapshots pre-launch BIN names, installs a production mission adapter from the live MAVLink master, accepts only one new `.BIN` for attempt analysis, and performs direct-handle cleanup followed by GPS-owned workspace-scoped process cleanup, canonical launcher cleanup, and a final survivor scan. |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/control.py` | Mission control now has a production `MavlinkGpsMissionAdapter` for upload/verify/arm/AUTO, with fake adapter support retained for tests; no live upload was executed during this task. |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/monitor.py` | Later-live monitor requests GPS-owned Plane data streams without an ACK gate, latches a fresh immutable seq-4 boot-time event, tracks `MISSION_ITEM_REACHED`, maximum sequence and AUTO-to-RTL progress, executes only authorized injection plans, schedules bounded restores/ramped slow-drift updates, treats 20 s nominal / 90 s fault as minimum evidence rather than termination, and normally continues through planned RTL plus 10 s stabilization. It emits terminal mission progress with the live artifacts and leaves stable BIN replacement to the post-cleanup analyzer. |
-| `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | Adds `--phase2-smoke-plan` as a plan-only no-live action and a guarded runnable Phase 2 path for the protected smoke slice only: `--live-phase2-smoke --confirm-live-phase2` or `--live-case <protected-case> --confirm-live-phase2`. The full Phase 3 matrix is not enabled through this live CLI. |
+| `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | Guarded live actions for the protected case set only: `--live-case <protected-case> --confirm-live-phase2`, the Phase H validation rerun, and the protected round-robin campaign. The earlier `--phase2-smoke-plan` / `--live-phase2-smoke` actions were removed on 2026-07-22 as superseded by `--preflight` and the Phase H validation rerun. The full Phase 3 matrix is not enabled through this live CLI. |
 | `tests/unit/test_gps_failure_phase2_path.py` | No-SITL/fake coverage for the source contract, source-contract-gated monitor acceptance, GPS-owned stream setup, event-driven `STATUSTEXT` handling, actual-message delivery gating, malformed samples, decoded/current-attempt BIN helpers, attempt-local BIN archival, launch plan, GPS-owned production mission protocol, workspace-scoped/canonical cleanup, Python-named MAVProxy matching, sibling-plugin isolation, monitor scheduling/artifact emission, guarded live CLI parsing, and connection factory. |
 
 No SITL, Gazebo, MAVProxy, real MAVLink connection, mission upload, parameter
@@ -454,9 +454,9 @@ No v6 live result or final science evidence is claimed.
   schema are reported together by `--preflight`. All output is strict JSON.
 - The readiness report (`--preflight`) is a deterministic no-SITL snapshot of
   what a suite run would schedule. It reuses a caller-supplied plugin (including
-  the shared registry factory) or builds a default one, and it reports
-  `ready_for_live_run=false` plus the three live-adapter blockers so
-  "readiness" never reads as "ready to fly".
+  the shared registry factory) or builds a default one. Since 2026-07-22 its
+  `ready_for_live_run` is exactly the Phase A-G no-live gate result, so
+  "readiness" is the gate report, not a hardcoded blocker list.
 
 ## Still Open
 
