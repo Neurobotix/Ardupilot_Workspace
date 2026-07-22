@@ -4,17 +4,19 @@ Status: Proposed
 
 Date: 2026-07-06
 
-The GPS failure lane uses an airspeed-style bounded smoke mission and inherits
-the airspeed lane's first-edge-latched injection trigger.
+The GPS failure lane uses a GPS-owned final-science candidate mission and
+inherits the airspeed lane's first-edge-latched injection trigger.
 
 Decision:
 
-- `assets/missions/gps_failure_behavior_mission.waypoints` uses the practical
-  airspeed behavior lifecycle: pre-injection settle, 2000 m Eastbound
-  measurement leg, reciprocal return leg, and RTL at seq 9. GPS owns its exact
-  geometry rather than importing the airspeed asset. The earlier 36 km one-way
-  design is retired for nominal smoke because it made the live experiment
-  unnecessarily slow.
+- `assets/missions/gps_failure_behavior_mission.waypoints` uses GPS-owned v6
+  shorter final-science candidate geometry: 1000 m controlled baseline, 6000 m
+  straight fault-observation leg after the seq-4 trigger, 1000 m straight
+  recovery/continuation, 30 s terminal loiter, seq-8 terminal gate, and RTL at
+  seq 9. GPS owns its exact geometry rather than importing the airspeed asset.
+  The earlier 36 km one-way design is still retired because it makes validation
+  unnecessarily slow, while the earlier reciprocal v4 shape is now superseded
+  because it is workflow-quality rather than final-science-quality.
 - Injection stays `seq 4`: the seq-1/3 front-half and the seq-4 injection edge
   are preserved from the airspeed missions, so the plugin's first-edge-latch
   logic transfers unchanged.
@@ -84,3 +86,35 @@ SHA-256 is
 `8d1c8de43c6e496946b1f6bdf3d88f4aa14cd3ba7abe84067cb6a4edd27d7f35`.
 V4 has structural/no-live geometry validation only; the v3 raw nominal remains
 the latest live geometry result.
+
+Amendment (2026-07-16, final-science candidate geometry): operator
+authorization promoted Phase I from design-only to implementation. Mission v5
+keeps 100 m AGL, the seq-4 trigger, front-half seq-1/3 trigger evidence, seq-8
+planned terminal gate, and seq-9 RTL, but replaces the v4 reciprocal box with a
+one-way science line. Seq 3 is 1000 m East of home, seq 4 is 13000 m East
+(12000 m fault-active leg), seq 5 is 15000 m East (2000 m recovery or
+continuation), seq 6 is a 30 s loiter at the same point, seq 7 is 15500 m East,
+and seq 8 is 16000 m East before RTL. This gives the slowest locked
+`slow_drift_0p2_mps` rate roughly 800 s of straight-line exposure at the
+commanded 15 m/s speed, for about 160 m of requested accumulated offset before
+terminal geometry. Active mission SHA-256 is
+`27336ee6b21c23f5863a19078a7a545ba2950f810c763ce8f01894ce1c821fc4`.
+V5 has structural/no-live validation and was live-validated as a protected
+three-case slice before being shortened for operations. Final science claims
+remain blocked until the active mission produces dated evidence and curated
+review.
+
+Amendment (2026-07-16, shorter final-science candidate geometry): after the v5
+validation slice showed the framework worked but the mission was operationally
+slow, operator authorization shortened only the geometry while preserving the
+seq-4 trigger, front-half seq-1/3 evidence, 100 m AGL altitude, 30 s loiter,
+seq-8 terminal gate, and seq-9 RTL. Mission v6 sets seq 3 at 1000 m East, seq 4
+at 7000 m East (6000 m fault-active leg), seq 5/6 at 8000 m East (1000 m
+recovery or continuation followed by the same 30 s loiter), seq 7 at 8500 m
+East, and seq 8 at 9000 m East before RTL. This gives the slowest locked
+`slow_drift_0p2_mps` rate roughly 400 s of straight-line exposure at the
+commanded 15 m/s speed, for about 80 m of requested accumulated offset before
+terminal geometry. Active mission SHA-256 is
+`ba22c669c895f694e8556e0e9573e9f9dd278d159086e46706eb30a3714d7261`.
+V6 has structural/no-live validation only until the next live campaign produces
+dated evidence and curated review.
