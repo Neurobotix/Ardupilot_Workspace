@@ -285,21 +285,89 @@ from about 180 m to less than 1 m, and maximum absolute roll was 2.1 degrees;
 the pre-injection loop is removed. This remains raw validation only. No fault
 case or curated-evidence claim has been made.
 
-The active mission is now v4 for the first fault experiment: it retains the
-v3-validated 500 m settle, extends both measurement legs to 2000 m, and widens
-the reciprocal-lane spacing to 500 m without changing seq-4 injection or seq-9
-RTL. Active hash: `8d1c8de43c6e...`. Targeted geometry and
-`hard_denial_15s` dry-run checks pass; v4 has not yet been flown.
+The active mission is now v6, the shorter final-science candidate authorized on
+2026-07-16: 1000 m controlled baseline, seq-4 injection onto a 6000 m straight
+fault-observation leg, 1000 m straight recovery/continuation, 30 s terminal
+loiter, seq-8 terminal gate, and seq-9 RTL. Active hash:
+`ba22c669c895f694e8556e0e9573e9f9dd278d159086e46706eb30a3714d7261`.
+Targeted no-live structural tests cover the baseline/fault/recovery/terminal
+geometry and the default mission timeout is now 1800 s. V6 has not yet been
+flown; final science campaign claims remain blocked pending dated live
+validation and curated evidence.
 
 On 2026-07-15, no-live campaign-readiness work added a guarded protected
 round-robin command for `nominal`, `slow_drift_0p5_mps`, and
-`hard_denial_15s`. It writes `campaign_contract.json`, defaults to five
-workflow-complete physical attempts per case, uses zero automatic retries, and
-stops on workflow/cleanup/raw-log failure. GPS manifest logic now separates
-workflow-complete counting from strict accepted-observation counting, and the
-source contract validates pre-injection EKF/GPS aiding flags while recording
-post-fault flags as behavior context. Focused no-live tests passed; no new live
-campaign result is claimed.
+`hard_denial_15s`. It writes `campaign_contract.json`, uses zero automatic
+retries, and stops on workflow/cleanup/raw-log failure. GPS manifest logic now
+separates workflow-complete counting from strict accepted-observation counting,
+and the source contract validates pre-injection EKF/GPS aiding flags while
+recording post-fault flags as behavior context. Phase H later superseded the
+next live step with a one-run-per-case validation rerun. Focused no-live tests
+passed; no new live campaign result is claimed.
+
+On 2026-07-16, no-live Phase B stimulus-fidelity work added required
+`stimulus_fidelity.json` plus terminal `stimulus_fidelity_status` fields. The
+post-cleanup BIN pass now checks nominal no-fault preservation, slow-drift
+realized GLTCH slope against the requested vehicle-time rate, and hard-denial
+disable/degrade/restore/recover timing separately from behavior classification.
+Missing, malformed, non-finite, absent, or unanchored BIN evidence fails
+stimulus fidelity closed. Focused synthetic decoded-record tests cover the
+0.61 m/s bad-dose regression for the 0.5 m/s case. No live result or historical
+campaign final-science claim is made.
+
+On 2026-07-16, no-live Phase C manifest work separated GPS terminal verdicts
+into `workflow_status`, `stimulus_fidelity_status`, and `behavior_status`, with
+distinct `accepted_observation` and `accepted_repetition` fields. GPS scheduler
+acceptance now counts accepted repetitions; the protected round-robin campaign
+continues to count workflow-complete physical attempts by name. Bad-dose runs
+can remain behavior observations only when workflow and behavior evidence are
+complete, but they do not count as requested-recipe repetitions. No live result
+or historical campaign final-science claim is made.
+
+On 2026-07-16, no-live Phase D lifecycle-window work added required
+`gps_lifecycle_windows.json` for live/post-cleanup analyzed attempts. The
+artifact is the ordered evidence authority for pre-trigger baseline, trigger,
+injection, fault-active, EKF response, recovery/continuation, and terminal
+state, with per-window timing, source, status, metrics, and evidence refs.
+Missing lifecycle evidence now fails closed instead of being hidden behind a
+broad behavior summary. No live result or historical campaign final-science
+claim is made.
+
+On 2026-07-16, no-live Phase E hard-denial transient visibility work added a
+top-level `hard_denial_transient` section to `gps_lifecycle_windows.json` and
+the final `gps_behavior_summary.json`. Hard-denial artifacts now expose denial
+start/end, restore, GPS status/satellites before/during/after, reset
+times/offsets, full post-trigger max truth-vs-belief gap, active-segment gap
+summary, and explicit sample-scope labels. Reset-segmented active samples
+remain the classifier input; missing reset details fail the transient section
+closed. No live result or historical campaign final-science claim is made.
+
+On 2026-07-16, no-live Phase F source-contract reframing made proof levels
+explicit: `exact_internal_proof`, `bin_observable_proof`, and
+`validated_proxy_proof`. `PV_AidingMode == AID_ABSOLUTE` remains internal and
+not directly logged, so exact internal proof stays false; EK3 readbacks are
+configuration proof, decoded XKF4/GPS fields are BIN-observable context, and
+the live pre-injection source gate is validated proxy proof. No live result or
+historical campaign final-science claim is made.
+
+On 2026-07-16, no-live Phase G altitude/attitude envelope authority work made
+`attitude_altitude_envelope.json` explicitly label `source`, altitude source,
+attitude source, sampling limits, and evidence quality. Live telemetry remains
+the pre-cleanup runtime guard; post-cleanup analysis prefers BIN-derived
+`POS.RelHomeAlt` or `CTUN.Alt` achieved altitude plus `ATT` attitude for final
+evidence, and fails closed on absolute `POS.Alt`, desired `CTUN.DAlt`, missing
+final sources, or BIN/live mismatches. The envelope can block reviewability but
+is not the primary GPS behavior classifier. No live result or historical
+campaign final-science claim is made.
+
+On 2026-07-16, no-live Phase H validation-rerun readiness work added an
+explicit Phase A-G gate report to `--preflight` and a plan-only
+`--phase2-validation-rerun-plan`. The next live validation path is exactly
+`nominal`, `slow_drift_0p5_mps`, and `hard_denial_15s`, one run each, zero
+automatic retries, and strict stop on workflow, stimulus fidelity,
+lifecycle-window, raw-log archival, or cleanup failure. The guarded live action
+requires both `--confirm-live-phase2` and `--confirm-validation-rerun`. This is
+framework validation only and does not authorize the full science campaign.
 
 Additional active feature work: the `test_suite` migration completed its Phase 3 sequence
 (3A–3G) on 2026-06-01. The staged `wind_matrix` plugin is fully zero-legacy

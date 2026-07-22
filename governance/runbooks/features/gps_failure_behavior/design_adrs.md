@@ -164,7 +164,7 @@ concepts:
 ## Open validation items
 
 - Live `EK3_POS_I_GATE`, `EK3_GLITCH_RAD`, `FS_EKF_THRESH`, `EK3_GPS_CHECK`,
-  and `EK3_SRC1_*`; exact checked-in knee values; complete integral source
+  and `EK3_SRC1_*`; checked configuration knee values; complete integral source
   contract (`POSXY=3`, `VELXY=3`, `POSZ=1`, `VELZ=3`, `YAW=1`); EKF
   absolute-position status flags as the validated GPS-aiding proxy.
 - Baseline `posTestRatio` and gap ranges from the `nominal` control.
@@ -249,19 +249,23 @@ is observable on a single heading regardless of wind.
 
 ## Decision
 
-`assets/missions/gps_failure_behavior_mission.waypoints` uses the practical
-airspeed behavior lifecycle with GPS-owned geometry: a 500 m calm-lane settle,
-2000 m Eastbound measurement leg, reciprocal return leg 500 m North, and RTL at
-seq 9. The
-earlier 36 km one-way candidate was retired before the nominal live gate because
-it made the experiment unnecessarily long.
+`assets/missions/gps_failure_behavior_mission.waypoints` is the v6 shorter
+final-science candidate geometry: a 1000 m controlled baseline, seq-4 injection
+onto a 6000 m straight fault-observation leg, 1000 m straight
+recovery/continuation, a 30 s terminal loiter, a seq-8 terminal gate, and RTL
+at seq 9. Earlier bounded reciprocal geometries were useful for Phase-2
+workflow validation, but final GPS characterization needs enough straight-line
+time for slow drift and must keep return-home turns out of the primary evidence
+window.
 
-1. **Bounded but long enough for fault observation** — the 2000 m outbound plus
-   reciprocal route provides post-injection observation while retaining a
-   deterministic end state.
-2. **Reciprocal plus RTL** — the reciprocal is not required for GPS physics,
-   but it preserves a proven mission lifecycle and gives the monitor a planned
-   RTL terminal contract.
+1. **Long enough for the slowest locked drift rate** — at the commanded 15 m/s,
+   the 6000 m fault leg provides roughly 400 s of straight exposure, so the
+   `0.2 m/s` slow-drift case can realize about 80 m of accumulated offset
+   before terminal geometry.
+2. **Baseline/fault/recovery/terminal windows are explicit** — seq 3 is the
+   baseline gate, seq 3→4 is fault-active observation, seq 4→5 is recovery or
+   continuation, seq 6 is controlled loiter, seq 8 is the planned terminal gate,
+   and seq 9 is RTL.
 3. **Injection stays `seq 4`** — the seq-1/3 front-half and the seq-4 injection
    edge are preserved from the airspeed mission.
 4. **Minimum window is not termination** — 20 s nominal / 90 s fault are
@@ -276,9 +280,9 @@ injection. Record requested vs actual.
 
 ## Alternatives considered
 
-- **Use the 36 km one-way mission** — rejected for the first live gate; it
-  removed the deterministic RTL lifecycle and made diagnosis unnecessarily
-  slow.
+- **Use the 36 km one-way mission** — rejected for v5/v6; it gives more distance
+  than needed for the locked drift bracket and makes validation unnecessarily
+  slow while adding little beyond the shortened straight fault leg.
 - **Stop at the minimum evidence window** — rejected after the 2026-07-14
   nominal regression; it truncates the experiment before reciprocal/RTL
   behavior is observed.
@@ -289,6 +293,10 @@ injection. Record requested vs actual.
   v4 retains the safe 500 m settle while extending the far endpoint to 2500 m
   and widening the reciprocal separation to 500 m. Trigger ordering is
   unchanged.
+- **Keep v4 as final science geometry** — rejected on 2026-07-16. Its 2000 m
+  post-trigger leg is acceptable for framework validation but gives only about
+  133 s at 15 m/s, which is too short to make the `0.2 m/s` slow-drift point a
+  clean science observation.
 
 ## Evidence / sources
 
@@ -301,6 +309,9 @@ injection. Record requested vs actual.
   first-edge mission contract; it does not import the airspeed plugin.
 - Nominal acceptance requires planned RTL completion; adverse fault terminals
   remain characterizable when cleanly measured.
+- V6 has no-live structural coverage only until a dated live validation records
+  the realized baseline, fault-active, recovery/continuation, terminal, and RTL
+  windows.
 
 ## Open validation items
 
@@ -380,9 +391,9 @@ The correction (mirrored verbatim in the promoted record
   config/overlays/plane_gps.parm` and nothing else — no airspeed overlay and no
   local override (the launcher uses a dedicated `build_plane_gps_param_args()`
   that never appends `.private/config/plane_params.local.parm`, and prints that
-  the override was intentionally excluded). It wipes EEPROM, uses
-  `var/runs/sitl/plane-gps` and a `plane-gps` MAVProxy identity, and emits
-  `udp:127.0.0.1:14551`.
+  the override was intentionally excluded). It wipes EEPROM and emits
+  `udp:127.0.0.1:14551`; GPS campaign runs override the manual default state
+  directory with `<campaign_root>/_sitl_state/<case_id>/attempt_NNN/`.
 - `gazebo-plane-gps` uses the dedicated sensor-neutral
   `assets/worlds/mini_talon_gps_runway.sdf`. It provides the JSON FDM path and
   NavSat/GPS with no wind publisher, `WindEffects`, airspeed sensor, or LiDAR

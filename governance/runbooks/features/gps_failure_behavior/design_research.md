@@ -186,8 +186,8 @@ three contracts before live analysis logic was added:
   (`AP_NavEKF3_core.h`, `AidingMode`; transitions in
   `AP_NavEKF3_Control.cpp`). There is no direct live/BIN field named
   `PV_AidingMode`. The implementation therefore treats absolute aiding as a
-  named validated proxy, not exact proof: the exact pinned knee readbacks,
-  the complete integral source set (`POSXY=3`, `VELXY=3`, `POSZ=1`,
+  named validated proxy, not exact proof: the checked configuration knee
+  readbacks, the complete integral source set (`POSXY=3`, `VELXY=3`, `POSZ=1`,
   `VELZ=3`, `YAW=1`; enums in `AP_NavEKF/AP_NavEKF_Source.h`), plus EKF status
   flags showing absolute horizontal position and not constant-position mode.
   If that combination is absent, GPS-rejection classification fails closed.

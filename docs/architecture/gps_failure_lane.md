@@ -31,16 +31,69 @@ Current status:
   monotonically East from takeoff completion to seq 3 with maximum absolute
   roll of 2.1 degrees, then completed through seq 9 and planned RTL. Fault cases
   and curated evidence remain open.
-- The active v4 fault geometry retains that 500 m settle, extends each
-  measurement leg to 2000 m, and increases reciprocal-lane spacing to 500 m.
-  Sequence numbering, seq-4 injection, 100 m altitude, and seq-9 RTL are
-  unchanged. V4 is structurally tested but not yet live-validated.
-- A 2026-07-15 no-live campaign-readiness update adds a protected round-robin
-  live entry point for `nominal`, `slow_drift_0p5_mps`, and
-  `hard_denial_15s`. It counts workflow-complete physical attempts separately
-  from post-cleanup behavior acceptance, writes a frozen
-  `campaign_contract.json`, defaults to five runs per case, and uses zero
-  automatic retries. This does not claim a new live campaign result.
+- The active v6 geometry is the shorter final-science candidate authorized on
+  2026-07-16: a one-way 100 m AGL mission with a 1000 m controlled baseline,
+  seq-4 injection onto a 6000 m straight fault-observation leg, 1000 m
+  straight recovery/continuation, a 30 s terminal loiter, a seq-8 terminal gate,
+  and seq-9 RTL. The seq-4 trigger, front-half seq-1/3 evidence, and planned RTL
+  terminal contract are unchanged. V6 is structurally tested only; no live
+  validation, curated evidence, or final science campaign claim exists yet.
+- A 2026-07-16 Phase H no-live readiness update gates the next live validation
+  rerun behind explicit Phase A-G proof: vehicle-time scheduling, BIN stimulus
+  fidelity, three-verdict manifest semantics, lifecycle-window artifact
+  authority, hard-denial transient visibility, source-proof labels, and
+  altitude/attitude source authority. The protected validation rerun is exactly
+  `nominal`, `slow_drift_0p5_mps`, and `hard_denial_15s`, one physical run each,
+  zero automatic retries, and strict stop-on-failure. It does not authorize the
+  full science campaign.
+- A 2026-07-16 no-live scheduling correction makes physical GPS slow-drift
+  strength vehicle-time based. Live GLTCH ramp updates use MAVLink
+  `time_boot_ms` elapsed from the seq-4 trigger; monitor wall time remains only
+  for deadlines, progress logs, and diagnostics. Attempt artifacts persist both
+  `wall_elapsed_s` and `vehicle_elapsed_s` plus the payload clock source, and
+  missing vehicle time fails closed for physical writes.
+- A 2026-07-16 no-live stimulus-fidelity contract adds
+  `stimulus_fidelity.json` and `stimulus_fidelity_status`. The post-cleanup BIN
+  pass now checks nominal no-fault preservation, slow-drift realized GLTCH
+  slope, and hard-denial disable/degrade/restore/recover timing separately from
+  behavior classification. Missing or unanchored BIN evidence fails closed. No
+  live result or historical campaign final-science claim is made by this
+  implementation.
+- A 2026-07-16 no-live lifecycle-window contract adds required
+  `gps_lifecycle_windows.json` for live/post-cleanup analyzed attempts. It is
+  the evidence authority for the ordered sequence: pre-trigger baseline,
+  trigger, injection, fault-active, EKF response, recovery/continuation, and
+  terminal state. Each window carries timing, source, status, metrics, and
+  evidence references; missing anchors, baseline proof, BIN fault evidence, EKF
+  response, cleanup, raw-BIN archival, or required artifacts fail closed.
+- A 2026-07-16 no-live hard-denial transient visibility update adds a top-level
+  `hard_denial_transient` section to the lifecycle artifact and final behavior
+  summary. Reviewers can see denial start/end, restore, GPS quality
+  before/during/after, reset times/offsets, the full post-trigger max
+  truth-vs-belief gap, and the active post-reset gap summary without drilling
+  into nested decoded records. Reset-segmented active samples remain the
+  classifier input; the full-window summary is additive.
+- A 2026-07-16 no-live three-verdict contract separates
+  `workflow_status`, `stimulus_fidelity_status`, and `behavior_status`, with
+  distinct `accepted_observation` and `accepted_repetition` fields. GPS generic
+  manifest views preserve the distinction: bad-dose behavior observations do
+  not count as accepted requested-recipe repetitions.
+- A 2026-07-16 no-live source-contract reframing makes proof levels explicit in
+  `source_contract.json` and BIN mechanism output. `exact_internal_proof`
+  remains false because `PV_AidingMode == AID_ABSOLUTE` is not directly logged;
+  EK3 source/knee readbacks are configuration proof, XKF4/GPS decoded rows are
+  BIN-observable context, and the pre-injection live source gate is labeled as
+  `validated_proxy_proof`.
+- A 2026-07-16 no-live altitude/attitude envelope authority update makes
+  `attitude_altitude_envelope.json` label its `source`, `altitude_source`,
+  `attitude_source`, sampling limits, and evidence quality. Live telemetry is
+  retained as a pre-cleanup runtime guard; post-cleanup artifacts prefer
+  BIN-derived `POS.RelHomeAlt` or `CTUN.Alt` achieved altitude and `ATT`
+  attitude for final evidence. `POS.Alt` absolute altitude and `CTUN.DAlt`
+  desired altitude are not accepted as achieved/relative envelope sources. If
+  BIN and live guard values disagree beyond tolerance, or if final envelope
+  sources are missing, behavior review fails closed instead of silently choosing
+  either source.
 
 - Phase 1 no-SITL foundation accepted 2026-07-13. Two nominal smoke attempts on
   2026-07-14 are rejected. Attempt 1 exposed weak readiness and incomplete
@@ -102,10 +155,18 @@ Current status:
   mission adapters, production mission-adapter installation from the MAVLink
   master, source-contract-gated monitor acceptance, cleanup wait/kill behavior,
   protected smoke-case planning, protected round-robin campaign automation,
-  and decoded-record BIN analysis helpers. The source contract now validates
-  pre-injection EKF/GPS aiding flags and records post-fault flags as behavior
-  context. The corrected nominal exercised the live path before this campaign
-  command existed; fault cases and Phase-2 acceptance remain open.
+  decoded-record BIN analysis helpers, and a required lifecycle-window artifact
+  that makes the ordered evidence sequence authoritative. Hard-denial lifecycle
+  artifacts also expose full-window transient/reset visibility separately from
+  active post-reset classification samples. The source contract now validates
+  pre-injection EKF/GPS aiding flags as validated proxy proof and records
+  post-fault flags as behavior context; it does not claim exact internal EKF
+  aiding proof. The corrected nominal exercised the live path before this
+  campaign command existed; fault cases and Phase-2 acceptance remain open.
+  `attitude_altitude_envelope.json` is an envelope guard artifact, not the main
+  GPS behavior classifier: BIN-derived values are final evidence when complete,
+  live telemetry is runtime guard/fallback context, and mismatches or missing
+  sources block reviewability.
 - A 2026-07-13 strict pre-smoke review rejected the first Phase 2 live path. Its
   findings are remediated in the working tree with no-live tests: launch cleanup
   is ordered before Gazebo, cleanup gates terminal success, trigger evidence is
@@ -140,14 +201,17 @@ The central result is the **knee**: the boundary between the EKF fusing a
 corrupted GPS fix and rejecting it, measured on two tiers.
 
 - **Mechanism tier (primary):** the position innovation test ratio
-  `posTestRatio`. Live, this is derived as
+  `posTestRatio`. Live, this is derived as validated proxy context from
   `EKF_STATUS_REPORT.pos_horiz_variance ** 2`; in BIN decoded `XKF4`, it is
   `SP ** 2` on the primary core selected by `PI` because pymavlink's DFReader
   has already applied the XKF4 format multiplier. The knee is
   `posTestRatio` crossing `1.0` — ArduPilot's own gate
   (`AP_NavEKF3_PosVelFusion.cpp`). Below `1.0` the fix is fused and the belief
   moves toward the drifting fix; at/above `1.0` the fix is rejected only when
-  the validated source preconditions hold.
+  the validated source preconditions hold. BIN mechanism output labels
+  `XKF4.PI`, `XKF4.SP`, `XKF4.GPS`, `XKF4.TS`, `XKF4.OFN/OFE`, and decoded
+  `GPS.Status`/`GPS.NSats` as BIN-observable proof, not exact internal
+  `PV_AidingMode` proof.
 - **Behavior tier:** the believed-vs-truth horizontal position gap, attitude/
   altitude band, and mode/failsafe changes.
 
@@ -160,7 +224,7 @@ reveals a lie the filter itself believes is fine.
 
 | Fault | Knob(s) | Real-world case |
 | --- | --- | --- |
-| `slow_drift` | `SIM_GPS1_GLTCH_{X,Y}` growing ramp | GPS spoofing / slow position capture |
+| `slow_drift` | `SIM_GPS1_GLTCH_{X,Y}` growing ramp; live strength uses vehicle `time_boot_ms` elapsed | GPS spoofing / slow position capture |
 | `step_glitch` | `SIM_GPS1_GLTCH_{X,Y}` fixed offset | multipath jump / sudden position pop |
 | `hard_denial` | `SIM_GPS1_ENABLE=0` | antenna/receiver loss, total denial |
 | `jamming` | `SIM_GPS1_JAM=1` | RF jamming (blackout + chaotic garbage) |

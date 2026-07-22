@@ -242,20 +242,24 @@ generator takes a rate list, so extending is a longer input, no code change.
 
 ## Default Stack
 
-- Mission: `assets/missions/gps_failure_behavior_mission.waypoints`, based on
-  the practical airspeed behavior lifecycle with GPS-owned geometry: 100 m AGL,
-  500 m Eastbound calm-lane settle, 2000 m Eastbound measurement leg, reciprocal
-  return leg 500 m North, and RTL at seq 9. The prior 36 km one-way template is
-  retired for nominal smoke because it made the live gate far slower than the
-  airspeed lane while adding no value to the first live experiment.
+- Mission: `assets/missions/gps_failure_behavior_mission.waypoints`, now the
+  v6 shorter final-science candidate geometry: 100 m AGL, 1000 m controlled baseline to
+  seq 3, seq-4 injection onto a 6000 m straight fault-observation leg, 1000 m
+  straight recovery/continuation, 30 s terminal loiter, seq-8 terminal gate, and
+  RTL at seq 9. The prior reciprocal v4 geometry is superseded because slow
+  drift needs long straight-line time and minimal return-home ambiguity during
+  the main evidence window.
   - **Injection point stays `seq 4`.** The seq-1/3 front-half and the seq-4
     injection edge are preserved, so the plugin's first-edge-latch logic remains
     unchanged.
-  - **Reciprocal/RTL is retained for smoke ergonomics.** GPS does not require a
-    wind-sign reciprocal, but the airspeed-style shape gives a bounded, familiar
-    mission and a deterministic end path.
+  - **Return-home geometry is outside the main observation window.** GPS does
+    not need wind-sign reciprocal legs; the terminal loiter/gate plus RTL keep a
+    deterministic end path without mixing turns into the baseline/fault/recovery
+    windows.
 
-  Finalized in Phase 1; see the Mission Design ADR in `design_adrs.md`.
+  V6 is structurally tested only. Final science campaign language remains
+  blocked until the mission is live-validated and supported by curated evidence;
+  see the Mission Design ADR in `design_adrs.md`.
 - SITL target: `plane-gps` (dedicated identity; loads `plane_base.parm ->
   plane_gps.parm` only, no airspeed overlay and no local override, wipes EEPROM).
   Corrected 2026-07-13 from `plane-cte`, which is the CTE/airspeed lane; see the
@@ -343,6 +347,9 @@ Required attempt-level outputs:
   readback values, reset values, success/failure, timestamps.
 - `gps_behavior_summary.json`: behavior band, observation-quality/acceptance
   decision, and human-readable reason.
+- `gps_lifecycle_windows.json`: ordered evidence for pre-trigger baseline,
+  trigger, injection, fault-active, EKF response, recovery/continuation, and
+  terminal state; this artifact is the authority for causality and timing.
 - `ekf_innovation_metrics.csv` and/or `.json`: `posTestRatio` timeline, reject/
   glitch flags, variance, reset events (the mechanism tier).
 - `truth_vs_belief.csv` and/or `.json`: believed-vs-truth horizontal position

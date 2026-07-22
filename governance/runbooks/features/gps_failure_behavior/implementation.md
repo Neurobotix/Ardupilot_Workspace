@@ -7,7 +7,11 @@ with accepted source/BIN/behavior analysis and clean cleanup. That raw run is
 not curated Phase-2 evidence, and no fault case has run.
 On 2026-07-15, a no-live campaign-readiness update added the protected
 round-robin campaign command, workflow-complete counting, and pre-injection
-source-contract staging. No new live result is claimed.
+source-contract staging. On 2026-07-16, Phase H narrowed the next live step to
+a protected validation rerun: exactly `nominal`, `slow_drift_0p5_mps`, and
+`hard_denial_15s`, one run each, zero automatic retries, and strict
+stop-on-failure after all Phase A-G no-live gates pass. No new live result is
+claimed.
 
 ## Implemented In Phase 1 Chunk 1
 
@@ -31,7 +35,7 @@ source-contract staging. No new live result is claimed.
 
 | Path | Responsibility |
 | --- | --- |
-| `assets/missions/gps_failure_behavior_mission.waypoints` | QGC WPL 110 GPS mission with the airspeed-style lifecycle but GPS-owned calm-lane geometry: seq-4 injection edge, explicit 15 m/s command, 500 m settle, 2000 m Eastbound measurement leg, reciprocal return leg 500 m North, and RTL at seq 9. |
+| `assets/missions/gps_failure_behavior_mission.waypoints` | QGC WPL 110 GPS mission with GPS-owned v6 shorter final-science candidate geometry: seq-4 injection edge, explicit 15 m/s command, 1000 m baseline, 6000 m straight fault-observation leg, 1000 m recovery/continuation, 30 s terminal loiter, seq-8 terminal gate, and RTL at seq 9. |
 | `config/overlays/plane_gps.parm` | Dedicated overlay applied after `plane_base.parm`; pins the four EKF knee inputs, complete primary EKF source set, and calm SITL wind without airspeed tuning. |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/defaults.py` | Two-file Phase-1 default parameter stack and current overlay schema status. |
 | `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | Dry-run output exposes the effective two-file parameter stack. |
@@ -72,7 +76,7 @@ evidence claim.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/sim_ard_gaw/launch/launch.sh` | Adds `PLANE_GPS_PARAM_FILE`, `build_plane_gps_param_args()` (base + `plane_gps.parm` only; local override excluded and printed), `launch_plane_gps()` (`--wipe-eeprom`, `var/runs/sitl/plane-gps`, `udp:127.0.0.1:14551`), and `launch_gazebo_plane_gps()` using the dedicated east-facing `mini_talon_gps_runway.sdf`. Existing targets and the shared `build_plane_param_args()` are unchanged. |
+| `src/sim_ard_gaw/launch/launch.sh` | Adds `PLANE_GPS_PARAM_FILE`, `build_plane_gps_param_args()` (base + `plane_gps.parm` only; local override excluded and printed), `launch_plane_gps()` (`--wipe-eeprom`, `udp:127.0.0.1:14551`, default `var/runs/sitl/plane-gps`, campaign-overridable use-dir), and `launch_gazebo_plane_gps()` using the dedicated east-facing `mini_talon_gps_runway.sdf`. Existing targets and the shared `build_plane_param_args()` are unchanged. |
 | `assets/worlds/mini_talon_gps_runway.sdf` | Dedicated calm/NavSat GPS world using the sensor-neutral Mini Talon with the east-facing behavior-mission pose; avoids changing the shared base world. |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/defaults.py` | `SITL_TARGET="plane-gps"`, `GAZEBO_TARGET="gazebo-plane-gps"`; `parameter_schema()` reports both targets. |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/readiness.py` | `--preflight` parameter-stack section reports the dedicated targets and the airspeed-overlay / local-override exclusions. |
@@ -87,9 +91,9 @@ amendment and `design_adrs.md`.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/source_contract.py` | Source-backed live/BIN preconditions: `EKF_STATUS_REPORT.pos_horiz_variance ** 2` for live `posTestRatio`, already-scaled decoded `XKF4.SP ** 2` for BIN, `EK3_GLITCH_RAD > 0`, GPS source readbacks, EKF absolute-position status flags, and explicit "validated proxy" wording for absolute aiding. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/source_contract.py` | Source-backed live/BIN preconditions with explicit proof levels: `exact_internal_proof` remains false without a directly logged EKF source signal; `EK3_GLITCH_RAD > 0`, GPS source readbacks, and knee readbacks are configuration proof; EKF absolute-position status flags provide `validated_proxy_proof` for absolute aiding. |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/telemetry.py` | Uses the GPS-owned `MAV_DATA_STREAM` request helper. It does not require `COMMAND_ACK` for event-driven `STATUSTEXT`; the monitor instead fails closed unless every required periodic message type is actually observed. Malformed EKF samples normalize to fail-closed records instead of raising. |
-| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py` | Current-attempt BIN decode/analysis boundary: lazy `pymavlink.DFReader` decode after cleanup closes the log, fake decoder injection for tests, `XKF4` primary-core mechanism extraction (`PI` selects the primary core and must be present on every analyzed row), reset detection from `OFN/OFE`, and decoded-degree `SIM` truth versus `POS` canonical-belief pairing on `TimeUS` with <=0.1 s skew. Mission-upload `CMD` rows are never treated as execution anchors; the live seq-4 boot timestamp is primary and an injection-parameter transition is the only decoded-log fallback. The post-cleanup analyzer archives the selected BIN into the attempt directory before decoding it, then records the copied artifact as `raw_log` / `raw_log_path`. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py` | Current-attempt BIN decode/analysis boundary: lazy `pymavlink.DFReader` decode after cleanup closes the log, fake decoder injection for tests, `XKF4` primary-core mechanism extraction (`PI` selects the primary core and must be present on every analyzed row), `SP`-derived `posTestRatio`, `GPS`/`TS` context, reset detection from `OFN/OFE`, decoded GPS status/satellite context when present, and decoded-degree `SIM` truth versus `POS` canonical-belief pairing on `TimeUS` with <=0.1 s skew. Mission-upload `CMD` rows are never treated as execution anchors; the live seq-4 boot timestamp is primary and an injection-parameter transition is the only decoded-log fallback. The post-cleanup analyzer archives the selected BIN into the attempt directory before decoding it, then records the copied artifact as `raw_log` / `raw_log_path`. |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/mavlink.py` | Explicit `connect_mavlink()` factory hook (no import-time connection), live contract readback list, and no-SITL tests preserving atomic batch validation. |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/environment.py` | Later-live launch plan uses only `plane-gps` / `gazebo-plane-gps`, routes attempt runtime under `var/`, records a required `run_config.json` with mission/world/parameter/plugin/source-tree provenance, snapshots pre-launch BIN names, installs a production mission adapter from the live MAVLink master, accepts only one new `.BIN` for attempt analysis, and performs direct-handle cleanup followed by GPS-owned workspace-scoped process cleanup, canonical launcher cleanup, and a final survivor scan. |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/control.py` | Mission control now has a production `MavlinkGpsMissionAdapter` for upload/verify/arm/AUTO, with fake adapter support retained for tests; no live upload was executed during this task. |
@@ -105,7 +109,7 @@ for this implementation.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | Adds `--live-phase2-round-robin-campaign` guarded by both `--confirm-live-phase2` and `--confirm-live-campaign`. The command writes `campaign_contract.json`, runs the protected case set in true round-robin order, defaults to five workflow-complete physical attempts per case, uses zero automatic retries, and stops on workflow/cleanup/raw-log failure. |
+| `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | Adds `--live-phase2-round-robin-campaign` guarded by both `--confirm-live-phase2` and `--confirm-live-campaign`. The command writes `campaign_contract.json`, runs the protected case set in true round-robin order, uses zero automatic retries, and stops on workflow/cleanup/raw-log failure. Phase H later supersedes this as the next live action with a one-run-per-case validation rerun. |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/manifest.py` | Adds workflow-complete counting separate from strict accepted-observation counting. A workflow-complete attempt can have failed analysis and still remain a preserved physical run; it does not become an accepted scientific observation. |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/monitor.py` | Source-contract artifact now validates the pre-injection EKF aiding flags and records post-injection flags separately, so expected post-fault GPS rejection is behavior rather than failed setup. |
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/analyzers.py` | Final post-cleanup summary marks `workflow_status=complete` only after cleanup is clean and the attempt-local raw BIN exists. The analyzer can still reject behavior without erasing the workflow-complete physical attempt. |
@@ -113,6 +117,82 @@ for this implementation.
 
 This update prepares the first protected repeated campaign command. It does not
 authorize or claim execution of that campaign.
+
+## Stimulus-Fidelity Update (2026-07-16, no live run)
+
+| Path | Responsibility |
+| --- | --- |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py` | Adds BIN-derived `stimulus_fidelity.json` evaluation for nominal, slow drift, and hard denial. Nominal proves no post-trigger GPS fault parameter transitions, healthy GPS quality, nominal truth/belief gap, and no reset. Slow drift converts decoded `SIM_GPS1_GLTCH_X/Y` degree transitions back to metre offsets using trigger latitude and verifies realized vehicle-time slope against the requested rate with `max(0.03 m/s, 7.5%)` tolerance. Hard denial verifies `SIM_GPS1_ENABLE` disable/restore, GPS status/satellite degradation and recovery, and vehicle-time duration within `0.8 s`. Missing, malformed, non-finite, absent, or unanchored BIN evidence fails closed. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/analyzers.py` | Runs stimulus fidelity only after cleanup has selected and copied the attempt BIN, writes `stimulus_fidelity.json`, and propagates `stimulus_fidelity_status` / reason into the terminal behavior summary and manifest fields without merging it into behavior classification. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/monitor.py` | Emits a pre-cleanup placeholder `stimulus_fidelity.json` with fail/pending status so missing finalized BIN analysis cannot appear as a pass. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/defaults.py` and `analyzers.py` | Adds `stimulus_fidelity.json` to the required artifact set and schema/readiness contract. |
+| `tests/unit/test_gps_failure_phase1.py` and `tests/unit/test_gps_failure_phase2_path.py` | Synthetic decoded-record tests cover nominal pass/fail, slow-drift pass at `0.5 m/s`, the bad-dose `0.61 m/s` regression failure, missing PARM/anchor fail-closed paths, hard-denial pass, missing restore, no degradation, and required schema exposure. |
+
+This update does not rerun, edit, or rehabilitate any historical raw root. It
+does not mark the 2026-07-15 campaign as final science evidence.
+
+## Lifecycle-Window Update (2026-07-16, no live run)
+
+| Path | Responsibility |
+| --- | --- |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py` | Builds required `gps_lifecycle_windows.json` from post-cleanup BIN analysis plus live trigger/injection/terminal context. The artifact contains the ordered windows `pre_trigger_baseline`, `trigger`, `injection`, `fault_active`, `ekf_response`, `recovery_or_continuation`, and `terminal`, each with timing, source, status, summary, metrics, and evidence references. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/analyzers.py` | Persists the lifecycle artifact after the selected BIN is copied, records lifecycle status/reason in the behavior summary context, and requires lifecycle pass status for complete behavior measurements. Missing finalized BIN evidence writes a failing lifecycle artifact. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/monitor.py` | Emits a pre-cleanup fail/pending lifecycle placeholder and now includes trigger longitude from fresh SIMSTATE when available. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/defaults.py` and `analyzers.py` | Add `gps_lifecycle_windows.json` to the required artifact set and artifact schema/readiness contract. |
+| `tests/unit/test_gps_failure_phase2_path.py` | Adds no-live lifecycle coverage for required order/fields/source labels, missing baseline evidence, missing injection anchor, slow-drift monotonic growth, hard-denial recovery/reset evidence, and nominal stable/no-fault behavior. |
+
+Lifecycle windows are now the evidence authority for sequence and causality;
+`gps_behavior_summary.json` may summarize the outcome but does not replace the
+window artifact.
+
+## Hard-Denial Transient Visibility Update (2026-07-16, no live run)
+
+| Path | Responsibility |
+| --- | --- |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py` | Adds a top-level `hard_denial_transient` section to `gps_lifecycle_windows.json`. Hard-denial attempts now expose denial start/end, restore event, GPS status/satellites before/during/after, reset event times and offsets, full post-trigger max truth-vs-belief gap, active-segment gap summary, and explicit sample-scope labels. Reset-segmented truth-vs-belief `samples` remain the classifier input; full-window gap summary is additive so the denial/reset snap cannot disappear behind the post-reset active segment. Missing reset details fail the transient section closed. Non-hard-denial cases mark the section `not_applicable`. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/analyzers.py` | Mirrors `hard_denial_transient` into `gps_behavior_summary.json` after cleanup-finalized BIN analysis and adds the field to schema validation. |
+| `tests/unit/test_gps_failure_phase2_path.py` | Adds synthetic regression coverage where a large pre-reset gap is top-level visible while active post-reset samples stay small, plus reset-event missing-offset fail-closed coverage and sample-scope labels. |
+
+This update changes artifact interpretation only. It does not run live SITL,
+does not claim a hard-denial result, and does not remove reset segmentation.
+
+## Three-Verdict Manifest Update (2026-07-16, no live run)
+
+| Path | Responsibility |
+| --- | --- |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/manifest.py` | Defines `workflow_complete_from_attempt`, `accepted_observation_from_attempt`, and `accepted_repetition_from_attempt`. GPS `accepted_count` now counts accepted repetitions for scheduler targets, not behavior observations. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/analyzers.py` | Persists `workflow_status`, `stimulus_fidelity_status`, `behavior_status`, `accepted_observation`, and `accepted_repetition` in final terminal rows after cleanup-finalized BIN analysis. |
+| `src/sim_ard_gaw/campaigns/test_suite/core/manifest.py` | Carries the three status fields and both acceptance booleans through the generic manifest view. |
+| `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` and `readiness.py` | Operator-facing live gates and plan/readiness output name accepted repetitions explicitly; protected round-robin counting remains workflow-complete physical-attempt counting. |
+| `tests/unit/test_gps_failure_phase1.py` and `tests/unit/test_gps_failure_phase2_path.py` | Cover the workflow/stimulus/behavior matrix, malformed `accepted_repetition`, generic manifest fields, GPS repetition counting, bad-dose non-repetition behavior, and CLI/campaign wording. |
+
+This update is a no-live contract correction. It does not create, curate, or
+rehabilitate live campaign evidence.
+
+## Altitude/Attitude Envelope Authority Update (2026-07-16, no live run)
+
+| Path | Responsibility |
+| --- | --- |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/monitor.py` | Pre-cleanup `attitude_altitude_envelope.json` is explicitly labeled `source=live_telemetry`, `evidence_quality=runtime_guard`, and `final_evidence_quality=false`; it preserves low-altitude, unexpected-disarm, roll, and pitch safety guard visibility. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py` | Adds BIN-derived envelope extraction from decoded `POS.RelHomeAlt` or `CTUN.Alt` achieved altitude and `ATT` attitude rows, records `source`, `altitude_source`, `attitude_source`, sampling limits, evidence quality, missing evidence, and live-vs-BIN comparison tolerances. Absolute `POS.Alt`, desired `CTUN.DAlt`, missing BIN sources, or BIN/live disagreement fail closed. |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/analyzers.py` | Post-cleanup analysis rewrites the envelope artifact from the selected attempt BIN, requires a passing final envelope for behavior-measurement completeness, and keeps the envelope separate from the mechanism/truth-vs-belief behavior classifier. |
+| `tests/unit/test_gps_failure_phase2_path.py` | Adds no-live coverage for live-only, BIN-only, hybrid/missing-axis, BIN/live mismatch, and missing-source envelope artifacts. |
+
+This update changes artifact authority and reviewability only. Live telemetry
+remains a runtime guard; final evidence prefers BIN values and never silently
+chooses between disagreeing sources.
+
+## Phase H Validation Rerun Readiness (2026-07-16, no live run)
+
+| Path | Responsibility |
+| --- | --- |
+| `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/readiness.py` | Adds the Phase H no-live gate report for vehicle-time scheduling, BIN stimulus fidelity, three-verdict manifest semantics, lifecycle-window artifact authority, hard-denial transient visibility, source-proof labeling, and altitude/attitude source authority. A missing or malformed proof blocks the gate. |
+| `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | Adds `--phase2-validation-rerun-plan` and a guarded `--live-phase2-validation-rerun --confirm-live-phase2 --confirm-validation-rerun` path. The live action uses the protected three-case set, one workflow run per case, zero automatic retries, and writes a contract that stops on workflow, stimulus fidelity, lifecycle-window, raw-log archival, cleanup, contract-drift, or operator-interrupt failure. |
+| `docs/operations/gps_failure_runbook.md` and `docs/architecture/gps_failure_lane.md` | Document the tiny protected validation rerun as the next live step only after no-live gates and operator authorization; the large/default science campaign remains unapproved. |
+| `tests/unit/test_gps_failure_readiness.py` and `tests/unit/test_gps_failure_phase2_path.py` | Cover fail-closed Phase H proof gates, the exact validation case set, one run per case, zero retries, strict stop rules, and confirmation guards. |
+
+This update does not run live SITL and does not authorize a full GPS science
+campaign. The validation rerun is framework validation only.
 
 ## Pre-Smoke Strict-Review Remediation (2026-07-13, no live run)
 
@@ -147,8 +227,9 @@ The implementation was then hardened without starting SITL, Gazebo, or MAVLink:
   immediately.
 - GPS JSON writes use `allow_nan=False`, fsync, and atomic replace; telemetry
   normalizes non-finite fields to `None`. The source contract checks all five
-  pinned source enums and the exact checked-in knee values. A real connection
-  factory must receive a heartbeat; an explicit heartbeat timeout is fatal.
+  pinned source enums and checked-in knee values as configuration proof, not as
+  a directly logged EKF source signal. A real connection factory must receive a
+  heartbeat; an explicit heartbeat timeout is fatal.
 
 This is implementation remediation only; it does not accept Phase 2. A fresh
 strict no-live review on 2026-07-14 found no remaining BLOCKER or HIGH finding
@@ -279,12 +360,22 @@ takeoff completion and seq 3, East displacement is monotonic, waypoint distance
 falls from about 180 m to less than 1 m, north span is 3.7 m, and maximum
 absolute roll is 2.1 degrees. The earlier raw nominal remains tied to v2.
 
-Mission v4 subsequently enlarges the fault-test envelope while preserving the
-validated settle and lifecycle contracts: seq 4/5/6 are 2500 m East, seq 5–8
-are 500 m North, and both measurement legs are 2000 m. Structural tests check
-the 500 m settle, 2000 m legs, and 500 m lane spacing. Active mission SHA-256 is
-`8d1c8de43c6e496946b1f6bdf3d88f4aa14cd3ba7abe84067cb6a4edd27d7f35`.
-No v4 live result is claimed.
+Mission v4 subsequently enlarged the workflow-validation envelope while
+preserving the validated settle and lifecycle contracts: seq 4/5/6 were 2500 m
+East, seq 5–8 were 500 m North, and both measurement legs were 2000 m. On
+2026-07-16, operator authorization replaced v4 with mission v5 for final science
+design: seq 3 is 1000 m East, seq 4 is 13000 m East, seq 5/6 are 15000 m East,
+seq 7 is 15500 m East, and seq 8 is 16000 m East before seq-9 RTL. V5 was then
+shortened into mission v6 after the validation slice showed the workflow worked
+but the mission was operationally slow. V6 preserves the seq-4 trigger and 30 s
+loiter while setting seq 4 at 7000 m East, seq 5/6 at 8000 m East, seq 7 at
+8500 m East, and seq 8 at 9000 m East before seq-9 RTL. Structural tests check
+the 1000 m baseline, 6000 m straight fault-observation leg, 1000 m
+recovery/continuation segment, 30 s terminal loiter, and enough observation time
+for `slow_drift_0p2_mps` to accumulate more than 75 m at the commanded 15 m/s
+speed. Active mission SHA-256 is
+`ba22c669c895f694e8556e0e9573e9f9dd278d159086e46706eb30a3714d7261`.
+No v6 live result or final science evidence is claimed.
 
 ## Current No-SITL Semantics
 

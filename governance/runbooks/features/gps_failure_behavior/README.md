@@ -71,7 +71,7 @@ through live Phase-2 measurement.
 
 | Path | Purpose |
 | --- | --- |
-| `assets/missions/gps_failure_behavior_mission.waypoints` | Bounded 2000 m outbound/reciprocal mission with 500 m spacing, seq-4 inject, seq-9 RTL |
+| `assets/missions/gps_failure_behavior_mission.waypoints` | GPS-owned v6 shorter final-science mission: 1000 m baseline, seq-4 inject, 6000 m straight fault-observation leg, 1000 m recovery/continuation, 30 s loiter, seq-9 RTL |
 | `assets/worlds/mini_talon_gps_runway.sdf` | Calm sensor-neutral GPS world with east-facing pose aligned to the mission |
 | `config/vehicles/plane_base.parm` | Base vehicle parameters |
 | `config/overlays/plane_gps.parm` | GPS overlay pinning `EK3_POS_I_GATE`, `EK3_GLITCH_RAD`, `FS_EKF_THRESH`, `EK3_GPS_CHECK`, `EK3_SRC*`, calm wind |
