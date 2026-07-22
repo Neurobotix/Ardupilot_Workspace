@@ -175,7 +175,7 @@ class GpsPluginTargetDefaultsTests(unittest.TestCase):
         self.assertEqual("gazebo-plane-gps", stack["gazebo_target"])
         self.assertTrue(stack["local_override_excluded"])
         self.assertTrue(stack["airspeed_overlay_excluded"])
-        self.assertFalse(report["ready_for_live_run"])
+        self.assertTrue(report["ready_for_live_run"])
         # The effective stack is exactly base -> gps overlay.
         effective = stack["effective_param_stack"]
         self.assertEqual(2, len(effective))

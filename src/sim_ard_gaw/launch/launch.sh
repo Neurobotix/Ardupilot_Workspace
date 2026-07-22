@@ -339,8 +339,13 @@ build_plane_gps_param_args() {
 
 build_sitl_runtime_args() {
     local target="$1"
-    local run_dir="$WORKSPACE_DIR/var/runs/sitl/$target"
+    local default_run_dir="$WORKSPACE_DIR/var/runs/sitl/$target"
+    local run_dir="${SIM_ARD_GAW_SITL_USE_DIR:-$default_run_dir}"
     local mavproxy_log_dir="$WORKSPACE_DIR/var/logs/mavproxy/$target"
+
+    if [ -n "${SIM_ARD_GAW_SITL_USE_DIR:-}" ]; then
+        mavproxy_log_dir="$run_dir"
+    fi
 
     mkdir -p "$run_dir" "$mavproxy_log_dir"
     SITL_RUNTIME_ARGS=(

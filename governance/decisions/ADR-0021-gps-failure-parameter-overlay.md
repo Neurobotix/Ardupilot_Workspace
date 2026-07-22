@@ -68,9 +68,9 @@ Decision (execution-path correction):
   unconditionally (it is never appended), because it could silently perturb the
   four governed knee params. The launcher prints the effective stack and prints
   that the local override was intentionally excluded. The lane wipes EEPROM for
-  clean per-attempt state, uses its own `var/runs/sitl/plane-gps` runtime dir
-  and `plane-gps` MAVProxy/log identity, and emits the governed local output
-  `udp:127.0.0.1:14551`.
+  clean per-attempt state and emits the governed local output
+  `udp:127.0.0.1:14551`; GPS campaign runs place SITL/MAVProxy state under the
+  campaign root at `<campaign_root>/_sitl_state/<case_id>/attempt_NNN/`.
 - The launcher uses a dedicated `build_plane_gps_param_args()` helper rather
   than the shared `build_plane_param_args()` (which always appends the local
   override), so no existing target's historical override behavior changes.

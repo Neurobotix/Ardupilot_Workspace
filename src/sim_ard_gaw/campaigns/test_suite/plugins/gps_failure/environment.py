@@ -69,9 +69,18 @@ class GpsLaunchPlan:
 
 def build_launch_plan(ctx: AttemptContext) -> GpsLaunchPlan:
     runtime_root = ctx.attempt_dir / "runtime"
-    sitl_state_dir = defaults.VAR_ROOT / "runs" / "sitl" / defaults.SITL_TARGET
+    sitl_state_dir = defaults.sitl_state_dir(
+        ctx.campaign_root,
+        ctx.case.case_id,
+        ctx.attempt_index,
+    )
     return GpsLaunchPlan(
-        sitl_command=[str(defaults.WORKSPACE_ROOT / "scripts" / "ops" / "launch.sh"), defaults.SITL_TARGET],
+        sitl_command=[
+            "env",
+            f"SIM_ARD_GAW_SITL_USE_DIR={sitl_state_dir}",
+            str(defaults.WORKSPACE_ROOT / "scripts" / "ops" / "launch.sh"),
+            defaults.SITL_TARGET,
+        ],
         gazebo_command=[
             str(defaults.WORKSPACE_ROOT / "scripts" / "ops" / "launch.sh"),
             defaults.GAZEBO_TARGET,
@@ -112,6 +121,9 @@ class GpsFailureEnvironment(EnvironmentAdapter):
         if plan.runtime_root.exists():
             shutil.rmtree(plan.runtime_root)
         plan.runtime_root.mkdir(parents=True, exist_ok=True)
+        if plan.sitl_state_dir.exists():
+            shutil.rmtree(plan.sitl_state_dir)
+        plan.sitl_state_dir.mkdir(parents=True, exist_ok=True)
         ctx.extra["gps_before_bin_names"] = _bin_names(plan.expected_bin_dir)
         ctx.extra["gps_launch_plan"] = plan.as_dict()
         gazebo_log = ctx.attempt_dir / "gazebo_plane_gps.log"
