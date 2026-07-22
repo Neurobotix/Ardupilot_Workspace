@@ -1,10 +1,9 @@
 """Phase-1 integration-readiness report for the gps_failure lane.
 
-Chunk 6 proves the GPS lane is wired into the shared suite path far enough to
-run — without launching SITL/Gazebo and without any evidence claim. The report
-is a deterministic, no-SITL snapshot of what a suite run *would* schedule: the
-full case catalog, the manifest/artifact contract, the effective parameter
-stack, and the explicit live-run blockers that still gate Phase 2.
+Chunk 6 originally proved the GPS lane was wired into the shared suite path
+without launching SITL/Gazebo. The report remains deterministic and no-live: it
+shows what a suite run would schedule, the manifest/artifact contract, the
+effective parameter stack, and the current protected-live readiness gates.
 
 Nothing here opens a MAVLink connection, starts a stack, or reads a BIN log.
 """
@@ -46,6 +45,146 @@ LIVE_BLOCKERS: tuple[dict[str, str], ...] = (
     },
 )
 
+PHASE_H_GATE_ORDER = (
+    "vehicle_time_scheduling",
+    "bin_stimulus_fidelity",
+    "three_verdict_manifest",
+    "lifecycle_window_artifact",
+    "hard_denial_transient_visibility",
+    "source_proof_label",
+    "altitude_attitude_authority",
+)
+
+PHASE_H_GATE_PROOFS: dict[str, dict[str, Any]] = {
+    "vehicle_time_scheduling": {
+        "status": "satisfied",
+        "label": "vehicle-time scheduling gate",
+        "proof_refs": [
+            "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/monitor.py",
+            "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/stimulus.py",
+            "tests/unit/test_gps_failure_phase2_path.py",
+            "docs/operations/gps_failure_runbook.md",
+        ],
+        "proof_summary": (
+            "Physical slow-drift scheduling uses MAVLink vehicle time_boot_ms "
+            "elapsed from the seq-4 trigger and fails closed when vehicle time "
+            "is missing or stale."
+        ),
+    },
+    "bin_stimulus_fidelity": {
+        "status": "satisfied",
+        "label": "BIN stimulus fidelity gate",
+        "proof_refs": [
+            "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py",
+            "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/analyzers.py",
+            "tests/unit/test_gps_failure_phase2_path.py",
+        ],
+        "proof_summary": (
+            "Post-cleanup BIN analysis writes stimulus_fidelity.json and "
+            "fails missing, malformed, unanchored, or physically wrong dose "
+            "evidence closed."
+        ),
+    },
+    "three_verdict_manifest": {
+        "status": "satisfied",
+        "label": "three-verdict manifest gate",
+        "proof_refs": [
+            "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/manifest.py",
+            "src/sim_ard_gaw/campaigns/test_suite/core/manifest.py",
+            "tests/unit/test_gps_failure_phase1.py",
+            "tests/unit/test_gps_failure_phase2_path.py",
+        ],
+        "proof_summary": (
+            "Terminal rows keep workflow_status, stimulus_fidelity_status, "
+            "behavior_status, accepted_observation, and accepted_repetition "
+            "separate."
+        ),
+    },
+    "lifecycle_window_artifact": {
+        "status": "satisfied",
+        "label": "lifecycle-window artifact gate",
+        "proof_refs": [
+            "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py",
+            "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/analyzers.py",
+            "tests/unit/test_gps_failure_phase2_path.py",
+        ],
+        "proof_summary": (
+            "gps_lifecycle_windows.json is required and is the ordered evidence "
+            "authority for baseline, trigger, injection, fault-active, EKF "
+            "response, recovery/continuation, and terminal windows."
+        ),
+    },
+    "hard_denial_transient_visibility": {
+        "status": "satisfied",
+        "label": "hard-denial transient visibility gate",
+        "proof_refs": [
+            "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py",
+            "tests/unit/test_gps_failure_phase2_path.py",
+            "docs/architecture/gps_failure_lane.md",
+        ],
+        "proof_summary": (
+            "Hard-denial artifacts expose denial/restore timing, GPS quality, "
+            "reset offsets, full-window gap, and active post-reset gap summary."
+        ),
+    },
+    "source_proof_label": {
+        "status": "satisfied",
+        "label": "source-proof label gate",
+        "proof_refs": [
+            "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/source_contract.py",
+            "tests/unit/test_gps_failure_phase2_path.py",
+            "docs/architecture/gps_failure_lane.md",
+        ],
+        "proof_summary": (
+            "source_contract.json labels exact_internal_proof, "
+            "bin_observable_proof, and validated_proxy_proof without claiming "
+            "direct PV_AidingMode evidence."
+        ),
+    },
+    "altitude_attitude_authority": {
+        "status": "satisfied",
+        "label": "altitude/attitude authority gate",
+        "proof_refs": [
+            "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py",
+            "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/monitor.py",
+            "tests/unit/test_gps_failure_phase2_path.py",
+        ],
+        "proof_summary": (
+            "attitude_altitude_envelope.json declares live telemetry as runtime "
+            "guard and BIN/hybrid source authority after cleanup, failing "
+            "closed on missing sources or disagreement."
+        ),
+    },
+}
+
+PHASE_H_STOP_RULES: tuple[dict[str, str], ...] = (
+    {
+        "id": "workflow_failure",
+        "stop_on": "workflow failure",
+        "action": "stop the validation rerun immediately; preserve the terminal row",
+    },
+    {
+        "id": "stimulus_fidelity_failure",
+        "stop_on": "stimulus fidelity failure",
+        "action": "stop the validation rerun immediately; do not consume a repetition",
+    },
+    {
+        "id": "lifecycle_window_failure",
+        "stop_on": "lifecycle-window failure",
+        "action": "stop the validation rerun immediately; mark reviewability blocked",
+    },
+    {
+        "id": "raw_log_archival_failure",
+        "stop_on": "raw-log archival failure",
+        "action": "stop the validation rerun immediately; raw BIN proof is mandatory",
+    },
+    {
+        "id": "cleanup_failure",
+        "stop_on": "cleanup failure",
+        "action": "stop the validation rerun immediately; no later case may start",
+    },
+)
+
 
 def build_readiness_report(
     plugin: GpsFailurePlugin | None = None,
@@ -62,6 +201,9 @@ def build_readiness_report(
     config = plugin.config
 
     cases = list(plugin.case_generator.iter_cases())
+    phase_h_gates = build_phase_h_gate_report()
+    validation_plan = build_phase_h_validation_plan(phase_h_gates=phase_h_gates)
+    protected_live_ready = bool(validation_plan.get("live_command_available"))
     return {
         "phase": "phase1_no_sitl",
         "lane": defaults.LANE_NAME,
@@ -84,10 +226,108 @@ def build_readiness_report(
             "trigger_heartbeat_max_age_s": defaults.TRIGGER_HEARTBEAT_MAX_AGE_S,
             "trigger_simstate_max_age_s": defaults.TRIGGER_SIMSTATE_MAX_AGE_S,
             "terminal_success_requires_cleanup": True,
+            "stop_on_first_non_accepted_repetition": True,
             "stop_on_first_non_accepted_record": True,
         },
-        "live_blockers": [dict(item) for item in LIVE_BLOCKERS],
-        "ready_for_live_run": False,
+        "phase_h_no_live_gates": phase_h_gates,
+        "phase_h_validation_rerun": validation_plan,
+        "live_blockers": [] if protected_live_ready else [dict(item) for item in LIVE_BLOCKERS],
+        "ready_for_live_run": protected_live_ready,
+    }
+
+
+def build_phase_h_gate_report(
+    proofs: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Report the Phase H no-live gates and fail closed on missing proof."""
+    proof_map = proofs if proofs is not None else PHASE_H_GATE_PROOFS
+    gates: list[dict[str, Any]] = []
+    for gate_id in PHASE_H_GATE_ORDER:
+        proof = proof_map.get(gate_id)
+        if not isinstance(proof, dict):
+            gates.append(
+                {
+                    "id": gate_id,
+                    "label": gate_id.replace("_", " "),
+                    "status": "missing",
+                    "satisfied": False,
+                    "reason": "no explicit proof entry",
+                    "proof_refs": [],
+                }
+            )
+            continue
+        proof_refs = proof.get("proof_refs")
+        status = proof.get("status")
+        satisfied = (
+            status == "satisfied"
+            and isinstance(proof_refs, list)
+            and bool(proof_refs)
+            and all(isinstance(item, str) and item for item in proof_refs)
+        )
+        gates.append(
+            {
+                "id": gate_id,
+                "label": str(proof.get("label") or gate_id.replace("_", " ")),
+                "status": status if isinstance(status, str) else "malformed",
+                "satisfied": satisfied,
+                "reason": (
+                    "explicit no-live proof present"
+                    if satisfied
+                    else "explicit satisfied proof_refs are required"
+                ),
+                "proof_summary": proof.get("proof_summary"),
+                "proof_refs": list(proof_refs) if isinstance(proof_refs, list) else [],
+            }
+        )
+    missing_gate_ids = [gate["id"] for gate in gates if not gate["satisfied"]]
+    return {
+        "schema_version": "gps_failure.phase_h_no_live_gates.v1",
+        "all_gates_satisfied": not missing_gate_ids,
+        "status": "satisfied" if not missing_gate_ids else "blocked",
+        "missing_gate_ids": missing_gate_ids,
+        "gates": gates,
+    }
+
+
+def build_phase_h_validation_plan(
+    *,
+    phase_h_gates: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    gates = phase_h_gates if phase_h_gates is not None else build_phase_h_gate_report()
+    no_live_gates_satisfied = bool(gates.get("all_gates_satisfied"))
+    command = (
+        "PYTHONPATH=src ./env/bin/python3 -m "
+        "sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure "
+        "--live-phase2-validation-rerun --confirm-live-phase2 "
+        "--confirm-validation-rerun --mission-timeout 1800 "
+        '--campaign-root "$(pwd)/var/runs/'
+        'gps_failure_behavior_v6_single_run_validation_$(date -u +%Y%m%dT%H%M%SZ)"'
+    )
+    return {
+        "schema_version": "gps_failure.phase_h_validation_rerun_plan.v1",
+        "purpose": "validate the v6 shorter final-science mission workflow on the protected case set before the multi-run science campaign",
+        "case_ids": list(defaults.PHASE2_PROTECTED_CASE_IDS),
+        "runs_per_case": 1,
+        "total_physical_attempts": len(defaults.PHASE2_PROTECTED_CASE_IDS),
+        "automatic_retries": 0,
+        "retry_policy": (
+            "zero automatic retries; any rerun after failure requires a separate "
+            "explicit operator request"
+        ),
+        "round_robin": True,
+        "operator_authorization_required": True,
+        "no_live_gates_satisfied": no_live_gates_satisfied,
+        "live_command_available": no_live_gates_satisfied,
+        "operator_command": command if no_live_gates_satisfied else None,
+        "blocked_reason": None
+        if no_live_gates_satisfied
+        else "all Phase A-G no-live gate proofs must be explicit first",
+        "stop_rules": [dict(rule) for rule in PHASE_H_STOP_RULES],
+        "not_authorized_for": [
+            "full Phase 3 science campaign",
+            "large 5x3 round-robin by default",
+            "automatic retries after failures",
+        ],
     }
 
 

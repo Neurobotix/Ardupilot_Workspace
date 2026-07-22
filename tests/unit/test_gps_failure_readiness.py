@@ -31,7 +31,11 @@ from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.plugin import (  # noq
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.readiness import (  # noqa: E402
     LIVE_BLOCKERS,
+    PHASE_H_GATE_ORDER,
+    PHASE_H_GATE_PROOFS,
     build_readiness_report,
+    build_phase_h_gate_report,
+    build_phase_h_validation_plan,
 )
 
 
@@ -39,12 +43,12 @@ class ReadinessReportTests(unittest.TestCase):
     def setUp(self) -> None:
         self.report = build_readiness_report()
 
-    def test_report_is_phase1_no_sitl_and_not_live_ready(self) -> None:
+    def test_report_is_no_live_preflight_but_protected_live_ready(self) -> None:
         self.assertEqual(self.report["phase"], "phase1_no_sitl")
         self.assertFalse(self.report["launch_stack"])
         self.assertFalse(self.report["launch_performed"])
         self.assertFalse(self.report["live_readback_performed"])
-        self.assertFalse(self.report["ready_for_live_run"])
+        self.assertTrue(self.report["ready_for_live_run"])
 
     def test_suite_path_exposes_every_suiterunner_seam(self) -> None:
         suite = self.report["suite_path"]
@@ -109,14 +113,13 @@ class ReadinessReportTests(unittest.TestCase):
         self.assertTrue(stack[0].endswith("plane_base.parm"))
         self.assertTrue(stack[1].endswith("plane_gps.parm"))
 
-    def test_live_blockers_cover_the_three_live_adapters(self) -> None:
-        blockers = self.report["live_blockers"]
-        components = {item["component"] for item in blockers}
-        self.assertIn("environment.GpsFailureEnvironment", components)
-        self.assertIn("control.GpsFailureMissionControl", components)
-        self.assertIn("monitor.GpsFailureMonitor", components)
-        self.assertNotIn("strict_review", components)
-        self.assertEqual(len(blockers), len(LIVE_BLOCKERS))
+    def test_live_blockers_are_cleared_when_phase_h_gates_are_satisfied(self) -> None:
+        self.assertEqual([], self.report["live_blockers"])
+        historical_components = {item["component"] for item in LIVE_BLOCKERS}
+        self.assertIn("environment.GpsFailureEnvironment", historical_components)
+        self.assertIn("control.GpsFailureMissionControl", historical_components)
+        self.assertIn("monitor.GpsFailureMonitor", historical_components)
+        self.assertNotIn("strict_review", historical_components)
 
     def test_phase2_report_exposes_strict_trigger_and_terminal_guards(self) -> None:
         smoke = self.report["phase2_protected_smoke"]
@@ -130,6 +133,75 @@ class ReadinessReportTests(unittest.TestCase):
         )
         self.assertTrue(smoke["terminal_success_requires_cleanup"])
         self.assertTrue(smoke["stop_on_first_non_accepted_record"])
+
+    def test_phase_h_gate_report_fails_until_every_gate_has_explicit_proof(self) -> None:
+        for missing_gate in PHASE_H_GATE_ORDER:
+            with self.subTest(missing_gate=missing_gate):
+                proofs = dict(PHASE_H_GATE_PROOFS)
+                proofs.pop(missing_gate)
+
+                report = build_phase_h_gate_report(proofs)
+
+                self.assertFalse(report["all_gates_satisfied"])
+                self.assertEqual("blocked", report["status"])
+                self.assertIn(missing_gate, report["missing_gate_ids"])
+
+    def test_phase_h_gate_report_requires_satisfied_status_and_refs(self) -> None:
+        proofs = {
+            gate_id: dict(proof)
+            for gate_id, proof in PHASE_H_GATE_PROOFS.items()
+        }
+        proofs["bin_stimulus_fidelity"]["proof_refs"] = []
+
+        report = build_phase_h_gate_report(proofs)
+
+        self.assertFalse(report["all_gates_satisfied"])
+        self.assertIn("bin_stimulus_fidelity", report["missing_gate_ids"])
+
+    def test_phase_h_gate_report_passes_only_with_all_explicit_proofs(self) -> None:
+        gates = build_phase_h_gate_report()
+
+        self.assertTrue(gates["all_gates_satisfied"], gates)
+        self.assertEqual("satisfied", gates["status"])
+        self.assertEqual([], gates["missing_gate_ids"])
+        self.assertEqual(list(PHASE_H_GATE_ORDER), [gate["id"] for gate in gates["gates"]])
+
+    def test_validation_rerun_plan_is_tiny_and_stop_rules_are_serialized(self) -> None:
+        plan = self.report["phase_h_validation_rerun"]
+
+        self.assertEqual(
+            ["nominal", "slow_drift_0p5_mps", "hard_denial_15s"],
+            plan["case_ids"],
+        )
+        self.assertEqual(1, plan["runs_per_case"])
+        self.assertEqual(3, plan["total_physical_attempts"])
+        self.assertEqual(0, plan["automatic_retries"])
+        self.assertTrue(plan["no_live_gates_satisfied"])
+        self.assertTrue(plan["operator_authorization_required"])
+        self.assertIn("--live-phase2-validation-rerun", plan["operator_command"])
+        self.assertIn("--mission-timeout 1800", plan["operator_command"])
+        self.assertIn("gps_failure_behavior_v6_single_run_validation_", plan["operator_command"])
+        self.assertIn("v6 shorter final-science mission", plan["purpose"])
+        stop_ids = {rule["id"] for rule in plan["stop_rules"]}
+        self.assertEqual(
+            {
+                "workflow_failure",
+                "stimulus_fidelity_failure",
+                "lifecycle_window_failure",
+                "raw_log_archival_failure",
+                "cleanup_failure",
+            },
+            stop_ids,
+        )
+
+    def test_validation_rerun_plan_hides_command_when_gates_are_blocked(self) -> None:
+        gates = build_phase_h_gate_report({})
+        plan = build_phase_h_validation_plan(phase_h_gates=gates)
+
+        self.assertFalse(plan["no_live_gates_satisfied"])
+        self.assertFalse(plan["live_command_available"])
+        self.assertIsNone(plan["operator_command"])
+        self.assertIn("all Phase A-G no-live gate proofs", plan["blocked_reason"])
 
     def test_report_built_from_registry_plugin_is_consistent(self) -> None:
         registry_plugin = cast(GpsFailurePlugin, PLUGINS["gps_failure"]())
@@ -177,8 +249,22 @@ class ReadinessCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
         self.assertEqual(report["phase"], "phase1_no_sitl")
-        self.assertFalse(report["ready_for_live_run"])
+        self.assertTrue(report["ready_for_live_run"])
         self.assertEqual(report["suite_path"]["registry_key"], "gps_failure")
+        self.assertTrue(report["phase_h_no_live_gates"]["all_gates_satisfied"])
+        self.assertEqual(1, report["phase_h_validation_rerun"]["runs_per_case"])
+
+    def test_validation_rerun_plan_cli_emits_exact_protected_plan(self) -> None:
+        result = self._run_cli("--phase2-validation-rerun-plan")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual(
+            ["nominal", "slow_drift_0p5_mps", "hard_denial_15s"],
+            plan["case_ids"],
+        )
+        self.assertEqual(1, plan["runs_per_case"])
+        self.assertEqual(0, plan["automatic_retries"])
+        self.assertNotIn("phase3", json.dumps(plan).lower())
 
     def test_preflight_is_mutually_exclusive_with_other_actions(self) -> None:
         result = self._run_cli("--preflight", "--list-cases")

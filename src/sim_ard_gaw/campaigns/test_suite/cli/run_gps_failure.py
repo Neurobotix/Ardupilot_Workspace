@@ -15,13 +15,20 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, cast
 
 from ...provenance import file_provenance, parameter_file_provenance, source_tree_snapshot
-from ..core.models import AttemptRecord, AttemptStatus, VerdictClass
+from ..core.manifest import attempt_record_to_generic_fields
+from ..core.models import AttemptRecord
 from ..plugins.gps_failure import build_plugin
 from ..plugins.gps_failure import defaults, glitch
 from ..plugins.gps_failure.case_generator import GpsFailureCaseGenerator
 from ..plugins.gps_failure.config import GpsFailureConfig
-from ..plugins.gps_failure.manifest import workflow_complete_from_attempt
+from ..plugins.gps_failure.manifest import (
+    accepted_observation_from_attempt,
+    accepted_repetition_from_attempt,
+    workflow_complete_from_attempt,
+)
 from ..plugins.gps_failure.readiness import build_readiness_report
+from ..plugins.gps_failure.readiness import build_phase_h_gate_report
+from ..plugins.gps_failure.readiness import build_phase_h_validation_plan
 from ..plugins.gps_failure.stimulus import build_injection_artifact
 
 
@@ -33,7 +40,9 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     actions.add_argument("--probe-schema", action="store_true")
     actions.add_argument("--preflight", action="store_true")
     actions.add_argument("--phase2-smoke-plan", action="store_true")
+    actions.add_argument("--phase2-validation-rerun-plan", action="store_true")
     actions.add_argument("--live-phase2-smoke", action="store_true")
+    actions.add_argument("--live-phase2-validation-rerun", action="store_true")
     actions.add_argument("--live-phase2-round-robin-campaign", action="store_true")
     actions.add_argument("--live-case", dest="live_case_id")
     parser.add_argument("--case", dest="case_id")
@@ -45,16 +54,17 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         default=defaults.PHASE2_MONITOR_TIMEOUT_S,
     )
     parser.add_argument("--confirm-live-phase2", action="store_true")
+    parser.add_argument("--confirm-validation-rerun", action="store_true")
     parser.add_argument("--confirm-live-campaign", action="store_true")
     parser.add_argument(
         "--campaign-cases",
         default=",".join(defaults.PHASE2_PROTECTED_CASE_IDS),
         help=(
-            "Comma-separated protected GPS case IDs for the live round-robin "
+            "Comma-separated non-jamming GPS case IDs for the live round-robin "
             "campaign. Defaults to the protected Phase-2 qualification set."
         ),
     )
-    parser.add_argument("--runs-per-case", type=int, default=5)
+    parser.add_argument("--runs-per-case", type=int, default=1)
     parser.add_argument("--inter-attempt-delay", type=float, default=2.0)
     parser.add_argument(
         "--no-force-arm",
@@ -70,11 +80,17 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         parser.error("--case is only valid with --dry-run")
     live_requested = (
         args.live_phase2_smoke
+        or args.live_phase2_validation_rerun
         or args.live_phase2_round_robin_campaign
         or args.live_case_id
     )
     if live_requested and not args.confirm_live_phase2:
         parser.error("live Phase 2 GPS runs require --confirm-live-phase2")
+    if args.live_phase2_validation_rerun and not args.confirm_validation_rerun:
+        parser.error(
+            "Phase H validation rerun requires --confirm-validation-rerun in "
+            "addition to --confirm-live-phase2"
+        )
     if args.live_phase2_round_robin_campaign and not args.confirm_live_campaign:
         parser.error(
             "live GPS campaigns require --confirm-live-campaign in addition to "
@@ -87,7 +103,7 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         )
     args.campaign_cases = _parse_campaign_cases(parser, args.campaign_cases)
     if not args.live_phase2_round_robin_campaign:
-        if args.runs_per_case != 5:
+        if args.runs_per_case != 1:
             parser.error("--runs-per-case is only valid with --live-phase2-round-robin-campaign")
         if args.inter_attempt_delay != 2.0:
             parser.error(
@@ -101,11 +117,11 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     unsupported_campaign_cases = [
         case_id
         for case_id in args.campaign_cases
-        if case_id not in defaults.PHASE2_PROTECTED_CASE_IDS
+        if case_id not in defaults.PHASE2_NON_JAMMING_CAMPAIGN_CASE_IDS
     ]
     if unsupported_campaign_cases:
         parser.error(
-            "--campaign-cases is restricted to protected Phase 2 cases: "
+            "--campaign-cases is restricted to non-jamming GPS campaign cases: "
             + ", ".join(unsupported_campaign_cases)
         )
     if args.reference_latitude_deg is not None and not args.dry_run:
@@ -157,6 +173,7 @@ def _config_from_args(args: argparse.Namespace) -> GpsFailureConfig:
         mavlink_addr=args.mavlink,
         launch_stack=bool(
             args.live_phase2_smoke
+            or args.live_phase2_validation_rerun
             or args.live_phase2_round_robin_campaign
             or args.live_case_id
         ),
@@ -208,7 +225,7 @@ def main(argv: Iterable[str] | None = None) -> None:
                     "force_arm_default": True,
                     "force_arm_disable_flag": "--no-force-arm",
                     "terminal_success_requires_cleanup": True,
-                    "stop_on_first_non_accepted_record": True,
+                    "stop_on_first_non_accepted_repetition": True,
                     "protected_case_ids": list(defaults.PHASE2_PROTECTED_CASE_IDS),
                     "cases": {
                         case_id: {
@@ -237,11 +254,39 @@ def main(argv: Iterable[str] | None = None) -> None:
         )
         return
 
+    if args.phase2_validation_rerun_plan:
+        print(
+            json.dumps(
+                build_phase_h_validation_plan(),
+                indent=2,
+                sort_keys=True,
+                allow_nan=False,
+            )
+        )
+        return
+
     if args.live_phase2_smoke:
         run_live_cases(
             config,
             list(defaults.PHASE2_PROTECTED_CASE_IDS),
             title="GPS Failure Behavior - Phase 2 protected live smoke",
+        )
+        return
+
+    if args.live_phase2_validation_rerun:
+        gates = build_phase_h_gate_report()
+        if not gates["all_gates_satisfied"]:
+            raise SystemExit(
+                "ERROR: Phase H validation rerun blocked by missing no-live gates: "
+                + ", ".join(gates["missing_gate_ids"])
+            )
+        run_live_round_robin_campaign(
+            config,
+            list(defaults.PHASE2_PROTECTED_CASE_IDS),
+            runs_per_case=1,
+            inter_attempt_delay_s=args.inter_attempt_delay,
+            title="GPS Failure Behavior - Phase H protected validation rerun",
+            campaign_mode="phase_h_validation_rerun",
         )
         return
 
@@ -252,6 +297,7 @@ def main(argv: Iterable[str] | None = None) -> None:
             runs_per_case=args.runs_per_case,
             inter_attempt_delay_s=args.inter_attempt_delay,
             title="GPS Failure Behavior - Phase 2 protected round-robin campaign",
+            campaign_mode="round_robin",
         )
         return
 
@@ -342,7 +388,7 @@ def run_live_cases(
         )
         if not _accepted_live_record(record):
             raise SystemExit(
-                "ERROR: GPS live case stopped after non-accepted terminal record: "
+                "ERROR: GPS live case stopped after non-accepted repetition: "
                 f"case={case_id} status={record.status.value} "
                 f"verdict={record.verdict.reason if record.verdict else 'missing'}"
             )
@@ -351,13 +397,7 @@ def run_live_cases(
 
 
 def _accepted_live_record(record: AttemptRecord) -> bool:
-    verdict = record.verdict
-    return bool(
-        record.status is AttemptStatus.SUCCESS
-        and verdict is not None
-        and verdict.klass is VerdictClass.SUCCESS
-        and verdict.metadata.get("accepted_observation") is True
-    )
+    return accepted_repetition_from_attempt(_record_manifest_fields(record))
 
 
 def run_live_round_robin_campaign(
@@ -367,15 +407,16 @@ def run_live_round_robin_campaign(
     runs_per_case: int,
     inter_attempt_delay_s: float,
     title: str,
+    campaign_mode: str = "round_robin",
 ) -> None:
     unsupported = [
         case_id
         for case_id in case_ids
-        if case_id not in defaults.PHASE2_PROTECTED_CASE_IDS
+        if case_id not in defaults.PHASE2_NON_JAMMING_CAMPAIGN_CASE_IDS
     ]
     if unsupported:
         raise SystemExit(
-            "ERROR: live GPS campaigns are restricted to protected Phase 2 cases: "
+            "ERROR: live GPS campaigns are restricted to non-jamming GPS campaign cases: "
             + ", ".join(unsupported)
         )
     plugin = build_plugin(config)
@@ -391,7 +432,9 @@ def run_live_round_robin_campaign(
     defaults.log(f"  Workflow runs/case: {runs_per_case}")
     defaults.log("  Ordering          : true round robin")
     defaults.log("  Retry policy      : zero automatic retries")
-    defaults.log("  Stop rule         : stop on workflow/cleanup/raw-log failure")
+    defaults.log(
+        "  Stop rule         : stop on workflow/stimulus/lifecycle/raw-log/cleanup failure"
+    )
     defaults.log("  Raw output only; no curated evidence promotion")
     defaults.log("=" * 60)
 
@@ -401,6 +444,7 @@ def run_live_round_robin_campaign(
         case_ids=case_ids,
         runs_per_case=runs_per_case,
         inter_attempt_delay_s=inter_attempt_delay_s,
+        campaign_mode=campaign_mode,
     )
 
     round_index = 0
@@ -433,7 +477,7 @@ def run_live_round_robin_campaign(
                 attempt_index=attempt_index,
                 attempt_dir=attempt_dir,
                 attempt_metadata={
-                    "campaign_mode": "round_robin",
+                    "campaign_mode": campaign_mode,
                     "campaign_round_index": round_index,
                     "workflow_target_runs": runs_per_case,
                 },
@@ -448,21 +492,30 @@ def run_live_round_robin_campaign(
                 )
             if not _accepted_live_record(record):
                 defaults.log(
-                    "[gps_campaign] analysis did not accept observation; "
-                    "workflow run is preserved and campaign continues: "
+                    "[gps_campaign] accepted repetition not recorded; workflow "
+                    "run is preserved and campaign continues: "
                     f"case={case.case_id} verdict="
-                    f"{record.verdict.reason if record.verdict else 'missing'}"
+                    f"{record.verdict.reason if record.verdict else 'missing'} "
+                    f"accepted_observation="
+                    f"{accepted_observation_from_attempt(_record_manifest_fields(record))} "
+                    f"stimulus_fidelity_status="
+                    f"{record.plugin_manifest_fields.get('stimulus_fidelity_status')}"
                 )
             if inter_attempt_delay_s > 0:
                 time.sleep(inter_attempt_delay_s)
 
 
 def _workflow_complete_live_record(record: AttemptRecord) -> bool:
-    fields = dict(record.plugin_manifest_fields)
+    return workflow_complete_from_attempt(_record_manifest_fields(record))
+
+
+def _record_manifest_fields(record: AttemptRecord) -> dict[str, Any]:
+    fields = attempt_record_to_generic_fields(record)
+    fields.update(record.plugin_manifest_fields)
     fields.setdefault("case_id", record.case_id)
     fields.setdefault("status", record.status.value)
     fields.setdefault("artifacts", dict(record.artifacts))
-    return workflow_complete_from_attempt(fields)
+    return fields
 
 
 def _workflow_complete_count(plugin: Any, case: Any) -> int:
@@ -479,6 +532,7 @@ def _write_campaign_contract(
     case_ids: list[str],
     runs_per_case: int,
     inter_attempt_delay_s: float,
+    campaign_mode: str = "round_robin",
 ) -> None:
     contract_path = config.campaign_root / "campaign_contract.json"
     payload = _campaign_contract_payload(
@@ -486,6 +540,7 @@ def _write_campaign_contract(
         case_ids=case_ids,
         runs_per_case=runs_per_case,
         inter_attempt_delay_s=inter_attempt_delay_s,
+        campaign_mode=campaign_mode,
     )
     if contract_path.exists():
         existing = defaults.read_json(contract_path)
@@ -507,6 +562,7 @@ def _campaign_contract_payload(
     case_ids: list[str],
     runs_per_case: int,
     inter_attempt_delay_s: float,
+    campaign_mode: str = "round_robin",
 ) -> dict[str, Any]:
     plugin_file = defaults.WORKSPACE_GAZEBO_PLUGIN_FILE
     return {
@@ -514,20 +570,26 @@ def _campaign_contract_payload(
         "created_at_utc": defaults.utc_now(),
         "campaign_root": str(config.campaign_root),
         "suite_name": defaults.SUITE_NAME,
-        "campaign_mode": "round_robin",
+        "campaign_mode": campaign_mode,
         "case_ids": list(case_ids),
         "runs_per_case": runs_per_case,
+        "phase_h_validation_rerun": campaign_mode == "phase_h_validation_rerun",
         "inter_attempt_delay_s": inter_attempt_delay_s,
         "retry_policy": {
             "automatic_retries": 0,
             "failed_attempts_preserved": True,
+            "operator_must_request_retry_after_failure": True,
         },
         "counting_rule": (
-            "scheduler counts workflow-complete physical attempts; behavior "
-            "acceptance is recorded by post-cleanup analysis and does not "
-            "silently consume or erase workflow attempts"
+            "protected campaign scheduler counts workflow-complete physical "
+            "attempts; accepted_observation records behavior usefulness, and "
+            "accepted_repetition records workflow + stimulus fidelity + "
+            "behavior acceptance for the requested recipe"
         ),
         "stop_rules": [
+            "workflow failure",
+            "stimulus fidelity failure",
+            "lifecycle-window failure",
             "readiness/source/mission/trigger/injection failure",
             "restore/readback failure",
             "dirty cleanup or surviving simulator process",
