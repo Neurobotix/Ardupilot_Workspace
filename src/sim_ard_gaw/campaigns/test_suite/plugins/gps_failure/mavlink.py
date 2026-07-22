@@ -1061,9 +1061,10 @@ def _mission_item_int(
 
 def _mission_item_mismatches(got: Any, want: Any, mavutil: Any) -> list[str]:
     mismatches: list[str] = []
-    if int(got.command) != int(want.command):
-        mismatches.append(f"command {int(got.command)}!={int(want.command)}")
-    if int(want.command) == mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH:
+    command = int(want.command)
+    if int(got.command) != command:
+        mismatches.append(f"command {int(got.command)}!={command}")
+    if command == mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH:
         defaults.log(
             "  Mission verification: RTL row normalizes frame/position on download."
         )
@@ -1091,6 +1092,16 @@ def _mission_item_mismatches(got: Any, want: Any, mavutil: Any) -> list[str]:
     for index in (1, 2, 3, 4):
         got_param = float(getattr(got, f"param{index}"))
         want_param = float(getattr(want, f"param{index}"))
+        if (
+            command == mavutil.mavlink.MAV_CMD_NAV_LOITER_TIME
+            and index == 3
+        ):
+            # ArduPilot Plane stores NAV_LOITER_TIME param3 as loiter
+            # direction only, then downloads it as +/-1 instead of preserving
+            # the uploaded radius value. A mission-file value of 0 therefore
+            # round-trips as +1. Verify the real round-trip contract here while
+            # keeping strict checks for all other mission fields.
+            want_param = -1.0 if want_param < 0.0 else 1.0
         if abs(got_param - want_param) > 1e-3:
             mismatches.append(f"param{index} {got_param:.3f}!={want_param:.3f}")
     return mismatches

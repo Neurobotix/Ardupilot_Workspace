@@ -6,6 +6,7 @@ import math
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 
@@ -26,6 +27,7 @@ from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.config import (  # noq
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.mavlink import (  # noqa: E402
     ReadbackRule,
+    _mission_item_mismatches,
     compare_readbacks,
     preflight_batch,
     read_back_injected_parameters,
@@ -50,17 +52,21 @@ def _valid_trace(
     trigger_latitude_deg: float = 0.0,
     trigger_time_s: float = 100.0,
     elapsed_since_trigger_s: float = 90.0,
+    include_vehicle_elapsed_s: bool = True,
 ) -> list[dict[str, Any]]:
     """The live-observed armed/AUTO seq 1->3->4 trace that authorizes a plan."""
+    seq4 = {
+        **_fresh_trigger_event(4),
+        "trigger_latitude_deg": trigger_latitude_deg,
+        "trigger_time_s": trigger_time_s,
+        "elapsed_since_trigger_s": elapsed_since_trigger_s,
+    }
+    if include_vehicle_elapsed_s:
+        seq4["vehicle_elapsed_s"] = elapsed_since_trigger_s
     return [
         _fresh_trigger_event(1),
         _fresh_trigger_event(3),
-        {
-            **_fresh_trigger_event(4),
-            "trigger_latitude_deg": trigger_latitude_deg,
-            "trigger_time_s": trigger_time_s,
-            "elapsed_since_trigger_s": elapsed_since_trigger_s,
-        },
+        seq4,
     ]
 
 
@@ -130,6 +136,46 @@ class _ParamSetOnlyConnection:
         return None
 
 
+def _mission_item(
+    *,
+    command: int,
+    param1: float = 0.0,
+    param2: float = 0.0,
+    param3: float = 0.0,
+    param4: float = 0.0,
+    frame: int = 3,
+    current: int = 0,
+    autocontinue: int = 1,
+    x: int = -353632620,
+    y: int = 1493306550,
+    z: float = 100.0,
+    msg_type: str = "MISSION_ITEM_INT",
+) -> Any:
+    return SimpleNamespace(
+        command=command,
+        frame=frame,
+        current=current,
+        autocontinue=autocontinue,
+        param1=param1,
+        param2=param2,
+        param3=param3,
+        param4=param4,
+        x=x,
+        y=y,
+        z=z,
+        get_type=lambda: msg_type,
+    )
+
+
+_FAKE_MAVUTIL = SimpleNamespace(
+    mavlink=SimpleNamespace(
+        MAV_CMD_NAV_WAYPOINT=16,
+        MAV_CMD_NAV_LOITER_TIME=19,
+        MAV_CMD_NAV_RETURN_TO_LAUNCH=20,
+    )
+)
+
+
 def _case(case_id: str):
     return GpsFailureCaseGenerator(GpsFailureConfig()).get_case(case_id)
 
@@ -180,6 +226,44 @@ def _case_with_recipe(
 
 
 class GpsFailureMavlinkHelperTests(unittest.TestCase):
+    def test_mission_verification_accepts_loiter_time_param3_clockwise_normalization(
+        self,
+    ) -> None:
+        got = _mission_item(command=19, param1=30.0, param3=1.0)
+        want = _mission_item(command=19, param1=30.0, param3=0.0)
+
+        mismatches = _mission_item_mismatches(got, want, _FAKE_MAVUTIL)
+
+        self.assertEqual([], mismatches)
+
+    def test_mission_verification_accepts_loiter_time_param3_ccw_normalization(
+        self,
+    ) -> None:
+        got = _mission_item(command=19, param1=30.0, param3=-1.0)
+        want = _mission_item(command=19, param1=30.0, param3=-25.0)
+
+        mismatches = _mission_item_mismatches(got, want, _FAKE_MAVUTIL)
+
+        self.assertEqual([], mismatches)
+
+    def test_mission_verification_rejects_wrong_loiter_time_direction(self) -> None:
+        got = _mission_item(command=19, param1=30.0, param3=1.0)
+        want = _mission_item(command=19, param1=30.0, param3=-25.0)
+
+        mismatches = _mission_item_mismatches(got, want, _FAKE_MAVUTIL)
+
+        self.assertIn("param3 1.000!=-1.000", mismatches)
+
+    def test_mission_verification_still_rejects_waypoint_param3_mismatch(
+        self,
+    ) -> None:
+        got = _mission_item(command=16, param3=1.0)
+        want = _mission_item(command=16, param3=0.0)
+
+        mismatches = _mission_item_mismatches(got, want, _FAKE_MAVUTIL)
+
+        self.assertIn("param3 1.000!=0.000", mismatches)
+
     def test_set_and_read_one_parameter_succeeds_with_fake_connection(self) -> None:
         fake = _FakeParamConnection()
         write = set_one_parameter(fake, "SIM_GPS1_JAM", 1.0)
@@ -223,6 +307,27 @@ class GpsFailureMavlinkHelperTests(unittest.TestCase):
         self.assertTrue(result.success, result.as_dict())
         self.assertEqual([], result.missing_parameters)
         self.assertEqual([], result.tolerance_failures)
+
+    def test_glitch_readback_tolerance_covers_float_rounding_not_wrong_fault(self) -> None:
+        requested = 0.03128395716978321
+        float_rounded_readback = 0.03128395602107048
+        wrong_readback = requested + 2.0e-8
+        rules = readback_rules_for_payload({"SIM_GPS1_GLTCH_Y": requested})
+
+        self.assertEqual(1.0e-8, rules["SIM_GPS1_GLTCH_Y"].tolerance)
+
+        rounded_result = compare_readbacks(
+            rules,
+            {"SIM_GPS1_GLTCH_Y": float_rounded_readback},
+        )
+        wrong_result = compare_readbacks(
+            rules,
+            {"SIM_GPS1_GLTCH_Y": wrong_readback},
+        )
+
+        self.assertTrue(rounded_result.success, rounded_result.as_dict())
+        self.assertFalse(wrong_result.success, wrong_result.as_dict())
+        self.assertEqual("SIM_GPS1_GLTCH_Y", wrong_result.tolerance_failures[0].param)
 
     def test_readback_failure_when_missing(self) -> None:
         rules = readback_rules_for_payload({"SIM_GPS1_ENABLE": 0.0})
@@ -784,6 +889,26 @@ class GpsFailureTriggerAuthorizationTests(unittest.TestCase):
             plan.injection_payload,
         )
 
+    def test_authorized_slow_drift_requires_vehicle_elapsed_not_legacy_elapsed(self) -> None:
+        plan = build_authorized_injection_plan(
+            _case("slow_drift_0p5_mps"),
+            _valid_trace(
+                trigger_latitude_deg=0.0,
+                elapsed_since_trigger_s=90.0,
+                include_vehicle_elapsed_s=False,
+            ),
+        )
+
+        self.assertFalse(plan.ready_to_inject, plan.as_dict())
+        self.assertFalse(plan.execution_authorized)
+        self.assertEqual({}, plan.injection_payload)
+        self.assertIn("vehicle_elapsed_s", plan.failures[0]["detail"])
+        fake = _FakeParamConnection()
+        result = execute_injection_plan(plan, fake)
+        self.assertFalse(result.success)
+        self.assertEqual("plan_not_ready", result.reason)
+        self._assert_no_connection_calls(fake)
+
     def test_preview_step_glitch_and_slow_drift_cannot_execute(self) -> None:
         for case_id in ("step_glitch_100m", "slow_drift_0p5_mps"):
             with self.subTest(case_id=case_id):
@@ -1071,6 +1196,17 @@ class GpsFailureMalformedRecipeFailClosedTests(unittest.TestCase):
         )
         self.assertTrue(plan.ready_to_inject, plan.as_dict())
         self.assertEqual(glitch.slow_drift_payload(0.5, 90.0, 0.0), plan.injection_payload)
+
+    def test_accumulation_ramp_resolves_to_selected_max_rate_payload(self) -> None:
+        plan = build_authorized_injection_plan(
+            _case("slow_drift_accumulation_ramp"),
+            _valid_trace(trigger_latitude_deg=0.0, elapsed_since_trigger_s=90.0),
+        )
+
+        self.assertTrue(plan.ready_to_inject, plan.as_dict())
+        self.assertTrue(plan.execution_authorized, plan.as_dict())
+        self.assertEqual(glitch.slow_drift_payload(8.0, 90.0, 0.0), plan.injection_payload)
+        self.assertEqual(set(plan.injection_payload), set(plan.readback_rules))
 
     def test_valid_denial_and_jamming_restore_behavior_remains_correct(self) -> None:
         denial = build_live_injection_plan(_case("hard_denial_15s"), {})

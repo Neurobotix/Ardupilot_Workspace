@@ -61,8 +61,9 @@ class GpsFailureCaseGenerator(CaseGenerator):
                 "drift_rate_mps": float(rate_mps),
                 "axis": "east",
                 "glitch_params": ["SIM_GPS1_GLTCH_X", "SIM_GPS1_GLTCH_Y"],
-                "formula": "offset_m = drift_rate_mps * elapsed_since_trigger_s",
+                "formula": "offset_m = drift_rate_mps * vehicle_elapsed_s",
                 "example_elapsed_since_trigger_s": float(example_elapsed_s),
+                "example_elapsed_clock": "preview_elapsed_s",
                 "example_offset_m": float(rate_mps) * float(example_elapsed_s),
                 "example_resolved_payload": glitch.slow_drift_payload(
                     float(rate_mps),
@@ -76,6 +77,7 @@ class GpsFailureCaseGenerator(CaseGenerator):
         )
 
     def _slow_drift_accumulation_case(self) -> TestCase:
+        selected_rate_mps = max(float(rate) for rate in self._config.drift_rates_mps)
         return self._case(
             case_id="slow_drift_accumulation_ramp",
             fault_type="slow_drift",
@@ -88,12 +90,19 @@ class GpsFailureCaseGenerator(CaseGenerator):
                 "axis": "east",
                 "glitch_params": ["SIM_GPS1_GLTCH_X", "SIM_GPS1_GLTCH_Y"],
                 "drift_rates_mps": [float(rate) for rate in self._config.drift_rates_mps],
-                "formula": "offset_m = selected_drift_rate_mps * elapsed_since_trigger_s",
-                "schedule_status": "live schedule deferred; no-SITL recipe only",
+                "selected_drift_rate_mps": selected_rate_mps,
+                "drift_rate_mps": selected_rate_mps,
+                "formula": "offset_m = selected_drift_rate_mps * vehicle_elapsed_s",
+                "schedule_status": (
+                    "live payload scheduling uses MAVLink time_boot_ms vehicle time "
+                    "at the selected max drift rate"
+                ),
                 "continuous_ramp": True,
                 "in_flight_reset": False,
                 "fresh_flight_required": True,
-                "measurement_role": "accumulation/endurance, not independent knee points",
+                "measurement_role": (
+                    "maximum-rate accumulation/endurance, not independent knee points"
+                ),
                 "reset_policy": "continuous ramp, no reset inside the flight",
             },
             tags=("gps", "slow_drift", "accumulation", "no_sitl_phase1"),

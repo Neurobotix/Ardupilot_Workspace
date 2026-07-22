@@ -34,7 +34,7 @@ class TriggerEvidence:
     validated through the canonical monitor helper
     ``first_seq4_edge_after_armed_auto_front_half`` — never a second trigger
     definition. The seq-4 edge event also supplies the trigger-time latitude and
-    elapsed time used to resolve GLTCH degree payloads.
+    vehicle elapsed time used to resolve GLTCH degree payloads.
 
     Authorization is not a plain ``validated=True`` flag a caller can set: it is
     an internal token stamped only by the validator, and it is re-checked by
@@ -265,7 +265,11 @@ def _build_plan(
         # fault case is malformed public input and must fail closed; nominal
         # no-write cases do not require a trigger.
         trigger = _resolve_case_trigger(fault_type, case.parameters.get("trigger"))
-        injection_payload, restore_plan = _resolve_payload_and_restore(case, event)
+        injection_payload, restore_plan = _resolve_payload_and_restore(
+            case,
+            event,
+            preview_only=preview_only,
+        )
         readback_rules = readback_rules_for_payload(injection_payload)
     except ValueError as exc:
         failures.append({"reason": "plan_resolution_failed", "detail": str(exc)})
@@ -319,8 +323,8 @@ def build_authorized_injection_plan(
     observes. It is validated through :func:`validate_trigger_trace` (which uses
     the canonical monitor helper); only a validated trace authorizes execution.
     An invalid trace yields a not-ready, not-authorized plan and writes nothing.
-    The seq-4 edge event supplies the trigger-time latitude/elapsed time used to
-    resolve GLTCH degree payloads.
+    The seq-4 edge event supplies the trigger-time latitude and vehicle elapsed
+    time used to resolve GLTCH degree payloads.
     """
 
     evidence = validate_trigger_trace(trigger_trace)
@@ -433,6 +437,8 @@ def execute_restore_step(
 def _resolve_payload_and_restore(
     case: TestCase,
     trigger_event: Mapping[str, Any],
+    *,
+    preview_only: bool,
 ) -> tuple[dict[str, float], list[RestoreStep]]:
     fault_type = str(case.parameters.get("fault_type"))
     recipe = case.parameters.get("fault_recipe") or {}
@@ -444,7 +450,11 @@ def _resolve_payload_and_restore(
     if fault_type == "nominal":
         return {}, []
     if fault_type == "slow_drift":
-        payload = _resolve_slow_drift_payload(recipe, trigger_event)
+        payload = _resolve_slow_drift_payload(
+            recipe,
+            trigger_event,
+            preview_only=preview_only,
+        )
         return payload, []
     if fault_type == "step_glitch":
         payload = _resolve_step_glitch_payload(recipe, trigger_event)
@@ -473,17 +483,22 @@ def _resolve_payload_and_restore(
 def _resolve_slow_drift_payload(
     recipe: Mapping[str, Any],
     trigger_event: Mapping[str, Any],
+    *,
+    preview_only: bool,
 ) -> dict[str, float]:
     latitude_deg = _required_event_float(
         trigger_event,
         "trigger_latitude_deg",
         aliases=("latitude_deg", "lat_deg"),
     )
-    elapsed_s = _required_event_float(
-        trigger_event,
-        "elapsed_since_trigger_s",
-        aliases=("elapsed_s",),
-    )
+    if preview_only:
+        elapsed_s = _required_event_float(
+            trigger_event,
+            "vehicle_elapsed_s",
+            aliases=("elapsed_since_trigger_s", "elapsed_s"),
+        )
+    else:
+        elapsed_s = _required_event_float(trigger_event, "vehicle_elapsed_s")
     if "drift_rate_mps" in recipe:
         rate_mps = finite_float("drift_rate_mps", recipe["drift_rate_mps"])
     else:

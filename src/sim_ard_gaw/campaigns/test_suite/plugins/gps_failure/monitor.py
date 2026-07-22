@@ -1,7 +1,7 @@
 """Monitor metadata for gps_failure."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 import time
 from typing import Any, Iterable
@@ -52,10 +52,14 @@ class _LiveGpsMonitor:
         self.injection_attempted = False
         self.triggered = False
         self.injection_monotonic_s: float | None = None
+        self.injection_vehicle_time_boot_ms: float | None = None
         self.injection_result: dict[str, Any] | None = None
         self.restore_results: list[dict[str, Any]] = []
         self.ramp_update_results: list[dict[str, Any]] = []
         self.next_ramp_update_s = defaults.SLOW_DRIFT_UPDATE_PERIOD_S
+        self.latest_vehicle_time_boot_ms: float | None = None
+        self.latest_vehicle_time_arrival_s: float | None = None
+        self.latest_vehicle_time_source: str | None = None
         self.stop_reason = "trigger_not_observed"
         self.operation_failure_reason: str | None = None
         self.observation_end_monotonic_s = self.started_monotonic
@@ -100,6 +104,7 @@ class _LiveGpsMonitor:
             self.observation_end_monotonic_s = arrival
             normalized = telemetry.normalize_message(msg, arrival_monotonic_s=arrival)
             self.normalized_messages.append(normalized)
+            self._record_vehicle_clock_sample(normalized)
             self._record_pre_injection_source_sample(normalized)
             self._record_flight_progress(normalized, arrival)
             self._maybe_record_trigger_event(normalized)
@@ -138,6 +143,43 @@ class _LiveGpsMonitor:
         plan = build_authorized_injection_plan(self.case, self.trigger_trace)
         self.trigger_event = dict(plan.trigger_event)
         self.ctx.extra["gps_trigger_event"] = dict(self.trigger_event)
+        if self._physical_schedule_requires_vehicle_time(plan):
+            trigger_boot_ms = _finite_nonnegative(
+                plan.trigger_event.get("trigger_vehicle_time_boot_ms")
+            )
+            if trigger_boot_ms is None:
+                reason = "vehicle_time_unavailable_for_physical_scheduling"
+                failed_plan = replace(
+                    plan,
+                    ready_to_inject=False,
+                    failures=[
+                        *plan.failures,
+                        {
+                            "reason": reason,
+                            "detail": (
+                                "trigger event lacks fresh finite "
+                                "trigger_vehicle_time_boot_ms"
+                            ),
+                        },
+                    ],
+                )
+                from .runtime import InjectionExecutionResult
+
+                result = InjectionExecutionResult(
+                    success=False,
+                    reason=reason,
+                    plan=failed_plan,
+                )
+                self.injection_result = result.as_dict()
+                self.ctx.extra["gps_injection_execution"] = self.injection_result
+                self.triggered = False
+                self.stop_reason = reason
+                defaults.log(
+                    f"[gps_monitor] {self.case.case_id}: refusing physical "
+                    "GPS fault write because fresh vehicle boot time is missing."
+                )
+                return
+
         result = execute_injection_plan(plan, self.master)
         self.injection_result = result.as_dict()
         self.ctx.extra["gps_injection_execution"] = self.injection_result
@@ -146,6 +188,9 @@ class _LiveGpsMonitor:
         )
         if self.triggered:
             self.injection_monotonic_s = now_s
+            self.injection_vehicle_time_boot_ms = _finite_nonnegative(
+                self.trigger_event.get("trigger_vehicle_time_boot_ms")
+            )
             self.stop_reason = "observing_post_injection"
             defaults.log(
                 f"GPS injection trigger latched at seq 4 for {self.case.case_id}; "
@@ -161,11 +206,38 @@ class _LiveGpsMonitor:
     def _maybe_execute_scheduled_steps(self, now_s: float) -> None:
         if self.injection_monotonic_s is None:
             return
-        elapsed_s = self._post_injection_s(now_s)
-        self._maybe_execute_restore(elapsed_s)
-        self._maybe_execute_slow_drift_update(elapsed_s)
+        clock = self._post_injection_clock(now_s)
+        if clock is None:
+            if self._has_pending_physical_scheduled_operations():
+                self.operation_failure_reason = (
+                    "vehicle_time_unavailable_for_physical_scheduling"
+                )
+                defaults.log(
+                    f"[gps_monitor] {self.case.case_id}: stopping physical "
+                    "GPS scheduling because no fresh vehicle boot time is available."
+                )
+            return
+        self._maybe_execute_restore(
+            clock["vehicle_elapsed_s"],
+            wall_elapsed_s=clock["wall_elapsed_s"],
+            clock_ratio=clock["clock_ratio"],
+            clock_source=clock["clock_source"],
+        )
+        self._maybe_execute_slow_drift_update(
+            clock["vehicle_elapsed_s"],
+            wall_elapsed_s=clock["wall_elapsed_s"],
+            clock_ratio=clock["clock_ratio"],
+            clock_source=clock["clock_source"],
+        )
 
-    def _maybe_execute_restore(self, elapsed_s: float) -> None:
+    def _maybe_execute_restore(
+        self,
+        vehicle_elapsed_s: float,
+        *,
+        wall_elapsed_s: float | None = None,
+        clock_ratio: float | None = None,
+        clock_source: str = "vehicle_time_boot_ms",
+    ) -> None:
         if self.injection_result is None:
             return
         plan = self.injection_result.get("plan") or {}
@@ -177,7 +249,7 @@ class _LiveGpsMonitor:
             if any(item.get("restore_index") == index for item in self.restore_results):
                 continue
             due_s = float(step_dict.get("elapsed_since_trigger_s", 0.0))
-            if elapsed_s < due_s:
+            if vehicle_elapsed_s < due_s:
                 continue
             payload = {
                 str(name): float(value)
@@ -192,13 +264,17 @@ class _LiveGpsMonitor:
             )
             defaults.log(
                 f"[gps_monitor] {self.case.case_id}: executing restore step "
-                f"{index} at +{elapsed_s:.1f}s: {payload}"
+                f"{index} at vehicle +{vehicle_elapsed_s:.1f}s: {payload}"
             )
             result = execute_restore_step(step, self.master)
             result_dict = result.as_dict() if result is not None else None
             self.restore_results.append({
                 "restore_index": index,
-                "elapsed_since_trigger_s": elapsed_s,
+                "elapsed_since_trigger_s": vehicle_elapsed_s,
+                "vehicle_elapsed_s": vehicle_elapsed_s,
+                "wall_elapsed_s": wall_elapsed_s,
+                "clock_ratio": clock_ratio,
+                "clock_source": clock_source,
                 "result": result_dict,
             })
             if not isinstance(result_dict, dict) or result_dict.get("success") is not True:
@@ -213,27 +289,43 @@ class _LiveGpsMonitor:
                 "readback verified."
             )
 
-    def _maybe_execute_slow_drift_update(self, elapsed_s: float) -> None:
+    def _maybe_execute_slow_drift_update(
+        self,
+        vehicle_elapsed_s: float,
+        *,
+        wall_elapsed_s: float | None = None,
+        clock_ratio: float | None = None,
+        clock_source: str = "vehicle_time_boot_ms",
+    ) -> None:
         if self.case.parameters.get("fault_type") != "slow_drift":
             return
-        if elapsed_s < self.next_ramp_update_s:
+        if vehicle_elapsed_s < self.next_ramp_update_s:
             return
         from .runtime import build_authorized_injection_plan, execute_injection_plan
 
         trace = [dict(event) for event in self.trigger_trace]
         for event in trace:
             if event.get("seq") == defaults.INJECTION_TRIGGER["seq"]:
-                event["elapsed_since_trigger_s"] = elapsed_s
+                event["elapsed_since_trigger_s"] = vehicle_elapsed_s
+                event["vehicle_elapsed_s"] = vehicle_elapsed_s
+                event["wall_elapsed_s"] = wall_elapsed_s
+                event["clock_ratio"] = clock_ratio
+                event["payload_clock_source"] = clock_source
                 break
         plan = build_authorized_injection_plan(self.case, trace)
         defaults.log(
             f"[gps_monitor] {self.case.case_id}: slow-drift update due at "
-            f"+{elapsed_s:.1f}s; payload={plan.injection_payload}"
+            f"vehicle +{vehicle_elapsed_s:.1f}s; payload={plan.injection_payload}"
         )
         result = execute_injection_plan(plan, self.master)
         self.ramp_update_results.append(
             {
-                "elapsed_since_trigger_s": elapsed_s,
+                "elapsed_since_trigger_s": vehicle_elapsed_s,
+                "vehicle_elapsed_s": vehicle_elapsed_s,
+                "wall_elapsed_s": wall_elapsed_s,
+                "clock_ratio": clock_ratio,
+                "clock_source": clock_source,
+                "resolved_payload": dict(plan.injection_payload),
                 "result": result.as_dict(),
             }
         )
@@ -254,6 +346,66 @@ class _LiveGpsMonitor:
         if self.injection_monotonic_s is None:
             return 0.0
         return max(0.0, now_s - self.injection_monotonic_s)
+
+    def _post_injection_clock(self, now_s: float) -> dict[str, Any] | None:
+        wall_elapsed_s = self._post_injection_s(now_s)
+        trigger_boot_ms = _finite_nonnegative(self.injection_vehicle_time_boot_ms)
+        latest_boot_ms = _finite_nonnegative(self.latest_vehicle_time_boot_ms)
+        latest_arrival_s = _finite_nonnegative(self.latest_vehicle_time_arrival_s)
+        if (
+            trigger_boot_ms is None
+            or latest_boot_ms is None
+            or latest_arrival_s is None
+        ):
+            return None
+        sample_age_s = _sample_age(now_s, latest_arrival_s)
+        if (
+            sample_age_s is None
+            or sample_age_s > defaults.TRIGGER_BOOT_TIME_MAX_AGE_S
+            or latest_boot_ms < trigger_boot_ms
+        ):
+            return None
+        vehicle_elapsed_s = (latest_boot_ms - trigger_boot_ms) / 1000.0
+        clock_ratio = (
+            wall_elapsed_s / vehicle_elapsed_s
+            if wall_elapsed_s > 0.0 and vehicle_elapsed_s > 0.0
+            else None
+        )
+        return {
+            "wall_elapsed_s": wall_elapsed_s,
+            "vehicle_elapsed_s": vehicle_elapsed_s,
+            "clock_ratio": clock_ratio,
+            "clock_source": "vehicle_time_boot_ms",
+            "latest_vehicle_time_boot_ms": latest_boot_ms,
+            "latest_vehicle_time_arrival_s": latest_arrival_s,
+            "latest_vehicle_time_source": self.latest_vehicle_time_source,
+            "trigger_vehicle_time_boot_ms": trigger_boot_ms,
+        }
+
+    def _record_vehicle_clock_sample(self, sample: dict[str, Any]) -> None:
+        boot_ms = _finite_nonnegative(sample.get("time_boot_ms"))
+        arrival_s = _finite_nonnegative(sample.get("arrival_monotonic_s"))
+        if boot_ms is None or arrival_s is None:
+            return
+        self.latest_vehicle_time_boot_ms = boot_ms
+        self.latest_vehicle_time_arrival_s = arrival_s
+        self.latest_vehicle_time_source = str(sample.get("type"))
+
+    def _physical_schedule_requires_vehicle_time(self, plan: Any) -> bool:
+        if self.case.parameters.get("fault_type") == "slow_drift":
+            return True
+        restore_plan = getattr(plan, "restore_plan", [])
+        return bool(restore_plan)
+
+    def _has_pending_physical_scheduled_operations(self) -> bool:
+        if self.case.parameters.get("fault_type") == "slow_drift":
+            return True
+        plan = self.injection_result.get("plan") if isinstance(self.injection_result, dict) else None
+        restore_plan = plan.get("restore_plan") if isinstance(plan, dict) else []
+        return isinstance(restore_plan, list) and any(
+            not any(item.get("restore_index") == index for item in self.restore_results)
+            for index, _step in enumerate(restore_plan)
+        )
 
     def _required_post_injection_s(self) -> float:
         requirements = self.case.parameters.get("acceptance_requirements")
@@ -398,7 +550,7 @@ class _LiveGpsMonitor:
         from .analyzers import _summary_with_terminal_context
 
         summary = _summary_with_terminal_context(
-            classify_observation(observation), observation
+            classify_observation(observation), observation, case=self.case
         )
         summary_path = self.ctx.attempt_dir / "gps_behavior_summary.json"
         defaults.write_json(summary_path, summary)
@@ -412,7 +564,21 @@ class _LiveGpsMonitor:
             ),
             "behavior_class": summary["behavior_class"],
             "observation_quality_class": summary["observation_quality_class"],
-            "accepted_observation": summary["accepted_observation"],
+            "behavior_status": (
+                "accepted"
+                if summary.get("accepted_observation") is True
+                else "incomplete"
+            ),
+            "accepted_observation": False,
+            "accepted_repetition": False,
+            "scientific_behavior_label": summary.get("scientific_behavior_label"),
+            "scientific_behavior_components": summary.get(
+                "scientific_behavior_components"
+            ),
+            "stimulus_fidelity_status": observation.get("stimulus_fidelity_status"),
+            "stimulus_fidelity_reason": observation.get("stimulus_fidelity_reason"),
+            "lifecycle_windows_status": observation.get("lifecycle_windows_status"),
+            "lifecycle_windows_reason": observation.get("lifecycle_windows_reason"),
             "terminal_state_reached": observation.get("terminal_state_reached"),
             "mission_complete": observation.get("mission_complete"),
             "stop_reason": observation.get("stop_reason"),
@@ -449,12 +615,30 @@ class _LiveGpsMonitor:
         )
 
     def _artifact_payloads(self) -> dict[str, dict[str, Any]]:
+        from .bin_analysis import (
+            lifecycle_windows_pending_artifact,
+            stimulus_fidelity_pending_artifact,
+        )
+
         artifacts = {
             "ekf_innovation_metrics.json": self._ekf_metrics_artifact(),
             "truth_vs_belief.json": self._truth_vs_belief_artifact(),
             "mode_timeline.json": self._mode_timeline_artifact(),
             "attitude_altitude_envelope.json": self._attitude_altitude_artifact(),
             "source_contract.json": self._source_contract_artifact(),
+            "stimulus_fidelity.json": stimulus_fidelity_pending_artifact(
+                case_id=self.case.case_id,
+                fault_type=str(self.case.parameters.get("fault_type", "")),
+                fault_recipe=(
+                    self.case.parameters.get("fault_recipe")
+                    if isinstance(self.case.parameters.get("fault_recipe"), dict)
+                    else None
+                ),
+            ),
+            "gps_lifecycle_windows.json": lifecycle_windows_pending_artifact(
+                case_id=self.case.case_id,
+                fault_type=str(self.case.parameters.get("fault_type", "")),
+            ),
         }
         return artifacts
 
@@ -542,17 +726,28 @@ class _LiveGpsMonitor:
             {
                 "arrival_monotonic_s": sample["arrival_monotonic_s"],
                 "relative_alt_m": float(sample["relative_alt_mm"]) / 1000.0,
+                "source": "GLOBAL_POSITION_INT.relative_alt_mm",
             }
             for sample in post_messages
             if sample["type"] == "GLOBAL_POSITION_INT"
             and isinstance(sample.get("relative_alt_mm"), (int, float))
         ]
-        attitudes = [
-            sample for sample in post_messages
-            if sample["type"] == "ATTITUDE"
-            and isinstance(sample.get("roll_rad"), (int, float))
-            and isinstance(sample.get("pitch_rad"), (int, float))
-        ]
+        attitudes = []
+        for sample in post_messages:
+            if (
+                sample["type"] != "ATTITUDE"
+                or not isinstance(sample.get("roll_rad"), (int, float))
+                or not isinstance(sample.get("pitch_rad"), (int, float))
+            ):
+                continue
+            roll_deg = math.degrees(float(sample["roll_rad"]))
+            pitch_deg = math.degrees(float(sample["pitch_rad"]))
+            attitudes.append({
+                **sample,
+                "roll_deg": roll_deg,
+                "pitch_deg": pitch_deg,
+                "source": "ATTITUDE.roll_rad/pitch_rad",
+            })
         altitudes = [sample["relative_alt_m"] for sample in altitude_samples]
         min_alt = min(altitudes) if altitudes else None
         max_drawdown = 0.0
@@ -562,8 +757,8 @@ class _LiveGpsMonitor:
             max_drawdown = max(max_drawdown, running_max - altitude)
         threshold_crossings: list[dict[str, Any]] = []
         for sample in attitudes:
-            roll_deg = math.degrees(float(sample["roll_rad"]))
-            pitch_deg = math.degrees(float(sample["pitch_rad"]))
+            roll_deg = float(sample["roll_deg"])
+            pitch_deg = float(sample["pitch_deg"])
             if abs(roll_deg) > defaults.MAX_ABS_ROLL_DEG:
                 threshold_crossings.append({
                     "type": "roll",
@@ -588,7 +783,30 @@ class _LiveGpsMonitor:
             sample["type"] == "HEARTBEAT" and sample.get("armed") is False
             for sample in post_messages
         )
+        missing = []
+        if not altitude_samples:
+            missing.append("live_telemetry.GLOBAL_POSITION_INT.relative_alt_mm")
+        if not attitudes:
+            missing.append("live_telemetry.ATTITUDE.roll_rad/pitch_rad")
         return {
+            "status": "pass" if not missing else "fail",
+            "reason": "ok" if not missing else "missing_live_envelope_samples",
+            "source": "live_telemetry",
+            "altitude_source": "live_telemetry:GLOBAL_POSITION_INT.relative_alt_mm",
+            "attitude_source": "live_telemetry:ATTITUDE.roll_rad/pitch_rad",
+            "sampling_limits": {
+                "post_injection_only": True,
+                "clock": "arrival_monotonic_s",
+                "start_arrival_monotonic_s": self.injection_monotonic_s,
+                "max_abs_roll_deg": defaults.MAX_ABS_ROLL_DEG,
+                "max_abs_pitch_deg": defaults.MAX_ABS_PITCH_DEG,
+                "max_altitude_loss_m": defaults.MAX_ALTITUDE_LOSS_M,
+                "bin_live_altitude_tolerance_m": defaults.BIN_LIVE_ALTITUDE_TOLERANCE_M,
+                "bin_live_attitude_tolerance_deg": defaults.BIN_LIVE_ATTITUDE_TOLERANCE_DEG,
+            },
+            "evidence_quality": "runtime_guard",
+            "final_evidence_quality": False,
+            "runtime_guard_quality": bool(not missing),
             "post_injection_min_alt_m": min_alt,
             "altitude_loss_m": max_drawdown,
             "altitude_samples": altitude_samples,
@@ -596,6 +814,7 @@ class _LiveGpsMonitor:
             "threshold_crossings": threshold_crossings,
             "unexpected_disarm": unexpected_disarm,
             "samples_complete": bool(attitudes and altitude_samples),
+            "missing_evidence": missing,
             "limits": {
                 "max_abs_roll_deg": defaults.MAX_ABS_ROLL_DEG,
                 "max_abs_pitch_deg": defaults.MAX_ABS_PITCH_DEG,
@@ -672,12 +891,27 @@ class _LiveGpsMonitor:
         return None
 
     def _observation(self, artifacts: dict[str, dict[str, Any]]) -> dict[str, Any]:
-        post_s = (
+        wall_post_s = (
             self._post_injection_s(self.observation_end_monotonic_s)
             if self.triggered
             else 0.0
         )
-        operation_status = self._scheduled_operation_status(post_s)
+        clock = (
+            self._post_injection_clock(self.observation_end_monotonic_s)
+            if self.triggered
+            else None
+        )
+        vehicle_post_s = (
+            float(clock["vehicle_elapsed_s"])
+            if isinstance(clock, dict)
+            else None
+        )
+        observation_post_s = (
+            vehicle_post_s
+            if vehicle_post_s is not None
+            else wall_post_s
+        )
+        operation_status = self._scheduled_operation_status(vehicle_post_s or 0.0)
         injection_ok = bool(
             self.injection_result
             and self.injection_result.get("success") is True
@@ -726,7 +960,14 @@ class _LiveGpsMonitor:
             "fault_type": self.case.parameters.get("fault_type"),
             "injection_triggered": self.triggered,
             "injection_readback_ok": injection_ok,
-            "post_injection_s": post_s,
+            "post_injection_s": observation_post_s,
+            "post_injection_vehicle_elapsed_s": vehicle_post_s,
+            "post_injection_wall_elapsed_s": wall_post_s,
+            "post_injection_elapsed_clock_source": (
+                "vehicle_time_boot_ms"
+                if vehicle_post_s is not None
+                else "wall_monotonic_diagnostic"
+            ),
             "required_post_injection_s": self._required_post_injection_s(),
             "required_artifacts_present": required_present,
             "mechanism_evidence": bool(ratios) and source_contract_ok,
@@ -769,6 +1010,10 @@ class _LiveGpsMonitor:
             "planned_rtl_min_seq": defaults.PLANNED_RTL_MIN_SEQ,
             "stop_reason": self.stop_reason,
             "timeout": self.timeout,
+            "stimulus_fidelity_status": artifacts["stimulus_fidelity.json"].get("status"),
+            "stimulus_fidelity_reason": artifacts["stimulus_fidelity.json"].get("reason"),
+            "lifecycle_windows_status": artifacts["gps_lifecycle_windows.json"].get("status"),
+            "lifecycle_windows_reason": artifacts["gps_lifecycle_windows.json"].get("reason"),
         }
         self.ctx.stimulus_result["verify"] = {
             "phase": "phase2_live_terminal_verification",
@@ -779,7 +1024,7 @@ class _LiveGpsMonitor:
         }
         return observation
 
-    def _scheduled_operation_status(self, post_s: float) -> dict[str, Any]:
+    def _scheduled_operation_status(self, vehicle_post_s: float) -> dict[str, Any]:
         plan = (
             self.injection_result.get("plan")
             if isinstance(self.injection_result, dict)
@@ -798,7 +1043,7 @@ class _LiveGpsMonitor:
         expected_ramp_count = 0
         if self.case.parameters.get("fault_type") == "slow_drift":
             expected_ramp_count = int(
-                min(post_s, defaults.MIN_POST_INJECTION_S)
+                min(vehicle_post_s, defaults.MIN_POST_INJECTION_S)
                 // defaults.SLOW_DRIFT_UPDATE_PERIOD_S
             )
         ramp_ok = (
@@ -837,12 +1082,22 @@ class _LiveGpsMonitor:
         payload["live_execution"] = self.injection_result
         payload["restore_results"] = list(self.restore_results)
         payload["ramp_update_results"] = list(self.ramp_update_results)
-        post_s = (
+        wall_post_s = (
             self._post_injection_s(self.observation_end_monotonic_s)
             if self.triggered
             else 0.0
         )
-        operation_status = self._scheduled_operation_status(post_s)
+        clock = (
+            self._post_injection_clock(self.observation_end_monotonic_s)
+            if self.triggered
+            else None
+        )
+        vehicle_post_s = (
+            float(clock["vehicle_elapsed_s"])
+            if isinstance(clock, dict)
+            else None
+        )
+        operation_status = self._scheduled_operation_status(vehicle_post_s or 0.0)
         plan = self.injection_result.get("plan")
         restore_plan = plan.get("restore_plan") if isinstance(plan, dict) else []
         payload["readback_status_shape"] = {
@@ -869,6 +1124,27 @@ class _LiveGpsMonitor:
                 "live_readback_performed": True,
                 "terminal_verification_pending": False,
             })
+        payload["scheduling"] = {
+            "physical_payload_clock_source": "vehicle_time_boot_ms",
+            "restore_clock_source": "vehicle_time_boot_ms",
+            "trigger_wall_monotonic_s": (
+                self.trigger_event.get("trigger_wall_monotonic_s")
+                if isinstance(self.trigger_event, dict)
+                else None
+            ),
+            "trigger_vehicle_time_boot_ms": (
+                self.trigger_event.get("trigger_vehicle_time_boot_ms")
+                if isinstance(self.trigger_event, dict)
+                else None
+            ),
+            "wall_elapsed_s": wall_post_s,
+            "vehicle_elapsed_s": vehicle_post_s,
+            "clock_ratio": (
+                clock.get("clock_ratio") if isinstance(clock, dict) else None
+            ),
+            "latest_vehicle_time": clock if isinstance(clock, dict) else None,
+            "missing_vehicle_time_fails_closed": True,
+        }
         defaults.write_json(path, payload)
         self.ctx.artifacts["gps_injection.json"] = path
         self.ctx.stimulus_result.clear()
@@ -908,6 +1184,8 @@ class _LiveGpsMonitor:
             "armed": isinstance(heartbeat, dict) and heartbeat.get("armed") is True,
             "mode": heartbeat.get("mode") if isinstance(heartbeat, dict) else None,
             "mission_arrival_monotonic_s": float(mission_arrival),
+            "trigger_wall_monotonic_s": float(mission_arrival),
+            "trigger_wall_time_utc": defaults.utc_now(),
             "heartbeat_age_s": heartbeat_age,
             "heartbeat_fresh": bool(
                 heartbeat_age is not None
@@ -915,6 +1193,9 @@ class _LiveGpsMonitor:
             ),
             "trigger_time_s": sample["arrival_monotonic_s"] - self.started_monotonic,
             "elapsed_since_trigger_s": 0.0,
+            "vehicle_elapsed_s": 0.0,
+            "wall_elapsed_s": 0.0,
+            "payload_clock_source": "vehicle_time_boot_ms",
             **latitude_fields,
             **boot_time_fields,
         }
@@ -1001,11 +1282,16 @@ class _LiveGpsMonitor:
                 fresh = bool(
                     age is not None and age <= defaults.TRIGGER_SIMSTATE_MAX_AGE_S
                 )
-                return {
+                payload = {
                     "trigger_latitude_deg": float(sample["lat_deg_e7"]) / 1e7,
                     "simstate_age_s": age,
                     "simstate_fresh": fresh,
                 }
+                if sample.get("lon_deg_e7") is not None:
+                    payload["trigger_longitude_deg"] = (
+                        float(sample["lon_deg_e7"]) / 1e7
+                    )
+                return payload
         return {"simstate_age_s": None, "simstate_fresh": False}
 
     def _trigger_boot_time_fields(self, mission_arrival_s: float) -> dict[str, Any]:
@@ -1028,8 +1314,10 @@ class _LiveGpsMonitor:
                 continue
             return {
                 "trigger_time_boot_ms": boot_ms,
+                "trigger_vehicle_time_boot_ms": boot_ms,
                 "trigger_time_us": boot_ms * 1000.0,
                 "trigger_time_source": str(sample.get("type")),
+                "trigger_vehicle_time_source": str(sample.get("type")),
                 "trigger_boot_sample_age_s": age,
                 "trigger_boot_time_fresh": True,
             }

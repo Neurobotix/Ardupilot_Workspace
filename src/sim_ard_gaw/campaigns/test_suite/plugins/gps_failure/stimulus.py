@@ -87,10 +87,15 @@ def payload_resolution_status(fault_recipe: dict[str, Any] | None) -> dict[str, 
         return {"requires_live_resolution": False, "reason": "concrete_payload_or_nominal"}
     return {
         "requires_live_resolution": True,
-        "reason": "SIM_GPS1_GLTCH degree payload depends on trigger-time latitude/time",
+        "reason": (
+            "SIM_GPS1_GLTCH degree payload depends on trigger-time latitude; "
+            "live slow-drift strength uses vehicle time_boot_ms elapsed"
+        ),
         "frame": fault_recipe.get("frame"),
         "conversion": fault_recipe.get("conversion"),
         "preview_only_available_with_reference_latitude": True,
+        "live_physical_payload_clock": "vehicle_time_boot_ms",
+        "missing_vehicle_time_fails_closed": True,
     }
 
 
