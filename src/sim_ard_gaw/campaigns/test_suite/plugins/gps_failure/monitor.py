@@ -835,7 +835,13 @@ class _LiveGpsMonitor:
     def _read_source_contract_parameters(self) -> None:
         from .mavlink import read_live_contract_parameters
 
-        results = read_live_contract_parameters(self.master)
+        results = read_live_contract_parameters(
+            self.master,
+            expected_knee_readbacks=self.config.source_contract_expected_knee_readbacks,
+            expected_airspeed_readbacks=(
+                self.config.source_contract_expected_airspeed_readbacks
+            ),
+        )
         self.ctx.extra["gps_live_contract_readbacks"] = {
             name: result.as_dict() for name, result in results.items()
         }
@@ -868,6 +874,10 @@ class _LiveGpsMonitor:
         contract = validate_source_contract(
             readbacks,
             estimator_flags=self.pre_injection_estimator_flags,
+            expected_knee_readbacks=self.config.source_contract_expected_knee_readbacks,
+            expected_airspeed_readbacks=(
+                self.config.source_contract_expected_airspeed_readbacks
+            ),
         )
         payload = contract.as_dict()
         payload["proof_stage"] = "pre_injection"

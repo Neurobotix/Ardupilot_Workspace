@@ -29,12 +29,7 @@ EXPECTED_SOURCE_READBACKS = {
     "EK3_SRC1_VELZ": 3,
     "EK3_SRC1_YAW": 1,
 }
-EXPECTED_KNEE_READBACKS = {
-    "EK3_POS_I_GATE": 500.0,
-    "EK3_GLITCH_RAD": 25.0,
-    "FS_EKF_THRESH": 0.8,
-    "EK3_GPS_CHECK": 31.0,
-}
+EXPECTED_KNEE_READBACKS = dict(defaults.BASELINE_EXPECTED_KNEE_READBACKS)
 
 
 @dataclass(frozen=True)
@@ -45,6 +40,8 @@ class SourceContract:
     validated_proxy_proof: bool
     reasons: list[str] = field(default_factory=list)
     readbacks: dict[str, float] = field(default_factory=dict)
+    expected_knee_readbacks: dict[str, float] = field(default_factory=dict)
+    expected_airspeed_readbacks: dict[str, float] = field(default_factory=dict)
     estimator_flags: int | None = None
 
     def as_dict(self) -> dict[str, Any]:
@@ -98,6 +95,10 @@ class SourceContract:
                 "role": "configuration_precondition",
                 "exact_runtime_internal_proof": False,
                 "readback_names": sorted(self.readbacks),
+                "expected_knee_readbacks": dict(self.expected_knee_readbacks),
+                "expected_airspeed_readbacks": dict(
+                    self.expected_airspeed_readbacks
+                ),
             },
             "source": {
                 "absolute_aiding": (
@@ -105,7 +106,10 @@ class SourceContract:
                     "uses EK3_SRC1_POSXY/VELXY GPS plus EKF absolute-position "
                     "status flags as validated proxy proof"
                 ),
-                "glitch_radius": "EK3_GLITCH_RAD must be > 0",
+                "glitch_radius": (
+                    "EK3_GLITCH_RAD is checked against the selected envelope; "
+                    "zero is valid only for an envelope that explicitly expects zero"
+                ),
                 "primary_core": "BIN XKF4.PI is frontend->getPrimaryCoreIndex()",
                 "belief_position": "BIN POS Lat/Lng is AP_AHRS::get_location() canonical belief",
             },
@@ -114,8 +118,12 @@ class SourceContract:
 
 def required_live_readback_names(
     injected_or_restored: Mapping[str, float] | None = None,
+    expected_knee_readbacks: Mapping[str, float] | None = None,
+    expected_airspeed_readbacks: Mapping[str, float] | None = None,
 ) -> tuple[str, ...]:
     names = set(defaults.LIVE_READBACK_PARAMS)
+    names.update(expected_knee_readbacks or {})
+    names.update(expected_airspeed_readbacks or {})
     names.update(injected_or_restored or {})
     return tuple(sorted(names))
 
@@ -124,11 +132,19 @@ def validate_source_contract(
     readbacks: Mapping[str, object],
     *,
     estimator_flags: int | None,
+    expected_knee_readbacks: Mapping[str, float] | None = None,
+    expected_airspeed_readbacks: Mapping[str, float] | None = None,
 ) -> SourceContract:
+    expected_knee = dict(expected_knee_readbacks or EXPECTED_KNEE_READBACKS)
+    expected_airspeed = dict(expected_airspeed_readbacks or {})
     parsed: dict[str, float] = {}
     reasons: list[str] = []
 
-    for name in defaults.KNEE_READBACK_PARAMS + defaults.SOURCE_CONTRACT_PARAMS:
+    for name in (
+        tuple(expected_knee)
+        + tuple(expected_airspeed)
+        + defaults.SOURCE_CONTRACT_PARAMS
+    ):
         if name not in readbacks:
             reasons.append(f"missing_readback:{name}")
             continue
@@ -139,9 +155,21 @@ def validate_source_contract(
             continue
         parsed[name] = value
 
-    if parsed.get("EK3_GLITCH_RAD", 0.0) <= 0.0:
+    expected_glitch_rad = expected_knee.get("EK3_GLITCH_RAD")
+    if (
+        expected_glitch_rad is None or expected_glitch_rad > 0.0
+    ) and parsed.get("EK3_GLITCH_RAD", 0.0) <= 0.0:
         reasons.append("ek3_glitch_rad_not_positive")
-    for name, expected in EXPECTED_KNEE_READBACKS.items():
+    for name, expected in expected_knee.items():
+        value = parsed.get(name)
+        if value is not None and not math.isclose(
+            value,
+            expected,
+            rel_tol=0.0,
+            abs_tol=1e-6,
+        ):
+            reasons.append(f"readback_mismatch:{name}")
+    for name, expected in expected_airspeed.items():
         value = parsed.get(name)
         if value is not None and not math.isclose(
             value,
@@ -174,6 +202,8 @@ def validate_source_contract(
         validated_proxy_proof=ok,
         reasons=reasons,
         readbacks=parsed,
+        expected_knee_readbacks=expected_knee,
+        expected_airspeed_readbacks=expected_airspeed,
         estimator_flags=estimator_flags,
     )
 

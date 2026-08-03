@@ -573,6 +573,76 @@ class GpsFailurePhase2SourceContractTests(unittest.TestCase):
         self.assertIn("ek3_glitch_rad_not_positive", contract.reasons)
         self.assertIn("ekf_pos_horiz_abs_flag_missing", contract.reasons)
 
+    def test_source_contract_accepts_named_zero_glitch_radius_envelope(self) -> None:
+        readbacks = {
+            "EK3_POS_I_GATE": 300,
+            "EK3_VEL_I_GATE": 300,
+            "EK3_GLITCH_RAD": 0,
+            "FS_EKF_THRESH": 0.8,
+            "EK3_GPS_CHECK": 31,
+            "EK3_SRC1_POSXY": 3,
+            "EK3_SRC1_VELXY": 3,
+            "EK3_SRC1_POSZ": 1,
+            "EK3_SRC1_VELZ": 3,
+            "EK3_SRC1_YAW": 1,
+        }
+
+        contract = validate_source_contract(
+            readbacks,
+            estimator_flags=EKF_POS_HORIZ_ABS,
+            expected_knee_readbacks=(
+                defaults.EKF_GATE300_GLITCH0_EXPECTED_KNEE_READBACKS
+            ),
+        )
+
+        self.assertTrue(contract.ok, contract.as_dict())
+        self.assertNotIn("ek3_glitch_rad_not_positive", contract.reasons)
+        self.assertEqual(300.0, contract.expected_knee_readbacks["EK3_VEL_I_GATE"])
+
+    def test_source_contract_accepts_fast_envelope_airspeed_readbacks(self) -> None:
+        readbacks = {
+            name: result["value"]
+            for name, result in _valid_contract_readback_results().items()
+        }
+        expected_airspeed = defaults.expected_airspeed_readbacks_for_envelope(
+            defaults.FAST_CRUISE_18MPS_ENVELOPE_NAME
+        )
+        readbacks.update(expected_airspeed)
+
+        contract = validate_source_contract(
+            readbacks,
+            estimator_flags=EKF_POS_HORIZ_ABS,
+            expected_airspeed_readbacks=expected_airspeed,
+        )
+
+        self.assertTrue(contract.ok, contract.as_dict())
+        self.assertEqual(
+            18.0,
+            contract.as_dict()["configuration_proof"][
+                "expected_airspeed_readbacks"
+            ]["AIRSPEED_CRUISE"],
+        )
+
+    def test_source_contract_rejects_fast_envelope_airspeed_mismatch(self) -> None:
+        readbacks = {
+            name: result["value"]
+            for name, result in _valid_contract_readback_results().items()
+        }
+        expected_airspeed = defaults.expected_airspeed_readbacks_for_envelope(
+            defaults.FAST_CRUISE_18MPS_ENVELOPE_NAME
+        )
+        readbacks.update(expected_airspeed)
+        readbacks["AIRSPEED_CRUISE"] = 14.0
+
+        contract = validate_source_contract(
+            readbacks,
+            estimator_flags=EKF_POS_HORIZ_ABS,
+            expected_airspeed_readbacks=expected_airspeed,
+        )
+
+        self.assertFalse(contract.ok)
+        self.assertIn("readback_mismatch:AIRSPEED_CRUISE", contract.reasons)
+
     def test_source_contract_rejects_fractional_source_enum(self) -> None:
         readbacks = {
             "EK3_POS_I_GATE": 500,
@@ -689,6 +759,32 @@ class GpsFailurePhase2MavlinkTelemetryTests(unittest.TestCase):
 
         self.assertEqual(sorted(defaults.LIVE_READBACK_PARAMS), fake.read_order)
         self.assertTrue(all(item.ok for item in result.values()))
+
+    def test_live_contract_readback_includes_envelope_specific_knee_names(self) -> None:
+        expected = defaults.EKF_GATE300_GLITCH0_EXPECTED_KNEE_READBACKS
+        values = {name: 1.0 for name in (*defaults.LIVE_READBACK_PARAMS, *expected)}
+        fake = _FakeParamConnection(values)
+
+        result = read_live_contract_parameters(fake, expected_knee_readbacks=expected)
+
+        self.assertIn("EK3_VEL_I_GATE", fake.read_order)
+        self.assertTrue(result["EK3_VEL_I_GATE"].ok)
+
+    def test_live_contract_readback_includes_fast_airspeed_names(self) -> None:
+        expected = defaults.expected_airspeed_readbacks_for_envelope(
+            defaults.FAST_CRUISE_18MPS_ENVELOPE_NAME
+        )
+        values = {name: 1.0 for name in (*defaults.LIVE_READBACK_PARAMS, *expected)}
+        fake = _FakeParamConnection(values)
+
+        result = read_live_contract_parameters(
+            fake,
+            expected_airspeed_readbacks=expected,
+        )
+
+        self.assertIn("ARSPD_USE", fake.read_order)
+        self.assertIn("AIRSPEED_CRUISE", fake.read_order)
+        self.assertTrue(result["AIRSPEED_CRUISE"].ok)
 
     def test_request_live_streams_uses_gps_owned_data_stream_requests(self) -> None:
         fake = _FakeRateConnection()

@@ -250,11 +250,15 @@ def read_live_contract_parameters(
     connection: MavlinkParameterConnection,
     *,
     injected_or_restored: Mapping[str, float] | None = None,
+    expected_knee_readbacks: Mapping[str, float] | None = None,
+    expected_airspeed_readbacks: Mapping[str, float] | None = None,
     timeout_s: float = 5.0,
 ) -> dict[str, ParameterReadResult]:
     """Read all Phase-2 GPS source-contract parameters from an explicit link."""
 
     names = set(defaults.LIVE_READBACK_PARAMS)
+    names.update(expected_knee_readbacks or {})
+    names.update(expected_airspeed_readbacks or {})
     names.update(injected_or_restored or {})
     return read_parameters(connection, tuple(sorted(names)), timeout_s=timeout_s)
 

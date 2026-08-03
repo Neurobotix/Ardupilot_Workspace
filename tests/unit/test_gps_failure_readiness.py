@@ -109,10 +109,17 @@ class ReadinessReportTests(unittest.TestCase):
             self.assertIn(name, contract["artifact_schema"], name)
 
     def test_parameter_stack_is_the_two_file_phase1_stack(self) -> None:
-        stack = self.report["parameter_stack"]["effective_param_stack"]
+        parameter_stack = self.report["parameter_stack"]
+        stack = parameter_stack["effective_param_stack"]
+
+        self.assertEqual("baseline", parameter_stack["envelope"]["name"])
         self.assertEqual(len(stack), 2)
         self.assertTrue(stack[0].endswith("plane_base.parm"))
         self.assertTrue(stack[1].endswith("plane_gps.parm"))
+        self.assertEqual(
+            defaults.BASELINE_EXPECTED_KNEE_READBACKS,
+            parameter_stack["source_contract_expected_knee_readbacks"],
+        )
 
     def test_readiness_gates_live_run_on_phase_h_gates_only(self) -> None:
         # ready_for_live_run must be exactly the Phase A-G gate result; there is

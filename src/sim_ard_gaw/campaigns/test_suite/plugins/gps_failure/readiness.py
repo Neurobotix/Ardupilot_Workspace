@@ -370,16 +370,26 @@ def _artifact_contract() -> dict[str, Any]:
 
 
 def _parameter_stack(config: GpsFailureConfig) -> dict[str, Any]:
+    envelope = config.envelope_metadata
     return {
+        "envelope": envelope,
         "effective_param_stack": [str(path) for path in config.effective_param_stack],
+        "source_contract_expected_knee_readbacks": (
+            config.source_contract_expected_knee_readbacks
+        ),
+        "source_contract_expected_airspeed_readbacks": (
+            config.source_contract_expected_airspeed_readbacks
+        ),
         "required_sim_gps_params": list(defaults.REQUIRED_SIM_GPS_PARAMS),
-        "sitl_target": defaults.SITL_TARGET,
-        "gazebo_target": defaults.GAZEBO_TARGET,
+        "sitl_target": config.sitl_target,
+        "gazebo_target": config.gazebo_target,
+        "gazebo_world_file": str(config.gazebo_world_file),
         "local_override_excluded": True,
-        "airspeed_overlay_excluded": True,
+        "airspeed_overlay_excluded": not bool(envelope.get("airspeed_required")),
         "launch_target_note": (
-            "dedicated GPS identities plane-gps / gazebo-plane-gps; exercised "
-            "by governed raw validation runs; no curated Phase-2 evidence yet"
+            "dedicated GPS identities; plane-gps defaults to the sensor-neutral "
+            "GPS stack, while named envelopes may provide an explicit GPS stack "
+            "and envelope-specific Gazebo target"
         ),
         "static_probe_mode": (
             "static name-existence validation only; live readback is "
