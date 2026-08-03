@@ -1,0 +1,16 @@
+# ArduPlane Parameters - GPS Failure EKF Glitch Radius 10 Envelope
+# Apply after config/vehicles/plane_base.parm and config/overlays/plane_gps.parm.
+#
+# Purpose: envelope comparison for GPS failure behavior. This lowers
+# EK3_GLITCH_RAD from the 25 m baseline to 10 m, the bottom of the parameter's
+# documented @Range (10 100), while leaving the innovation gates at their
+# baseline values. It is not the default GPS failure overlay.
+#
+# Any non-zero radius keeps the reject-and-reset path reachable, unlike the
+# ekf_gate300_glitch0 envelope where GLITCH_RAD=0 selects the clip-and-fuse
+# branch and makes reset unreachable. The expected trade here is more frequent
+# resets, each of smaller magnitude: after every reset the filter reseeds
+# position variance to sq(0.5 * EK3_GLITCH_RAD) per axis, so the absolute
+# headroom to the next reset falls with the square of the radius.
+
+EK3_GLITCH_RAD 10

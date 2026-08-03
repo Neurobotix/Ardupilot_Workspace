@@ -29,19 +29,122 @@ CAMPAIGN_ROOT_PREFIX = "gps_failure_behavior"
 DEFAULT_CAMPAIGN_ROOT_PARENT = VAR_ROOT / "runs"
 
 MISSION_FILE = ASSETS_ROOT / "missions" / "gps_failure_behavior_mission.waypoints"
+FAST_CRUISE_18MPS_MISSION_FILE = (
+    ASSETS_ROOT / "missions" / "gps_failure_behavior_mission_fast_cruise_18mps.waypoints"
+)
 GAZEBO_WORLD_FILE = ASSETS_ROOT / "worlds" / "mini_talon_gps_runway.sdf"
+GPS_AIRSPEED_GAZEBO_WORLD_FILE = (
+    ASSETS_ROOT / "worlds" / "mini_talon_gps_airspeed_runway.sdf"
+)
 # Dedicated GPS failure launch identities. These are NOT the CTE/airspeed
 # targets: plane-cte/gazebo-plane-cte load plane_airspeed.parm and the local
 # plane override, which ADR-0021 rejects for GPS. plane-gps loads exactly
 # plane_base.parm -> plane_gps.parm with no airspeed overlay and no local
-# override; gazebo-plane-gps is the dedicated sensor-neutral GPS runway world
-# (GPS/NavSat, calm, no wind/airspeed) whose east-facing pose matches the
-# behavior mission. A plugin-owned live launcher must use these
-# identities and this explicit stack, never plane-cte.
+# override by default. Named GPS envelopes may pass a plugin-owned explicit
+# stack through SIM_ARD_GAW_GPS_PARAM_FILES; that is how fast_cruise_18mps
+# enables measured airspeed without importing the CTE/airspeed-failure local
+# override path. A plugin-owned live launcher must use these identities and
+# explicit stacks, never plane-cte.
 SITL_TARGET = "plane-gps"
 GAZEBO_TARGET = "gazebo-plane-gps"
+GPS_AIRSPEED_GAZEBO_TARGET = "gazebo-plane-gps-airspeed"
+GAZEBO_TARGETS = (GAZEBO_TARGET, GPS_AIRSPEED_GAZEBO_TARGET)
 PLANE_BASE_PARAM_FILE = CONFIG_ROOT / "vehicles" / "plane_base.parm"
 PLANE_GPS_PARAM_FILE = CONFIG_ROOT / "overlays" / "plane_gps.parm"
+PLANE_GPS_AIRSPEED_FAST_CRUISE_18MPS_PARAM_FILE = (
+    CONFIG_ROOT / "overlays" / "plane_gps_airspeed_fast_cruise_18mps.parm"
+)
+PLANE_GPS_EKF_GATE300_GLITCH0_PARAM_FILE = (
+    CONFIG_ROOT / "overlays" / "plane_gps_ekf_gate300_glitch0.parm"
+)
+PLANE_GPS_EKF_GLITCH10_PARAM_FILE = (
+    CONFIG_ROOT / "overlays" / "plane_gps_ekf_glitch10.parm"
+)
+
+BASELINE_ENVELOPE_NAME = "baseline"
+FAST_CRUISE_18MPS_ENVELOPE_NAME = "fast_cruise_18mps"
+EKF_GATE300_GLITCH0_ENVELOPE_NAME = "ekf_gate300_glitch0"
+EKF_GLITCH10_ENVELOPE_NAME = "ekf_glitch10"
+
+BASELINE_EXPECTED_KNEE_READBACKS = {
+    "EK3_POS_I_GATE": 500.0,
+    "EK3_GLITCH_RAD": 25.0,
+    "FS_EKF_THRESH": 0.8,
+    "EK3_GPS_CHECK": 31.0,
+}
+EKF_GATE300_GLITCH0_EXPECTED_KNEE_READBACKS = {
+    "EK3_POS_I_GATE": 300.0,
+    "EK3_VEL_I_GATE": 300.0,
+    "EK3_GLITCH_RAD": 0.0,
+    "FS_EKF_THRESH": 0.8,
+    "EK3_GPS_CHECK": 31.0,
+}
+EKF_GLITCH10_EXPECTED_KNEE_READBACKS = {
+    "EK3_POS_I_GATE": 500.0,
+    "EK3_GLITCH_RAD": 10.0,
+    "FS_EKF_THRESH": 0.8,
+    "EK3_GPS_CHECK": 31.0,
+}
+ENVELOPE_DEFINITIONS: dict[str, dict[str, Any]] = {
+    BASELINE_ENVELOPE_NAME: {
+        "label": "baseline GPS failure v6 envelope",
+        "mission_file": MISSION_FILE,
+        "param_files": (PLANE_BASE_PARAM_FILE, PLANE_GPS_PARAM_FILE),
+        "expected_knee_readbacks": BASELINE_EXPECTED_KNEE_READBACKS,
+        "sitl_target": SITL_TARGET,
+        "gazebo_target": GAZEBO_TARGET,
+        "gazebo_world_file": GAZEBO_WORLD_FILE,
+        "airspeed_required": False,
+    },
+    FAST_CRUISE_18MPS_ENVELOPE_NAME: {
+        "label": "18 m/s measured-airspeed GPS envelope",
+        "mission_file": FAST_CRUISE_18MPS_MISSION_FILE,
+        "param_files": (
+            PLANE_BASE_PARAM_FILE,
+            PLANE_GPS_PARAM_FILE,
+            PLANE_GPS_AIRSPEED_FAST_CRUISE_18MPS_PARAM_FILE,
+        ),
+        "expected_knee_readbacks": BASELINE_EXPECTED_KNEE_READBACKS,
+        "sitl_target": SITL_TARGET,
+        "gazebo_target": GPS_AIRSPEED_GAZEBO_TARGET,
+        "gazebo_world_file": GPS_AIRSPEED_GAZEBO_WORLD_FILE,
+        "airspeed_required": True,
+        "expected_airspeed_readbacks": {
+            "ARSPD_TYPE": 100.0,
+            "ARSPD_USE": 1.0,
+            "AIRSPEED_CRUISE": 18.0,
+        },
+    },
+    EKF_GATE300_GLITCH0_ENVELOPE_NAME: {
+        "label": "EKF gate 300 and glitch radius 0 envelope",
+        "mission_file": MISSION_FILE,
+        "param_files": (
+            PLANE_BASE_PARAM_FILE,
+            PLANE_GPS_PARAM_FILE,
+            PLANE_GPS_EKF_GATE300_GLITCH0_PARAM_FILE,
+        ),
+        "expected_knee_readbacks": EKF_GATE300_GLITCH0_EXPECTED_KNEE_READBACKS,
+        "sitl_target": SITL_TARGET,
+        "gazebo_target": GAZEBO_TARGET,
+        "gazebo_world_file": GAZEBO_WORLD_FILE,
+        "airspeed_required": False,
+    },
+    EKF_GLITCH10_ENVELOPE_NAME: {
+        "label": "EKF glitch radius 10 envelope",
+        "mission_file": MISSION_FILE,
+        "param_files": (
+            PLANE_BASE_PARAM_FILE,
+            PLANE_GPS_PARAM_FILE,
+            PLANE_GPS_EKF_GLITCH10_PARAM_FILE,
+        ),
+        "expected_knee_readbacks": EKF_GLITCH10_EXPECTED_KNEE_READBACKS,
+        "sitl_target": SITL_TARGET,
+        "gazebo_target": GAZEBO_TARGET,
+        "gazebo_world_file": GAZEBO_WORLD_FILE,
+        "airspeed_required": False,
+    },
+}
+ENVELOPE_NAMES = tuple(ENVELOPE_DEFINITIONS)
 
 INJECTION_TRIGGER = {
     "source": "MISSION_CURRENT",
@@ -294,6 +397,65 @@ def default_param_files() -> list[Path]:
     return [PLANE_BASE_PARAM_FILE, PLANE_GPS_PARAM_FILE]
 
 
+def mission_file_for_envelope(name: str) -> Path:
+    return Path(_envelope_definition(name)["mission_file"])
+
+
+def param_files_for_envelope(name: str) -> list[Path]:
+    return [Path(path) for path in _envelope_definition(name)["param_files"]]
+
+
+def expected_knee_readbacks_for_envelope(name: str) -> dict[str, float]:
+    return dict(_envelope_definition(name)["expected_knee_readbacks"])
+
+
+def expected_airspeed_readbacks_for_envelope(name: str) -> dict[str, float]:
+    definition = _envelope_definition(name)
+    return dict(definition.get("expected_airspeed_readbacks", {}))
+
+
+def sitl_target_for_envelope(name: str) -> str:
+    return str(_envelope_definition(name).get("sitl_target", SITL_TARGET))
+
+
+def gazebo_target_for_envelope(name: str) -> str:
+    return str(_envelope_definition(name).get("gazebo_target", GAZEBO_TARGET))
+
+
+def gazebo_world_file_for_envelope(name: str) -> Path:
+    return Path(_envelope_definition(name).get("gazebo_world_file", GAZEBO_WORLD_FILE))
+
+
+def envelope_metadata(name: str) -> dict[str, Any]:
+    definition = _envelope_definition(name)
+    metadata = {
+        "name": name,
+        "label": str(definition["label"]),
+        "mission_file": str(definition["mission_file"]),
+        "param_files": [str(path) for path in definition["param_files"]],
+        "expected_knee_readbacks": dict(definition["expected_knee_readbacks"]),
+        "sitl_target": sitl_target_for_envelope(name),
+        "gazebo_target": gazebo_target_for_envelope(name),
+        "gazebo_world_file": str(gazebo_world_file_for_envelope(name)),
+        "airspeed_required": bool(definition.get("airspeed_required", False)),
+    }
+    if "expected_airspeed_readbacks" in definition:
+        metadata["expected_airspeed_readbacks"] = dict(
+            definition["expected_airspeed_readbacks"]
+        )
+    return metadata
+
+
+def _envelope_definition(name: str) -> dict[str, Any]:
+    try:
+        return ENVELOPE_DEFINITIONS[name]
+    except KeyError:
+        raise ValueError(
+            "unknown GPS failure envelope "
+            f"{name!r}; expected one of {', '.join(ENVELOPE_NAMES)}"
+        ) from None
+
+
 def validate_required_param_names(names: Iterable[str]) -> None:
     present = set(names)
     missing = [name for name in REQUIRED_SIM_GPS_PARAMS if name not in present]
@@ -311,6 +473,10 @@ def parameter_schema() -> dict[str, Any]:
         "phase2_non_jamming_campaign_case_ids": list(
             PHASE2_NON_JAMMING_CAMPAIGN_CASE_IDS
         ),
+        "envelopes": {
+            name: envelope_metadata(name)
+            for name in ENVELOPE_NAMES
+        },
         "telemetry_message_types": list(TELEMETRY_MESSAGE_TYPES),
         "source_defaults": dict(SOURCE_DEFAULTS),
         "metadata": copy.deepcopy(PARAMETER_METADATA),
@@ -319,9 +485,12 @@ def parameter_schema() -> dict[str, Any]:
         "analysis_state_classes": list(ANALYSIS_STATE_CLASSES),
         "sitl_target": SITL_TARGET,
         "gazebo_target": GAZEBO_TARGET,
+        "gazebo_targets": list(GAZEBO_TARGETS),
         "launch_target_note": (
-            "dedicated GPS identities; plane-gps loads plane_base.parm -> "
-            "plane_gps.parm only (no airspeed overlay, no local override); "
+            "dedicated GPS identities; plane-gps defaults to plane_base.parm -> "
+            "plane_gps.parm with no local override. Named envelopes may pass a "
+            "plugin-owned explicit stack, including the fast-cruise GPS "
+            "airspeed overlay, without routing through plane-cte; "
             "exercised by governed raw validation runs, no curated Phase-2 "
             "evidence yet"
         ),

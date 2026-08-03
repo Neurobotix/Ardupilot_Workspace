@@ -1,0 +1,10 @@
+# ArduPlane Parameters - GPS Failure EKF Gate 300 / Glitch Radius 0 Envelope
+# Apply after config/vehicles/plane_base.parm and config/overlays/plane_gps.parm.
+#
+# Purpose: envelope comparison for GPS failure behavior. This intentionally
+# sets EK3_GLITCH_RAD to 0 and pins both position and velocity innovation gates
+# to 300 for a named experiment. It is not the default GPS failure overlay.
+
+EK3_GLITCH_RAD 0
+EK3_POS_I_GATE 300
+EK3_VEL_I_GATE 300

@@ -359,6 +359,78 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             GpsFailureConfig(param_file_stack=override).effective_param_stack,
         )
 
+    def test_named_envelopes_select_mission_and_param_stack(self) -> None:
+        fast = GpsFailureConfig(envelope_name=defaults.FAST_CRUISE_18MPS_ENVELOPE_NAME)
+        gate300_glitch0 = GpsFailureConfig(
+            envelope_name=defaults.EKF_GATE300_GLITCH0_ENVELOPE_NAME
+        )
+
+        self.assertEqual(defaults.FAST_CRUISE_18MPS_MISSION_FILE, fast.mission_file)
+        self.assertIn(defaults.PLANE_GPS_PARAM_FILE, fast.effective_param_stack)
+        self.assertEqual(
+            defaults.PLANE_GPS_AIRSPEED_FAST_CRUISE_18MPS_PARAM_FILE,
+            fast.effective_param_stack[-1],
+        )
+        self.assertEqual(defaults.SITL_TARGET, fast.sitl_target)
+        self.assertEqual(defaults.GPS_AIRSPEED_GAZEBO_TARGET, fast.gazebo_target)
+        self.assertEqual(
+            defaults.GPS_AIRSPEED_GAZEBO_WORLD_FILE,
+            fast.gazebo_world_file,
+        )
+        self.assertTrue(fast.envelope_metadata["airspeed_required"])
+        self.assertEqual(defaults.MISSION_FILE, gate300_glitch0.mission_file)
+        self.assertEqual(
+            defaults.PLANE_GPS_EKF_GATE300_GLITCH0_PARAM_FILE,
+            gate300_glitch0.effective_param_stack[-1],
+        )
+        self.assertEqual(
+            300.0,
+            gate300_glitch0.source_contract_expected_knee_readbacks["EK3_VEL_I_GATE"],
+        )
+
+    def test_fast_cruise_mission_changes_commanded_speed_only_in_mission(self) -> None:
+        base_header, base = _mission_rows(defaults.MISSION_FILE)
+        fast_header, fast = _mission_rows(defaults.FAST_CRUISE_18MPS_MISSION_FILE)
+
+        self.assertEqual(base_header, fast_header)
+        self.assertEqual(len(base), len(fast))
+        self.assertEqual("178", fast[2][3])
+        self.assertEqual(18.0, float(fast[2][5]))
+        for seq, (base_row, fast_row) in enumerate(zip(base, fast)):
+            if seq == 2:
+                continue
+            self.assertEqual(base_row, fast_row)
+
+    def test_fast_cruise_overlay_enables_gps_owned_airspeed_only(self) -> None:
+        params = _parse_param_file(
+            defaults.PLANE_GPS_AIRSPEED_FAST_CRUISE_18MPS_PARAM_FILE
+        )
+
+        self.assertEqual(100.0, params["ARSPD_TYPE"])
+        self.assertEqual(1.0, params["ARSPD_USE"])
+        self.assertEqual(18.0, params["AIRSPEED_CRUISE"])
+        self.assertEqual(12.0, params["AIRSPEED_MIN"])
+        self.assertEqual(22.0, params["AIRSPEED_MAX"])
+        self.assertNotIn("SIM_GPS1_GLTCH_X", params)
+        self.assertNotIn("SIM_GPS1_ENABLE", params)
+        self.assertNotIn("EK3_GLITCH_RAD", params)
+
+    def test_ekf_gate300_glitch0_overlay_declares_gate_envelope_only(self) -> None:
+        params = _parse_param_file(defaults.PLANE_GPS_EKF_GATE300_GLITCH0_PARAM_FILE)
+
+        self.assertEqual(0.0, params["EK3_GLITCH_RAD"])
+        self.assertEqual(300.0, params["EK3_POS_I_GATE"])
+        self.assertEqual(300.0, params["EK3_VEL_I_GATE"])
+        self.assertNotIn("SIM_GPS1_GLTCH_X", params)
+
+    def test_ekf_glitch10_overlay_declares_radius_envelope_only(self) -> None:
+        params = _parse_param_file(defaults.PLANE_GPS_EKF_GLITCH10_PARAM_FILE)
+
+        self.assertEqual(10.0, params["EK3_GLITCH_RAD"])
+        self.assertNotIn("EK3_POS_I_GATE", params)
+        self.assertNotIn("EK3_VEL_I_GATE", params)
+        self.assertNotIn("SIM_GPS1_GLTCH_X", params)
+
     def test_case_list_includes_locked_catalog(self) -> None:
         case_ids = [case.case_id for case in _cases()]
         self.assertEqual("nominal", case_ids[0])

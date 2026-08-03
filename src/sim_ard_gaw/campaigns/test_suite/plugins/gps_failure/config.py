@@ -21,6 +21,8 @@ class GpsFailureConfig:
     campaign_root: Path = field(default_factory=defaults.default_campaign_root)
     mission_file: Path = field(default_factory=lambda: defaults.MISSION_FILE)
     param_file_stack: Sequence[Path] | None = None
+    extra_param_files: Sequence[Path] = ()
+    envelope_name: str = defaults.BASELINE_ENVELOPE_NAME
     mavlink_addr: str = "udpin:0.0.0.0:14551"
     launch_stack: bool = False
     mission_timeout_s: float = defaults.PHASE2_MONITOR_TIMEOUT_S
@@ -34,6 +36,11 @@ class GpsFailureConfig:
     nominal_observation_s: float = defaults.NOMINAL_MIN_POST_INJECTION_S
 
     def __post_init__(self) -> None:
+        self.envelope_name = str(self.envelope_name)
+        defaults.envelope_metadata(self.envelope_name)
+        if Path(self.mission_file) == defaults.MISSION_FILE:
+            self.mission_file = defaults.mission_file_for_envelope(self.envelope_name)
+        self.extra_param_files = tuple(Path(path) for path in self.extra_param_files)
         self.runs_per_case = _positive_int("runs_per_case", self.runs_per_case, minimum=1)
         self.jamming_repeats = _positive_int(
             "jamming_repeats",
@@ -95,8 +102,37 @@ class GpsFailureConfig:
     @property
     def effective_param_stack(self) -> list[Path]:
         if self.param_file_stack is None:
-            return defaults.default_param_files()
-        return [Path(path) for path in self.param_file_stack]
+            stack = defaults.param_files_for_envelope(self.envelope_name)
+        else:
+            stack = [Path(path) for path in self.param_file_stack]
+        return [*stack, *self.extra_param_files]
+
+    @property
+    def envelope_metadata(self) -> dict[str, object]:
+        metadata = defaults.envelope_metadata(self.envelope_name)
+        metadata["mission_file"] = str(self.mission_file)
+        metadata["param_files"] = [str(path) for path in self.effective_param_stack]
+        return metadata
+
+    @property
+    def sitl_target(self) -> str:
+        return defaults.sitl_target_for_envelope(self.envelope_name)
+
+    @property
+    def gazebo_target(self) -> str:
+        return defaults.gazebo_target_for_envelope(self.envelope_name)
+
+    @property
+    def gazebo_world_file(self) -> Path:
+        return defaults.gazebo_world_file_for_envelope(self.envelope_name)
+
+    @property
+    def source_contract_expected_knee_readbacks(self) -> dict[str, float]:
+        return defaults.expected_knee_readbacks_for_envelope(self.envelope_name)
+
+    @property
+    def source_contract_expected_airspeed_readbacks(self) -> dict[str, float]:
+        return defaults.expected_airspeed_readbacks_for_envelope(self.envelope_name)
 
 
 def _positive_int(name: str, value: object, *, minimum: int) -> int:
