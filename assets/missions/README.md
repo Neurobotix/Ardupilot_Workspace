@@ -41,6 +41,13 @@ Active waypoint missions live directly in this directory.
   recovery/continuation, holds a 30 s terminal loiter, and ends in RTL at seq 9.
   The minimum post-injection window is an evidence gate; it does not terminate
   the flight.
+- `gps_failure_behavior_mission_fast_cruise_18mps.waypoints`
+  Purpose: mission half of the GPS failure `fast_cruise_18mps` envelope. It
+  preserves the active v6 geometry, seq-4 trigger contract, terminal loiter,
+  seq-8 terminal gate, and seq-9 RTL, but raises the explicit
+  `DO_CHANGE_SPEED` command from 15 m/s to 18 m/s. The complete envelope also
+  requires `config/overlays/plane_gps_airspeed_fast_cruise_18mps.parm` and
+  `assets/worlds/mini_talon_gps_airspeed_runway.sdf`.
 - `lidar_staircase_mission.waypoints`
   Purpose: LiDAR overpass mission for the staircase world.
 - `quad_star_showcase_mission.waypoints`

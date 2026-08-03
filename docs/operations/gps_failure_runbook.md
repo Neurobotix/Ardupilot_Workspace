@@ -108,6 +108,25 @@ Full narratives: `.ai/current.md` and
 - Mission: `assets/missions/gps_failure_behavior_mission.waypoints` (v6)
 - Params: `config/vehicles/plane_base.parm` + `config/overlays/plane_gps.parm`
   in that order, with no airspeed overlay and no local plane override.
+- Named envelopes:
+  - `baseline`: active v6 mission at explicit `DO_CHANGE_SPEED=15` and the
+    default GPS parameter stack above.
+  - `fast_cruise_18mps`: same v6 geometry and trigger/terminal contract, but
+    uses `assets/missions/gps_failure_behavior_mission_fast_cruise_18mps.waypoints`
+    with explicit `DO_CHANGE_SPEED=18`, appends
+    `config/overlays/plane_gps_airspeed_fast_cruise_18mps.parm`, and launches
+    `gazebo-plane-gps-airspeed` /
+    `assets/worlds/mini_talon_gps_airspeed_runway.sdf` so the speed envelope
+    has measured Gazebo JSON airspeed. It remains GPS-lane owned and still
+    excludes the local plane override.
+  - `ekf_gate300_glitch0`: same v6 mission as baseline, but appends
+    `config/overlays/plane_gps_ekf_gate300_glitch0.parm` after the default GPS
+    stack and expects live readbacks `EK3_GLITCH_RAD=0`,
+    `EK3_POS_I_GATE=300`, and `EK3_VEL_I_GATE=300`.
+  - `ekf_glitch10`: same v6 mission as baseline, but appends
+    `config/overlays/plane_gps_ekf_glitch10.parm` after the default GPS stack
+    and expects live readback `EK3_GLITCH_RAD=10` while keeping the baseline
+    innovation gates.
 
 Mission v6 keeps ambiguous return-home turns out of the main observation
 window and gives the lowest locked slow-drift rate (`0.2 m/s`) roughly 400 s
@@ -120,21 +139,35 @@ every live attempt.
 
 ### Dedicated launch identities
 
-`plane-gps` and `gazebo-plane-gps` are **not** the CTE/airspeed targets:
+`plane-gps`, `gazebo-plane-gps`, and `gazebo-plane-gps-airspeed` are **not**
+the CTE/airspeed targets:
 
-- `plane-gps` loads exactly `plane_base.parm -> plane_gps.parm`. It does not
-  load `plane_airspeed.parm` and does not append
+- `plane-gps` defaults to `plane_base.parm -> plane_gps.parm`. It does not
+  load `plane_airspeed.parm` by default and does not append
   `.private/config/plane_params.local.parm` (the local override is excluded
   unconditionally and the launcher prints that exclusion). It wipes EEPROM and
-  emits `udp:127.0.0.1:14551`. Manual launches default to
-  `var/runs/sitl/plane-gps`; GPS campaign launches override that with
+  emits `udp:127.0.0.1:14551`. GPS campaign launches may pass an explicit
+  envelope stack through `SIM_ARD_GAW_GPS_PARAM_FILES`; manual launches default
+  to the baseline GPS stack. Manual launches default to
+  `var/runs/sitl/plane-gps`; GPS campaign launches override runtime state with
   `<campaign_root>/_sitl_state/<case_id>/attempt_NNN/`.
 - `gazebo-plane-gps` uses `assets/worlds/mini_talon_gps_runway.sdf`: the same
   sensor-neutral Mini Talon capabilities, but an east-facing pose aligned to
   the behavior mission. The shared `mini_talon_runway.sdf` is unchanged.
+- `gazebo-plane-gps-airspeed` uses
+  `assets/worlds/mini_talon_gps_airspeed_runway.sdf`: the same GPS mission
+  pose, but with `mini_talon_with_airspeed` and Gazebo's airspeed system for
+  named speed-envelope runs. It is calm by default and does not route through
+  the CTE wind world or local override path.
 - Using the earlier `plane-cte` / `gazebo-plane-cte` for GPS was unsafe: those
   load the airspeed overlay and the local override. See ADR-0021 (2026-07-13
   amendment).
+
+Important correction: `var/runs/gps_failure_behavior_fast_cruise_18mps_20260722T092001Z`
+is accepted GPS behavior evidence, but it is not valid evidence for achieved
+18 m/s cruise. That run uploaded `DO_CHANGE_SPEED=18`, but it used the older
+sensor-neutral GPS world and no airspeed overlay, so achieved groundspeed stayed
+near the baseline. Treat it as commanded-fast only.
 
 These targets are covered by structural tests and were exercised by the
 governed raw validation runs above. No curated evidence has been promoted.
@@ -156,6 +189,9 @@ governed raw validation runs above. No curated evidence has been promoted.
 - Dry-run `--preview-elapsed-s` remains a plan-only preview input. During live
   execution, slow-drift payloads and bounded restore schedules are driven by
   vehicle `time_boot_ms`; wall elapsed is diagnostic only.
+- `--envelope` selects a named mission/parameter/source-contract envelope.
+  `--mission-file` and `--extra-param-file` are explicit override hooks for
+  named experiments; use the named envelopes for comparable reruns.
 
 Example no-SITL and guard checks (the `--live-case nominal` command without
 confirmation must fail before launch):
@@ -180,9 +216,12 @@ PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_failure_readiness
 Before any live matrix: read back every injected `SIM_GPS1_*` param, read live
 `EK3_POS_I_GATE` / `EK3_GLITCH_RAD` / `FS_EKF_THRESH` / `EK3_GPS_CHECK` plus
 `EK3_SRC1_POSXY` / `EK3_SRC1_VELXY` / `EK3_SRC1_POSZ` / `EK3_SRC1_VELZ` /
-`EK3_SRC1_YAW`, require `EK3_GLITCH_RAD > 0`, integral source enums, and EKF
-absolute-position status flags as the validated GPS-aiding proxy. Confirm the
-checked-in configuration source set (`3/3/1/3/1`) and knee values plus the
+`EK3_SRC1_YAW`, require the selected envelope's knee readbacks, integral
+source enums, and EKF absolute-position status flags as the validated
+GPS-aiding proxy. The baseline, fast-cruise, and `ekf_glitch10` envelopes
+require `EK3_GLITCH_RAD > 0`; the `ekf_gate300_glitch0` envelope accepts zero
+only because zero is its named expected readback. Confirm the checked-in
+configuration source set (`3/3/1/3/1`) and knee values plus the
 straight-leg duration, but do not treat those readbacks as exact internal EKF
 runtime proof. Trigger authorization additionally requires fresh,
 co-temporal heartbeat and SIMSTATE evidence; cleanup, all scheduled operations,
@@ -219,8 +258,17 @@ the live campaign:
 PYTHONPATH=src ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure --live-phase2-round-robin-campaign --confirm-live-phase2 --confirm-live-campaign --campaign-cases nominal,slow_drift_0p5_mps,hard_denial_15s --runs-per-case 5 --mission-timeout 1800 --campaign-root "$(pwd)/var/runs/gps_failure_behavior_v6_science_rr_$(date -u +%Y%m%dT%H%M%SZ)"
 ```
 
-The full Phase 3 matrix remains gated; this v6 campaign authorizes only the
-protected three-case set above, not the full v1 GPS catalog.
+Full one-run non-jamming envelope comparisons, one repetition per case:
+
+```bash
+PYTHONPATH=src ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure --live-phase2-round-robin-campaign --confirm-live-phase2 --confirm-live-campaign --envelope fast_cruise_18mps --campaign-cases nominal,slow_drift_0p2_mps,slow_drift_0p5_mps,slow_drift_1p0_mps,slow_drift_2p0_mps,slow_drift_4p0_mps,slow_drift_8p0_mps,slow_drift_accumulation_ramp,step_glitch_010m,step_glitch_025m,step_glitch_050m,step_glitch_100m,step_glitch_200m,step_glitch_500m,hard_denial_05s,hard_denial_15s,hard_denial_30s,hard_denial_60s --runs-per-case 1 --mission-timeout 1800 --campaign-root "$(pwd)/var/runs/gps_failure_behavior_fast_cruise_18mps_$(date -u +%Y%m%dT%H%M%SZ)"
+PYTHONPATH=src ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure --live-phase2-round-robin-campaign --confirm-live-phase2 --confirm-live-campaign --envelope ekf_gate300_glitch0 --campaign-cases nominal,slow_drift_0p2_mps,slow_drift_0p5_mps,slow_drift_1p0_mps,slow_drift_2p0_mps,slow_drift_4p0_mps,slow_drift_8p0_mps,slow_drift_accumulation_ramp,step_glitch_010m,step_glitch_025m,step_glitch_050m,step_glitch_100m,step_glitch_200m,step_glitch_500m,hard_denial_05s,hard_denial_15s,hard_denial_30s,hard_denial_60s --runs-per-case 1 --mission-timeout 1800 --campaign-root "$(pwd)/var/runs/gps_failure_behavior_ekf_gate300_glitch0_$(date -u +%Y%m%dT%H%M%SZ)"
+PYTHONPATH=src ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure --live-phase2-round-robin-campaign --confirm-live-phase2 --confirm-live-campaign --envelope ekf_glitch10 --campaign-cases nominal,slow_drift_0p2_mps,slow_drift_0p5_mps,slow_drift_1p0_mps,slow_drift_2p0_mps,slow_drift_4p0_mps,slow_drift_8p0_mps,slow_drift_accumulation_ramp,step_glitch_010m,step_glitch_025m,step_glitch_050m,step_glitch_100m,step_glitch_200m,step_glitch_500m,hard_denial_05s,hard_denial_15s,hard_denial_30s,hard_denial_60s --runs-per-case 1 --mission-timeout 1800 --campaign-root "$(pwd)/var/runs/gps_failure_behavior_ekf_glitch10_$(date -u +%Y%m%dT%H%M%SZ)"
+```
+
+Full non-jamming envelope comparisons remain guarded live campaigns: they need
+the explicit confirmations in the commands above, preserve failed attempts, and
+do not include jamming cases. Jamming remains outside this non-jamming matrix.
 
 ## References
 

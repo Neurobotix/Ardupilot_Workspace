@@ -384,6 +384,24 @@ and the dead `mechanism_fields_present` legacy alias plus the
 lane doc/runbook were corrected to the current v6/Phase-H state. No scientific
 behavior changed; all GPS suites and pyright pass.
 
+On 2026-07-22, GPS envelope wiring added named full-matrix comparison profiles:
+`fast_cruise_18mps` keeps the v6 geometry but changes the explicit mission
+`DO_CHANGE_SPEED` from 15 m/s to 18 m/s, appends
+`config/overlays/plane_gps_airspeed_fast_cruise_18mps.parm`, and launches the
+GPS-owned `gazebo-plane-gps-airspeed` /
+`assets/worlds/mini_talon_gps_airspeed_runway.sdf` target so the speed envelope
+has measured Gazebo JSON airspeed. `ekf_gate300_glitch0` keeps the baseline v6
+mission and appends `config/overlays/plane_gps_ekf_gate300_glitch0.parm` after
+the GPS stack. `ekf_glitch10` keeps the baseline v6 mission and appends
+`config/overlays/plane_gps_ekf_glitch10.parm` after the GPS stack. The campaign
+CLI records the selected envelope in
+`campaign_contract.json`, run config, launch plan, and readiness metadata; the
+launcher consumes the selected GPS stack through `SIM_ARD_GAW_GPS_PARAM_FILES`;
+and source-contract validation uses the selected envelope's knee readbacks.
+`var/runs/gps_failure_behavior_fast_cruise_18mps_20260722T092001Z` is accepted
+GPS behavior output but is commanded-fast only, not valid achieved-18 m/s
+evidence, because it predated this airspeed-backed fast-envelope correction.
+
 Additional active feature work: the `test_suite` migration completed its Phase 3 sequence
 (3A–3G) on 2026-06-01. The staged `wind_matrix` plugin is fully zero-legacy
 (environment, MAVLink control/monitor, and wind injection all plugin-owned) and
