@@ -53,6 +53,9 @@ class GpsLaunchPlan:
     runtime_root: Path
     sitl_state_dir: Path
     expected_bin_dir: Path
+    param_file_stack: list[Path]
+    sitl_target: str
+    gazebo_target: str
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -61,33 +64,49 @@ class GpsLaunchPlan:
             "runtime_root": str(self.runtime_root),
             "sitl_state_dir": str(self.sitl_state_dir),
             "expected_bin_dir": str(self.expected_bin_dir),
-            "sitl_target": defaults.SITL_TARGET,
-            "gazebo_target": defaults.GAZEBO_TARGET,
+            "sitl_target": self.sitl_target,
+            "gazebo_target": self.gazebo_target,
+            "param_file_stack": [str(path) for path in self.param_file_stack],
             "bin_selection": "new .BIN files only; names snapshotted before launch",
         }
 
 
-def build_launch_plan(ctx: AttemptContext) -> GpsLaunchPlan:
+def build_launch_plan(
+    ctx: AttemptContext,
+    config: GpsFailureConfig | None = None,
+) -> GpsLaunchPlan:
     runtime_root = ctx.attempt_dir / "runtime"
     sitl_state_dir = defaults.sitl_state_dir(
         ctx.campaign_root,
         ctx.case.case_id,
         ctx.attempt_index,
     )
+    param_file_stack = (
+        config.effective_param_stack if config is not None else defaults.default_param_files()
+    )
+    sitl_target = config.sitl_target if config is not None else defaults.SITL_TARGET
+    gazebo_target = (
+        config.gazebo_target if config is not None else defaults.GAZEBO_TARGET
+    )
+    param_stack_env = ":".join(str(path) for path in param_file_stack)
     return GpsLaunchPlan(
         sitl_command=[
             "env",
             f"SIM_ARD_GAW_SITL_USE_DIR={sitl_state_dir}",
+            f"SIM_ARD_GAW_GPS_PARAM_FILES={param_stack_env}",
             str(defaults.WORKSPACE_ROOT / "scripts" / "ops" / "launch.sh"),
-            defaults.SITL_TARGET,
+            sitl_target,
         ],
         gazebo_command=[
             str(defaults.WORKSPACE_ROOT / "scripts" / "ops" / "launch.sh"),
-            defaults.GAZEBO_TARGET,
+            gazebo_target,
         ],
         runtime_root=runtime_root,
         sitl_state_dir=sitl_state_dir,
         expected_bin_dir=sitl_state_dir / "logs",
+        param_file_stack=list(param_file_stack),
+        sitl_target=sitl_target,
+        gazebo_target=gazebo_target,
     )
 
 
@@ -115,8 +134,11 @@ class GpsFailureEnvironment(EnvironmentAdapter):
     def launch(self, case: TestCase, ctx: AttemptContext) -> None:
         if not self._config.launch_stack:
             return None
-        plan = build_launch_plan(ctx)
-        if defaults.SITL_TARGET != "plane-gps" or defaults.GAZEBO_TARGET != "gazebo-plane-gps":
+        plan = build_launch_plan(ctx, self._config)
+        if (
+            plan.sitl_target != defaults.SITL_TARGET
+            or plan.gazebo_target not in defaults.GAZEBO_TARGETS
+        ):
             raise RuntimeError("gps_failure launch target contract violated")
         if plan.runtime_root.exists():
             shutil.rmtree(plan.runtime_root)
@@ -126,8 +148,8 @@ class GpsFailureEnvironment(EnvironmentAdapter):
         plan.sitl_state_dir.mkdir(parents=True, exist_ok=True)
         ctx.extra["gps_before_bin_names"] = _bin_names(plan.expected_bin_dir)
         ctx.extra["gps_launch_plan"] = plan.as_dict()
-        gazebo_log = ctx.attempt_dir / "gazebo_plane_gps.log"
-        sitl_log = ctx.attempt_dir / "plane_gps.log"
+        gazebo_log = ctx.attempt_dir / f"{plan.gazebo_target.replace('-', '_')}.log"
+        sitl_log = ctx.attempt_dir / f"{plan.sitl_target.replace('-', '_')}.log"
         run_config = build_run_config(
             config=self._config,
             case=case,
@@ -140,25 +162,25 @@ class GpsFailureEnvironment(EnvironmentAdapter):
         defaults.write_json(run_config_path, run_config)
         ctx.artifacts["run_config.json"] = run_config_path
         ctx.extra["run_config"] = run_config
-        ctx.process_handles["plane-gps"] = self._launcher(
+        ctx.process_handles[plan.sitl_target] = self._launcher(
             plan.sitl_command,
             log_path=sitl_log,
         )
-        ctx.log_paths["plane-gps"] = sitl_log
+        ctx.log_paths[plan.sitl_target] = sitl_log
         # plane-gps owns the governed broad pre-run cleanup. Do not start
         # Gazebo until that cleanup has definitely completed or the plane
         # launcher could kill the Gazebo process it is meant to use.
         _wait_for_log_marker(
             sitl_log,
             "Cleanup complete",
-            ctx.process_handles["plane-gps"],
+            ctx.process_handles[plan.sitl_target],
             timeout_s=self._config.cleanup_timeout_s,
         )
-        ctx.process_handles["gazebo-plane-gps"] = self._launcher(
+        ctx.process_handles[plan.gazebo_target] = self._launcher(
             plan.gazebo_command,
             log_path=gazebo_log,
         )
-        ctx.log_paths["gazebo-plane-gps"] = gazebo_log
+        ctx.log_paths[plan.gazebo_target] = gazebo_log
 
     def assert_ready(self, case: TestCase, ctx: AttemptContext) -> None:
         if not self._config.launch_stack:
@@ -314,9 +336,10 @@ def build_run_config(
         "campaign_root": str(config.campaign_root),
         "attempt_dir": str(ctx.attempt_dir),
         "mission_file": str(mission_file),
+        "envelope": config.envelope_metadata,
         "mission_file_provenance": file_provenance(mission_file),
-        "gazebo_world": str(defaults.GAZEBO_WORLD_FILE),
-        "gazebo_world_provenance": file_provenance(defaults.GAZEBO_WORLD_FILE),
+        "gazebo_world": str(config.gazebo_world_file),
+        "gazebo_world_provenance": file_provenance(config.gazebo_world_file),
         "mavlink_addr": config.mavlink_addr,
         "launch_stack": config.launch_stack,
         "fresh_sitl_process_per_attempt": True,
@@ -332,8 +355,8 @@ def build_run_config(
         "commands": {
             "sitl": list(plan.sitl_command),
             "gazebo": list(plan.gazebo_command),
-            "sitl_target": defaults.SITL_TARGET,
-            "gazebo_target": defaults.GAZEBO_TARGET,
+            "sitl_target": plan.sitl_target,
+            "gazebo_target": plan.gazebo_target,
         },
         "runtime": plan.as_dict(),
         "logs": {

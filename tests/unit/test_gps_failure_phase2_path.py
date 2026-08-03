@@ -4010,12 +4010,58 @@ class GpsFailurePhase2AdapterTests(unittest.TestCase):
             "SIM_ARD_GAW_SITL_USE_DIR=",
             plan.sitl_command[1],
         )
+        self.assertIn(
+            "SIM_ARD_GAW_GPS_PARAM_FILES=",
+            plan.sitl_command[2],
+        )
         self.assertIn("plane-gps", plan.sitl_command)
         self.assertIn("gazebo-plane-gps", plan.gazebo_command)
         self.assertIn("var/tmp_test_gps_phase2/attempt/runtime", str(plan.runtime_root))
         self.assertIn(
             "var/tmp_test_gps_phase2/_sitl_state/nominal/attempt_001/logs",
             str(plan.expected_bin_dir),
+        )
+
+    def test_launch_plan_uses_selected_envelope_param_stack(self) -> None:
+        ctx = _ctx(ROOT / "var" / "tmp_test_gps_phase2_envelope")
+        config = GpsFailureConfig(
+            envelope_name=defaults.EKF_GATE300_GLITCH0_ENVELOPE_NAME
+        )
+
+        plan = build_launch_plan(ctx, config)
+
+        param_env = next(
+            item for item in plan.sitl_command if item.startswith("SIM_ARD_GAW_GPS_PARAM_FILES=")
+        )
+        self.assertIn("plane_gps_ekf_gate300_glitch0.parm", param_env)
+        self.assertTrue(
+            any(
+                path.name == "plane_gps_ekf_gate300_glitch0.parm"
+                for path in plan.param_file_stack
+            )
+        )
+
+    def test_launch_plan_uses_fast_envelope_airspeed_world_and_stack(self) -> None:
+        ctx = _ctx(ROOT / "var" / "tmp_test_gps_phase2_fast_envelope")
+        config = GpsFailureConfig(
+            envelope_name=defaults.FAST_CRUISE_18MPS_ENVELOPE_NAME
+        )
+
+        plan = build_launch_plan(ctx, config)
+
+        param_env = next(
+            item
+            for item in plan.sitl_command
+            if item.startswith("SIM_ARD_GAW_GPS_PARAM_FILES=")
+        )
+        self.assertIn("plane_gps_airspeed_fast_cruise_18mps.parm", param_env)
+        self.assertIn("plane-gps", plan.sitl_command)
+        self.assertIn("gazebo-plane-gps-airspeed", plan.gazebo_command)
+        self.assertEqual("plane-gps", plan.sitl_target)
+        self.assertEqual("gazebo-plane-gps-airspeed", plan.gazebo_target)
+        self.assertEqual(
+            defaults.PLANE_GPS_AIRSPEED_FAST_CRUISE_18MPS_PARAM_FILE,
+            plan.param_file_stack[-1],
         )
 
     def test_environment_launch_uses_injected_launcher_without_opening_real_stack(self) -> None:
@@ -4065,11 +4111,66 @@ class GpsFailurePhase2AdapterTests(unittest.TestCase):
         )
         self.assertEqual(64, len(run_config["gazebo_world_provenance"]["sha256"]))
         self.assertEqual(2, len(run_config["param_file_provenance"]))
+        self.assertEqual("baseline", run_config["envelope"]["name"])
         self.assertIn("git_head", run_config["source_tree_snapshot"])
         self.assertEqual(set(), ctx.extra["gps_before_bin_names"])
         self.assertIn("_sitl_state/nominal/attempt_001", run_config["runtime"]["sitl_state_dir"])
         self.assertEqual({}, ctx.process_handles)
         self.assertEqual([defaults.CLEANUP_TIMEOUT_S], cleanup_calls)
+
+    def test_environment_launch_records_fast_envelope_world_provenance(self) -> None:
+        calls: list[tuple[list[str], Path]] = []
+
+        class _Proc:
+            def poll(self) -> None:
+                return None
+
+            def wait(self, *, timeout: float) -> None:
+                return None
+
+            def terminate(self) -> None:
+                return None
+
+            def kill(self) -> None:
+                return None
+
+        def launcher(command: list[str], *, log_path: Path) -> _Proc:
+            calls.append((command, log_path))
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text("Cleanup complete\n", encoding="utf-8")
+            return _Proc()
+
+        config = GpsFailureConfig(
+            envelope_name=defaults.FAST_CRUISE_18MPS_ENVELOPE_NAME,
+            launch_stack=True,
+        )
+        ctx = _ctx(ROOT / "var" / "tmp_test_gps_phase2_fast_env")
+        env = GpsFailureEnvironment(
+            config,
+            launcher=launcher,
+            governed_cleanup=lambda *, timeout_s: {"attempted": True, "ok": True},
+            process_scanner=lambda: [],
+        )
+
+        env.launch(ctx.case, ctx)
+        env.cleanup(ctx.case, ctx)
+
+        run_config = defaults.read_json(ctx.artifacts["run_config.json"])
+        self.assertIn("gazebo-plane-gps-airspeed", calls[1][0])
+        self.assertEqual(
+            str(defaults.GPS_AIRSPEED_GAZEBO_WORLD_FILE),
+            run_config["gazebo_world"],
+        )
+        self.assertEqual(
+            "gazebo-plane-gps-airspeed",
+            run_config["commands"]["gazebo_target"],
+        )
+        self.assertTrue(run_config["envelope"]["airspeed_required"])
+        self.assertTrue(
+            run_config["param_files_loaded_at_sitl_start"][-1].endswith(
+                "plane_gps_airspeed_fast_cruise_18mps.parm"
+            )
+        )
 
     def test_launch_script_supports_campaign_local_sitl_state_override(self) -> None:
         source = (ROOT / "src" / "sim_ard_gaw" / "launch" / "launch.sh").read_text(
@@ -4077,6 +4178,7 @@ class GpsFailurePhase2AdapterTests(unittest.TestCase):
         )
 
         self.assertIn("SIM_ARD_GAW_SITL_USE_DIR", source)
+        self.assertIn("SIM_ARD_GAW_GPS_PARAM_FILES", source)
         self.assertIn('mavproxy_log_dir="$run_dir"', source)
 
     def test_environment_ready_installs_production_mission_adapter(self) -> None:
