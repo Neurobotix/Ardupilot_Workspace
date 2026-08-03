@@ -458,7 +458,16 @@ def _resolve_payload_and_restore(
         return payload, []
     if fault_type == "step_glitch":
         payload = _resolve_step_glitch_payload(recipe, trigger_event)
-        return payload, []
+        # A bounded step glitch clears every GLTCH axis it wrote at
+        # glitch_hold_duration_s. An unbounded one carries no hold key and keeps
+        # the historical behavior: the offset persists until cleanup.
+        restore = _duration_restore(
+            recipe=recipe,
+            duration_key="glitch_hold_duration_s",
+            payload={name: 0.0 for name in payload},
+            reason="restore GPS position offset after bounded glitch hold",
+        )
+        return payload, restore
     if fault_type == "hard_denial":
         payload = {"SIM_GPS1_ENABLE": 0.0}
         restore = _duration_restore(

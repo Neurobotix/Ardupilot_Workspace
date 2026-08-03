@@ -101,17 +101,37 @@ def preview_payload_from_recipe(
     fault_type = recipe.get("fault_type")
     axis = str(recipe.get("axis", "east"))
     if fault_type == "step_glitch":
-        return {
+        payload = step_glitch_payload(
+            float(recipe["offset_magnitude_m"]),
+            latitude,
+            axis=axis,
+        )
+        preview = {
             "latitude_deg": latitude,
             "elapsed_s": elapsed,
+            # The injected payload is a fixed step: elapsed time never changes the
+            # magnitude. For a bounded glitch elapsed time still decides whether
+            # the offset is present at all, which the hold fields below express.
             "elapsed_affects_payload": False,
-            "payload": step_glitch_payload(
-                float(recipe["offset_magnitude_m"]),
-                latitude,
-                axis=axis,
-            ),
+            "payload": payload,
             "not_live_payload": True,
         }
+        hold_duration_s = recipe.get("glitch_hold_duration_s")
+        if hold_duration_s is None:
+            preview["bounded"] = False
+            return preview
+        hold_s = _finite_float("glitch_hold_duration_s", hold_duration_s)
+        if hold_s <= 0:
+            raise ValueError("glitch_hold_duration_s must be > 0")
+        preview.update(
+            {
+                "bounded": True,
+                "glitch_hold_duration_s": hold_s,
+                "offset_active_at_elapsed": elapsed < hold_s,
+                "restore_payload": {name: 0.0 for name in payload},
+            }
+        )
+        return preview
     if fault_type == "slow_drift" and "drift_rate_mps" in recipe:
         drift_rate = _finite_float("drift_rate_mps", recipe["drift_rate_mps"])
         return {

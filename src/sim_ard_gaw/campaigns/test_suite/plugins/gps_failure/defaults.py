@@ -252,6 +252,7 @@ BEHAVIOR_CLASSES = (
     "nominal",
     "silent_drift",
     "detected_rejected",
+    "rejected_and_survived",
     "reset_captured",
     "autopilot_contained",
     "loss_of_control",
@@ -262,6 +263,18 @@ ANALYSIS_STATE_CLASSES = ("analysis_incomplete",)
 DRIFT_RATES_MPS = (0.2, 0.5, 1.0, 2.0, 4.0, 8.0)
 GLITCH_MAGNITUDES_M = (10, 25, 50, 100, 200, 500)
 DENIAL_DURATIONS_S = (5, 15, 30, 60)
+# Bounded step-glitch holds. An unbounded step_glitch writes its offset once and
+# never clears it before cleanup, so with MIN_POST_INJECTION_S = 90 the shortest
+# glitch outlives EK3's posRetryTimeUseVel_ms = 10000 ms position-retry budget by
+# 9x. Rejection is therefore always a 10 s transient on the way to a reset, and
+# the run is classified by its terminal state. A bounded hold restores the offset
+# to zero mid-flight so the duration axis can be swept: a hold shorter than the
+# retry budget lets lastGpsPosPassTime_ms refresh before posTimeout fires, which
+# is the only configuration in which the innovation gate wins outright.
+# 5 s sits below the 10 s budget with margin for the ~0.2-0.5 s detection latency
+# (GPS sample-phase jitter); 15 s is the negative control above the budget.
+GLITCH_HOLD_DURATIONS_S = (5, 15)
+BOUNDED_GLITCH_MAGNITUDE_M = 200.0
 JAMMING_REPEAT_COUNT = 5
 JAMMING_DURATION_S = 45.0
 
@@ -280,6 +293,8 @@ PHASE2_NON_JAMMING_CAMPAIGN_CASE_IDS = (
     "step_glitch_100m",
     "step_glitch_200m",
     "step_glitch_500m",
+    "step_glitch_200m_05s",
+    "step_glitch_200m_15s",
     "hard_denial_05s",
     "hard_denial_15s",
     "hard_denial_30s",
@@ -481,6 +496,8 @@ def parameter_schema() -> dict[str, Any]:
         "source_defaults": dict(SOURCE_DEFAULTS),
         "metadata": copy.deepcopy(PARAMETER_METADATA),
         "fault_types": list(FAULT_TYPES),
+        "glitch_hold_durations_s": [float(value) for value in GLITCH_HOLD_DURATIONS_S],
+        "bounded_glitch_magnitude_m": float(BOUNDED_GLITCH_MAGNITUDE_M),
         "behavior_classes": list(BEHAVIOR_CLASSES),
         "analysis_state_classes": list(ANALYSIS_STATE_CLASSES),
         "sitl_target": SITL_TARGET,

@@ -15,6 +15,8 @@ class GpsFailureConfig:
     drift_rates_mps: tuple[float, ...] = defaults.DRIFT_RATES_MPS
     glitch_magnitudes_m: tuple[float, ...] = defaults.GLITCH_MAGNITUDES_M
     denial_durations_s: tuple[float, ...] = defaults.DENIAL_DURATIONS_S
+    glitch_hold_durations_s: tuple[float, ...] = defaults.GLITCH_HOLD_DURATIONS_S
+    bounded_glitch_magnitude_m: float = defaults.BOUNDED_GLITCH_MAGNITUDE_M
     jamming_repeats: int = defaults.JAMMING_REPEAT_COUNT
     jamming_duration_s: float = defaults.JAMMING_DURATION_S
     runs_per_case: int = 1
@@ -65,6 +67,15 @@ class GpsFailureConfig:
             "denial_durations_s",
             self.denial_durations_s,
             denial_duration_token,
+        )
+        self.glitch_hold_durations_s = _positive_ladder(
+            "glitch_hold_durations_s",
+            self.glitch_hold_durations_s,
+            glitch_hold_duration_token,
+        )
+        self.bounded_glitch_magnitude_m = _positive_finite(
+            "bounded_glitch_magnitude_m",
+            self.bounded_glitch_magnitude_m,
         )
         self.mission_timeout_s = _positive_finite(
             "mission_timeout_s",
@@ -201,5 +212,11 @@ def glitch_magnitude_token(value: float) -> str:
 
 def denial_duration_token(value: float) -> str:
     if value in defaults.DENIAL_DURATIONS_S:
+        return f"{int(value):02d}"
+    return _format_number_token(value)
+
+
+def glitch_hold_duration_token(value: float) -> str:
+    if value in defaults.GLITCH_HOLD_DURATIONS_S:
         return f"{int(value):02d}"
     return _format_number_token(value)

@@ -356,6 +356,22 @@ def _classify_behavior(evidence: "_BehaviorEvidence") -> dict[str, Any]:
     if evidence.reset_event:
         return _result("reset_captured", "valid_reset_behavior", True)
     if evidence.rejected:
+        # The gate only wins outright when the fault ended before the filter gave
+        # up: rejection occurred, no position reset followed, and the
+        # truth-vs-belief gap came back inside the nominal band. Requiring the
+        # closed gap (not merely "no reset") keeps a still-diverging rejection
+        # from being promoted into the survived band.
+        if (
+            evidence.bounded_fault
+            and evidence.fault_restored
+            and not evidence.gap_growing
+            and evidence.gap_within_nominal_band
+        ):
+            return _result(
+                "rejected_and_survived",
+                "valid_rejection_survived_bounded_fault",
+                True,
+            )
         return _result("detected_rejected", "valid_detected_rejection", True)
     if evidence.fused and evidence.gap_growing and not evidence.failsafe:
         return _result("silent_drift", "valid_silent_drift", True)
@@ -381,6 +397,27 @@ def _is_nominal_observation(observation: dict[str, Any]) -> bool:
     )
 
 
+def _restore_completed(observation: dict[str, Any]) -> bool:
+    """True when every planned restore step executed and read back successfully.
+
+    Reads the monitor's ``scheduled_operations`` status, which already tracks
+    expected-vs-completed restore counts and fails closed on a restore whose
+    readback did not verify. Anything missing or malformed is treated as
+    not-restored so a bounded case cannot be credited by omission.
+    """
+
+    status = observation.get("scheduled_operations")
+    if not isinstance(status, dict) or status.get("ok") is not True:
+        return False
+    expected = status.get("expected_restore_count")
+    completed = status.get("completed_restore_count")
+    if not isinstance(expected, int) or isinstance(expected, bool):
+        return False
+    if not isinstance(completed, int) or isinstance(completed, bool):
+        return False
+    return expected > 0 and completed == expected
+
+
 @dataclass(frozen=True)
 class _BehaviorEvidence:
     fused: bool
@@ -392,6 +429,13 @@ class _BehaviorEvidence:
     gap_growing: bool
     gap_within_nominal_band: bool
     attitude_in_band: bool
+    # Bounded-fault provenance. ``bounded_fault`` is a property of the recipe (the
+    # case declared a hold duration); ``fault_restored`` is a property of the run
+    # (the restore step actually executed and read back). Both are required before
+    # a rejection may be classified as survived, so an unbounded run can never
+    # reach that band no matter how its gap metrics look.
+    bounded_fault: bool = False
+    fault_restored: bool = False
 
 
 # The substantive behavior-tier fields the classifier requires. Each must be
@@ -417,6 +461,8 @@ _SUPPORTED_BEHAVIOR_FIELDS = frozenset(
         "mode_change",
         "loss_of_control",
         "timeout",
+        "bounded_fault",
+        "fault_restored",
     }
 )
 # Gap magnitude (metres) at or below which the truth-vs-belief gap is treated as
@@ -465,8 +511,14 @@ def _behavior_evidence(
         )
         gap_growing = _strict_bool(observation, "gap_growing")
         attitude_in_band = _strict_bool(observation, "attitude_in_band")
+        bounded_fault = _strict_bool(observation, "bounded_fault")
+        fault_restored = _strict_bool(observation, "fault_restored")
     except _NonBoolField as exc:
         return None, f"invalid_behavior_field_{exc.field}"
+
+    # A run cannot claim its fault was restored unless the recipe bounded it.
+    if fault_restored and not bounded_fault:
+        return None, "contradictory_restored_unbounded_fault"
 
     if "gap_within_nominal_band" in observation:
         try:
@@ -492,6 +544,8 @@ def _behavior_evidence(
             gap_growing=gap_growing,
             gap_within_nominal_band=gap_within_nominal_band,
             attitude_in_band=attitude_in_band,
+            bounded_fault=bounded_fault,
+            fault_restored=fault_restored,
         ),
         None,
     )
@@ -779,6 +833,11 @@ def _finalize_live_bin_analysis(
         if isinstance(value, (int, float)) and not isinstance(value, bool)
     ]
     finalized = dict(observation)
+    # A fault is bounded when its recipe declares a hold duration, which is what
+    # makes the fault end in flight rather than at cleanup.
+    bounded_fault = bool(
+        isinstance(recipe, dict) and recipe.get("glitch_hold_duration_s") is not None
+    )
     analysis_ok = analysis.get("ok") is True
     mechanism_ok = isinstance(mechanism, dict) and mechanism.get("ok") is True
     lifecycle_ok = lifecycle_windows.get("status") == "pass"
@@ -812,6 +871,11 @@ def _finalize_live_bin_analysis(
         "fused": bool(ratios and max(ratios) < 1.0),
         "pos_test_ratio_rejected": bool(ratios and max(ratios) >= 1.0),
         "reset_event": bool(metrics.get("reset_events")),
+        "bounded_fault": bounded_fault,
+        # Restored only when every planned restore step actually executed and read
+        # back. A bounded recipe whose restore silently failed to fire must not be
+        # credited with surviving the fault.
+        "fault_restored": bounded_fault and _restore_completed(observation),
         "attitude_in_band": bool(
             envelope_ok and not envelope.get("threshold_crossings")
         ),

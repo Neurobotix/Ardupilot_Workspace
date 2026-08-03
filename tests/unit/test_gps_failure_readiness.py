@@ -64,14 +64,16 @@ class ReadinessReportTests(unittest.TestCase):
         suite = self.report["suite_path"]
         self.assertEqual(suite["scheduled_case_count"], len(expected_ids))
         self.assertEqual(suite["scheduled_case_ids"], expected_ids)
-        # nominal + 6 drift rates + accumulation + 6 glitch + 4 denial + 5 jam
-        self.assertEqual(suite["scheduled_case_count"], 23)
+        # nominal + 6 drift rates + accumulation + 6 glitch + 2 bounded glitch
+        # + 4 denial + 5 jam
+        self.assertEqual(suite["scheduled_case_count"], 25)
 
     def test_case_catalog_counts_by_fault_type(self) -> None:
         by_fault = self.report["case_catalog"]["by_fault_type"]
         self.assertEqual(by_fault["nominal"], 1)
         self.assertEqual(by_fault["slow_drift"], 7)
-        self.assertEqual(by_fault["step_glitch"], 6)
+        # 6 unbounded magnitudes + 2 bounded holds at the fixed 200 m magnitude
+        self.assertEqual(by_fault["step_glitch"], 8)
         self.assertEqual(by_fault["hard_denial"], 4)
         self.assertEqual(by_fault["jamming"], 5)
         self.assertEqual(sum(by_fault.values()), self.report["case_catalog"]["total"])
@@ -217,12 +219,17 @@ class ReadinessReportTests(unittest.TestCase):
             drift_rates_mps=(0.5,),
             glitch_magnitudes_m=(50,),
             denial_durations_s=(30,),
+            glitch_hold_durations_s=(5,),
         )
         report = build_readiness_report(build_plugin(config))
         by_fault = report["case_catalog"]["by_fault_type"]
         self.assertEqual(by_fault["slow_drift"], 2)  # one rate + accumulation
-        self.assertEqual(by_fault["step_glitch"], 1)
+        self.assertEqual(by_fault["step_glitch"], 2)  # one magnitude + one hold
         self.assertEqual(by_fault["hard_denial"], 1)
+        self.assertIn(
+            "step_glitch_200m_05s",
+            report["suite_path"]["scheduled_case_ids"],
+        )
 
     def test_report_is_json_serializable_without_nan(self) -> None:
         # allow_nan=False raises on any non-finite value leaking into the report.

@@ -12,8 +12,19 @@ from .config import (
     GpsFailureConfig,
     denial_duration_token,
     drift_rate_token,
+    glitch_hold_duration_token,
     glitch_magnitude_token,
 )
+
+
+# Restore payload for a bounded step glitch: clear every GLTCH axis back to the
+# source default. Written as an explicit literal rather than filtered from
+# SOURCE_DEFAULTS so a bounded glitch never touches SIM_GPS1_ENABLE / _JAM.
+_GLITCH_ZERO_PAYLOAD: dict[str, float] = {
+    "SIM_GPS1_GLTCH_X": 0.0,
+    "SIM_GPS1_GLTCH_Y": 0.0,
+    "SIM_GPS1_GLTCH_Z": 0.0,
+}
 
 
 class GpsFailureCaseGenerator(CaseGenerator):
@@ -27,6 +38,11 @@ class GpsFailureCaseGenerator(CaseGenerator):
         yield self._slow_drift_accumulation_case()
         for magnitude_m in self._config.glitch_magnitudes_m:
             yield self._step_glitch_case(magnitude_m)
+        for hold_duration_s in self._config.glitch_hold_durations_s:
+            yield self._step_glitch_case(
+                self._config.bounded_glitch_magnitude_m,
+                hold_duration_s=hold_duration_s,
+            )
         for duration_s in self._config.denial_durations_s:
             yield self._hard_denial_case(duration_s)
         for repeat_index in range(1, self._config.jamming_repeats + 1):
@@ -108,27 +124,89 @@ class GpsFailureCaseGenerator(CaseGenerator):
             tags=("gps", "slow_drift", "accumulation", "no_sitl_phase1"),
         )
 
-    def _step_glitch_case(self, magnitude_m: float) -> TestCase:
+    def _step_glitch_case(
+        self,
+        magnitude_m: float,
+        *,
+        hold_duration_s: float | None = None,
+    ) -> TestCase:
+        """Build a step-glitch case, optionally bounded by a mid-flight restore.
+
+        An unbounded case writes the offset once and leaves it in place until
+        cleanup, so it always outlives EK3's position-retry budget. A bounded case
+        adds a restore step that clears the offset at ``hold_duration_s``, which is
+        what makes the fault *duration* an independent variable rather than a
+        constant. The magnitude is held fixed across the hold ladder so a bounded
+        case and its unbounded twin differ in exactly one variable.
+        """
+
+        bounded = hold_duration_s is not None
+        case_id = f"step_glitch_{glitch_magnitude_token(float(magnitude_m))}m"
+        recipe: dict[str, Any] = {
+            **glitch.glitch_recipe_metadata(requires_live_resolution=True),
+            "fault_type": "step_glitch",
+            "independent_variable": "offset_magnitude_m",
+            "offset_magnitude_m": float(magnitude_m),
+            "axis": "east",
+            "glitch_params": ["SIM_GPS1_GLTCH_X", "SIM_GPS1_GLTCH_Y"],
+            "example_resolved_payload": glitch.step_glitch_payload(
+                float(magnitude_m),
+                glitch.EXAMPLE_REFERENCE_LATITUDE_DEG,
+                axis="east",
+            ),
+            "bounded": bounded,
+            "reset_policy": "fresh flight per magnitude; reset params only during cleanup",
+        }
+        injection_schedule: list[dict[str, Any]] | None = None
+        tags = ("gps", "step_glitch", "no_sitl_phase1")
+
+        if bounded:
+            duration_s = float(hold_duration_s)  # type: ignore[arg-type]
+            case_id = f"{case_id}_{glitch_hold_duration_token(duration_s)}s"
+            recipe.update(
+                {
+                    "independent_variable": "glitch_hold_duration_s",
+                    "glitch_hold_duration_s": duration_s,
+                    "restore_payload": dict(_GLITCH_ZERO_PAYLOAD),
+                    "reset_policy": (
+                        "fresh flight per hold duration; offset restored to zero "
+                        "in flight at glitch_hold_duration_s, then cleanup"
+                    ),
+                    "mechanism_note": (
+                        "a hold shorter than EK3 posRetryTimeUseVel_ms (10 s) lets "
+                        "lastGpsPosPassTime_ms refresh before posTimeout fires, so "
+                        "the innovation gate rejects without a position reset"
+                    ),
+                }
+            )
+            injection_schedule = [
+                {
+                    "event_index": 1,
+                    "phase": "fault_observe",
+                    "elapsed_since_trigger_s": 0.0,
+                    "observe_s": duration_s,
+                    # The concrete degree payload is resolved live from the
+                    # trigger-time latitude; the schedule records the intent only.
+                    "payload": {},
+                },
+                {
+                    "event_index": 2,
+                    "phase": "restore",
+                    "elapsed_since_trigger_s": duration_s,
+                    "observe_s": 0.0,
+                    "payload": dict(_GLITCH_ZERO_PAYLOAD),
+                },
+            ]
+            tags = (*tags, "bounded_glitch")
+
         return self._case(
-            case_id=f"step_glitch_{glitch_magnitude_token(float(magnitude_m))}m",
+            case_id=case_id,
             fault_type="step_glitch",
             stimulus_name="sim_gps_glitch_step",
             injection_payload={},
-            fault_recipe={
-                **glitch.glitch_recipe_metadata(requires_live_resolution=True),
-                "fault_type": "step_glitch",
-                "independent_variable": "offset_magnitude_m",
-                "offset_magnitude_m": float(magnitude_m),
-                "axis": "east",
-                "glitch_params": ["SIM_GPS1_GLTCH_X", "SIM_GPS1_GLTCH_Y"],
-                "example_resolved_payload": glitch.step_glitch_payload(
-                    float(magnitude_m),
-                    glitch.EXAMPLE_REFERENCE_LATITUDE_DEG,
-                    axis="east",
-                ),
-                "reset_policy": "fresh flight per magnitude; reset params only during cleanup",
-            },
-            tags=("gps", "step_glitch", "no_sitl_phase1"),
+            injection_schedule=injection_schedule,
+            fault_recipe=recipe,
+            tags=tags,
         )
 
     def _hard_denial_case(self, duration_s: float) -> TestCase:

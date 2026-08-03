@@ -454,6 +454,9 @@ class GpsFailurePhase1Tests(unittest.TestCase):
                 "step_glitch_100m",
                 "step_glitch_200m",
                 "step_glitch_500m",
+                # Bounded holds: same 200 m magnitude, duration as the variable.
+                "step_glitch_200m_05s",
+                "step_glitch_200m_15s",
             ],
             [case_id for case_id in case_ids if case_id.startswith("step_glitch_")],
         )
@@ -480,7 +483,7 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             {"nominal", "slow_drift", "step_glitch", "hard_denial", "jamming"},
             {case.parameters["fault_type"] for case in _cases()},
         )
-        self.assertEqual(23, len(case_ids))
+        self.assertEqual(25, len(case_ids))
         self.assertEqual(len(case_ids), len(set(case_ids)))
 
     def test_dry_run_prints_phase1_no_launch_json(self) -> None:
@@ -2004,6 +2007,197 @@ class GpsFailurePhase1Tests(unittest.TestCase):
             plugin.attempt_runner()
         finally:
             sys.meta_path.remove(finder)
+
+
+class BoundedStepGlitchTests(unittest.TestCase):
+    """The duration axis for step glitches.
+
+    An unbounded step glitch writes its offset once and holds it until cleanup,
+    so it always outlives EK3's ``posRetryTimeUseVel_ms`` (10 s) position-retry
+    budget and rejection can only ever be a transient on the way to a reset. A
+    bounded glitch restores the offset in flight, which is the only way the
+    innovation gate can be observed winning outright.
+    """
+
+    def _case(self, case_id: str):
+        return GpsFailureCaseGenerator(GpsFailureConfig()).get_case(case_id)
+
+    def _trigger_trace(self) -> list[dict[str, Any]]:
+        def event(seq: int, **extra: Any) -> dict[str, Any]:
+            return {
+                "seq": seq,
+                "armed": True,
+                "mode": "AUTO",
+                "heartbeat_fresh": True,
+                "heartbeat_age_s": 0.1,
+                "simstate_fresh": True,
+                "simstate_age_s": 0.1,
+                **extra,
+            }
+
+        return [
+            event(1),
+            event(3),
+            event(4, trigger_latitude_deg=-35.363262, vehicle_elapsed_s=0.0),
+        ]
+
+    def test_bounded_cases_are_generated_for_each_hold_duration(self) -> None:
+        case_ids = [case.case_id for case in _cases()]
+        for duration_s in defaults.GLITCH_HOLD_DURATIONS_S:
+            self.assertIn(f"step_glitch_200m_{int(duration_s):02d}s", case_ids)
+
+    def test_bounded_recipe_declares_duration_as_the_variable(self) -> None:
+        recipe = self._case("step_glitch_200m_05s").parameters["fault_recipe"]
+        self.assertTrue(recipe["bounded"])
+        self.assertEqual(recipe["independent_variable"], "glitch_hold_duration_s")
+        self.assertEqual(recipe["glitch_hold_duration_s"], 5.0)
+        self.assertEqual(
+            recipe["offset_magnitude_m"],
+            defaults.BOUNDED_GLITCH_MAGNITUDE_M,
+        )
+
+    def test_unbounded_case_keeps_its_historical_shape(self) -> None:
+        recipe = self._case("step_glitch_200m").parameters["fault_recipe"]
+        self.assertFalse(recipe["bounded"])
+        self.assertNotIn("glitch_hold_duration_s", recipe)
+        self.assertEqual(recipe["independent_variable"], "offset_magnitude_m")
+        self.assertEqual(
+            self._case("step_glitch_200m").parameters["injection_schedule"],
+            [],
+        )
+
+    def test_bounded_plan_carries_a_restore_step_at_the_hold_duration(self) -> None:
+        from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.runtime import (
+            build_authorized_injection_plan,
+        )
+
+        plan = build_authorized_injection_plan(
+            self._case("step_glitch_200m_05s"),
+            self._trigger_trace(),
+        )
+        self.assertTrue(plan.execution_authorized)
+        self.assertEqual(len(plan.restore_plan), 1)
+        step = plan.restore_plan[0]
+        self.assertEqual(step.elapsed_since_trigger_s, 5.0)
+        # The restore must zero every axis the injection wrote, or a residual
+        # offset would keep the fault alive past the intended hold.
+        self.assertEqual(set(step.payload), set(plan.injection_payload))
+        self.assertEqual(set(step.payload.values()), {0.0})
+
+    def test_bounded_and_unbounded_twins_inject_the_same_payload(self) -> None:
+        """The controlled pair: only duration differs, so only duration explains
+        any difference in outcome."""
+        from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.runtime import (
+            build_authorized_injection_plan,
+        )
+
+        trace = self._trigger_trace()
+        unbounded = build_authorized_injection_plan(
+            self._case("step_glitch_200m"), trace
+        )
+        bounded = build_authorized_injection_plan(
+            self._case("step_glitch_200m_05s"), trace
+        )
+        self.assertEqual(unbounded.injection_payload, bounded.injection_payload)
+        self.assertEqual(unbounded.restore_plan, [])
+        self.assertEqual(len(bounded.restore_plan), 1)
+
+    def test_preview_reports_whether_the_offset_is_still_active(self) -> None:
+        recipe = self._case("step_glitch_200m_05s").parameters["fault_recipe"]
+        during = glitch.preview_payload_from_recipe(
+            recipe, latitude_deg=-35.363262, elapsed_s=2.0
+        )
+        after = glitch.preview_payload_from_recipe(
+            recipe, latitude_deg=-35.363262, elapsed_s=7.0
+        )
+        assert during is not None and after is not None
+        self.assertTrue(during["bounded"])
+        self.assertTrue(during["offset_active_at_elapsed"])
+        self.assertFalse(after["offset_active_at_elapsed"])
+
+    def test_unbounded_preview_is_marked_unbounded(self) -> None:
+        preview = glitch.preview_payload_from_recipe(
+            self._case("step_glitch_200m").parameters["fault_recipe"],
+            latitude_deg=-35.363262,
+            elapsed_s=2.0,
+        )
+        assert preview is not None
+        self.assertFalse(preview["bounded"])
+        self.assertNotIn("glitch_hold_duration_s", preview)
+
+
+class RejectedAndSurvivedClassificationTests(unittest.TestCase):
+    """The band that only a bounded fault can reach."""
+
+    def _rejected(self, **updates: Any) -> dict[str, Any]:
+        fields: dict[str, Any] = {
+            "fault_type": "step_glitch",
+            "fused": False,
+            "pos_test_ratio_rejected": True,
+            "reset_event": False,
+            "horizontal_gap_m": 1.2,
+            "gap_growing": False,
+            "gap_within_nominal_band": True,
+            "mission_complete": False,
+        }
+        fields.update(updates)
+        return _valid_observation(**fields)
+
+    def test_bounded_rejection_with_a_closed_gap_survives(self) -> None:
+        result = classify_observation(
+            self._rejected(bounded_fault=True, fault_restored=True)
+        )
+        self.assertEqual(result["behavior_class"], "rejected_and_survived")
+        self.assertTrue(result["accepted_observation"])
+
+    def test_a_reset_still_wins_over_the_survived_band(self) -> None:
+        """A run that rejects and then resets is a reset, not a survival."""
+        result = classify_observation(
+            self._rejected(
+                bounded_fault=True,
+                fault_restored=True,
+                reset_event=True,
+                horizontal_gap_m=180.0,
+                gap_growing=True,
+                gap_within_nominal_band=False,
+            )
+        )
+        self.assertEqual(result["behavior_class"], "reset_captured")
+
+    def test_unbounded_rejection_can_never_reach_the_survived_band(self) -> None:
+        result = classify_observation(
+            self._rejected(bounded_fault=False, fault_restored=False)
+        )
+        self.assertEqual(result["behavior_class"], "detected_rejected")
+
+    def test_a_restore_that_never_fired_is_not_a_survival(self) -> None:
+        """A bounded recipe whose restore silently failed must not be credited."""
+        result = classify_observation(
+            self._rejected(bounded_fault=True, fault_restored=False)
+        )
+        self.assertEqual(result["behavior_class"], "detected_rejected")
+
+    def test_a_still_open_gap_is_not_a_survival(self) -> None:
+        result = classify_observation(
+            self._rejected(
+                bounded_fault=True,
+                fault_restored=True,
+                horizontal_gap_m=95.0,
+                gap_within_nominal_band=False,
+            )
+        )
+        self.assertEqual(result["behavior_class"], "detected_rejected")
+
+    def test_restored_without_bounded_is_a_contradiction(self) -> None:
+        result = classify_observation(
+            self._rejected(bounded_fault=False, fault_restored=True)
+        )
+        self.assertEqual(result["behavior_class"], "analysis_incomplete")
+        self.assertEqual(result["reason"], "contradictory_restored_unbounded_fault")
+        self.assertFalse(result["accepted_observation"])
+
+    def test_the_new_band_is_registered_as_a_behavior_class(self) -> None:
+        self.assertIn("rejected_and_survived", defaults.BEHAVIOR_CLASSES)
 
 
 if __name__ == "__main__":
