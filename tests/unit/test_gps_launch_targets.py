@@ -7,9 +7,9 @@ the dedicated identities. They prove:
 
 - `plane-gps` / `gazebo-plane-gps` are discoverable and dispatch to their own
   functions.
-- `plane-gps` loads exactly `plane_base.parm -> plane_gps.parm`, wipes EEPROM,
-  exposes only the local UDP output, and never appends the airspeed overlay or
-  the local plane override.
+- `plane-gps` defaults to `plane_base.parm -> plane_gps.parm`, wipes EEPROM,
+  exposes only the local UDP output, and never appends the local plane override.
+  Named GPS envelopes may pass GPS-owned explicit overlays.
 - `gazebo-plane-gps` uses a dedicated sensor-neutral, east-facing runway world
   and never touches the CTE wind-control path.
 - The existing CTE/airspeed targets are unchanged.
@@ -34,6 +34,9 @@ if str(SRC) not in sys.path:
 from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure import (  # noqa: E402
     defaults,
     readiness,
+)
+from sim_ard_gaw.campaigns.test_suite.plugins.gps_failure.config import (  # noqa: E402
+    GpsFailureConfig,
 )
 
 
@@ -81,6 +84,7 @@ class GpsLaunchTargetSourceTests(unittest.TestCase):
         out = result.stdout
         self.assertIn("plane-gps", out)
         self.assertIn("gazebo-plane-gps", out)
+        self.assertIn("gazebo-plane-gps-airspeed", out)
         # Existing CTE/airspeed targets remain listed.
         self.assertIn("plane-cte", out)
         self.assertIn("gazebo-plane-cte", out)
@@ -91,6 +95,10 @@ class GpsLaunchTargetSourceTests(unittest.TestCase):
         self.assertIn(
             "launch_gazebo_plane_gps",
             _dispatch_case(self.source, "gazebo-plane-gps"),
+        )
+        self.assertIn(
+            "launch_gazebo_plane_gps_airspeed",
+            _dispatch_case(self.source, "gazebo-plane-gps-airspeed"),
         )
         # plane-gps performs a clean run before launch, like the other SITL
         # targets.
@@ -142,6 +150,22 @@ class GpsLaunchTargetSourceTests(unittest.TestCase):
         self.assertIn("model://mini_talon", world)
         self.assertNotIn("mini_talon_with_airspeed", world)
 
+    def test_gazebo_plane_gps_airspeed_uses_gps_owned_airspeed_world(self) -> None:
+        body = _function_body(self.source, "launch_gazebo_plane_gps_airspeed")
+        self.assertIn("$PLANE_GPS_AIRSPEED_WORLD", body)
+        self.assertNotIn("PLANE_WIND_WORLD", body)
+        self.assertNotIn("launch_gazebo_plane_cte", body)
+        self.assertIn("plane-gps", body)
+
+        world = (
+            ROOT / "assets/worlds/mini_talon_gps_airspeed_runway.sdf"
+        ).read_text(encoding="utf-8")
+        self.assertIn('<world name="mini_talon_gps_airspeed_runway">', world)
+        self.assertIn('<pose degrees="true">0 0 0.2 0 0 0</pose>', world)
+        self.assertIn("gz-sim-air-speed-system", world)
+        self.assertIn("model://mini_talon_with_airspeed", world)
+        self.assertNotIn("model://mini_talon</uri>", world)
+
     # --- regression: CTE lane unchanged ------------------------------------
 
     def test_cte_lane_still_uses_airspeed_and_local_override(self) -> None:
@@ -162,11 +186,16 @@ class GpsPluginTargetDefaultsTests(unittest.TestCase):
     def test_defaults_name_dedicated_targets(self) -> None:
         self.assertEqual("plane-gps", defaults.SITL_TARGET)
         self.assertEqual("gazebo-plane-gps", defaults.GAZEBO_TARGET)
+        self.assertEqual(
+            "gazebo-plane-gps-airspeed",
+            defaults.GPS_AIRSPEED_GAZEBO_TARGET,
+        )
 
     def test_schema_reports_dedicated_targets(self) -> None:
         schema = defaults.parameter_schema()
         self.assertEqual("plane-gps", schema["sitl_target"])
         self.assertEqual("gazebo-plane-gps", schema["gazebo_target"])
+        self.assertIn("gazebo-plane-gps-airspeed", schema["gazebo_targets"])
 
     def test_readiness_reports_dedicated_targets_and_exclusions(self) -> None:
         report = readiness.build_readiness_report()
@@ -181,6 +210,22 @@ class GpsPluginTargetDefaultsTests(unittest.TestCase):
         self.assertEqual(2, len(effective))
         self.assertTrue(effective[0].endswith("plane_base.parm"))
         self.assertTrue(effective[1].endswith("plane_gps.parm"))
+
+    def test_fast_envelope_readiness_reports_airspeed_requirement(self) -> None:
+        config = GpsFailureConfig(
+            envelope_name=defaults.FAST_CRUISE_18MPS_ENVELOPE_NAME
+        )
+        report = readiness.build_readiness_report(config=config)
+        stack = report["parameter_stack"]
+
+        self.assertEqual("fast_cruise_18mps", stack["envelope"]["name"])
+        self.assertEqual("gazebo-plane-gps-airspeed", stack["gazebo_target"])
+        self.assertFalse(stack["airspeed_overlay_excluded"])
+        self.assertTrue(
+            stack["effective_param_stack"][-1].endswith(
+                "plane_gps_airspeed_fast_cruise_18mps.parm"
+            )
+        )
 
     def test_no_gps_default_routes_through_cte(self) -> None:
         self.assertNotIn("cte", defaults.SITL_TARGET)
