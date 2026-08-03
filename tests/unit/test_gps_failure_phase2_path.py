@@ -2620,6 +2620,77 @@ class GpsFailurePhase2CliTests(unittest.TestCase):
         )
         self.assertEqual(3, args.runs_per_case)
 
+    def test_campaign_cli_selects_named_run_envelope(self) -> None:
+        cases = ",".join(defaults.PHASE2_NON_JAMMING_CAMPAIGN_CASE_IDS)
+
+        args = _parse_args([
+            "--live-phase2-round-robin-campaign",
+            "--confirm-live-phase2",
+            "--confirm-live-campaign",
+            "--envelope",
+            defaults.EKF_GATE300_GLITCH0_ENVELOPE_NAME,
+            "--campaign-cases",
+            cases,
+            "--runs-per-case",
+            "1",
+        ])
+        config = _config_from_args(args)
+
+        self.assertEqual(
+            defaults.EKF_GATE300_GLITCH0_ENVELOPE_NAME,
+            config.envelope_metadata["name"],
+        )
+        self.assertEqual(defaults.MISSION_FILE, config.mission_file)
+        self.assertEqual(
+            defaults.EKF_GATE300_GLITCH0_EXPECTED_KNEE_READBACKS,
+            config.source_contract_expected_knee_readbacks,
+        )
+        self.assertEqual(
+            [
+                defaults.PLANE_BASE_PARAM_FILE,
+                defaults.PLANE_GPS_PARAM_FILE,
+                defaults.PLANE_GPS_EKF_GATE300_GLITCH0_PARAM_FILE,
+            ],
+            config.effective_param_stack,
+        )
+
+    def test_campaign_cli_selects_fast_cruise_envelope_mission(self) -> None:
+        args = _parse_args([
+            "--live-phase2-round-robin-campaign",
+            "--confirm-live-phase2",
+            "--confirm-live-campaign",
+            "--envelope",
+            defaults.FAST_CRUISE_18MPS_ENVELOPE_NAME,
+            "--campaign-cases",
+            "nominal",
+            "--runs-per-case",
+            "1",
+        ])
+        config = _config_from_args(args)
+
+        self.assertEqual(
+            defaults.FAST_CRUISE_18MPS_MISSION_FILE,
+            config.mission_file,
+        )
+        self.assertEqual(
+            defaults.BASELINE_EXPECTED_KNEE_READBACKS,
+            config.source_contract_expected_knee_readbacks,
+        )
+        self.assertEqual(
+            {
+                "ARSPD_TYPE": 100.0,
+                "ARSPD_USE": 1.0,
+                "AIRSPEED_CRUISE": 18.0,
+            },
+            config.source_contract_expected_airspeed_readbacks,
+        )
+        self.assertEqual(
+            defaults.PLANE_GPS_AIRSPEED_FAST_CRUISE_18MPS_PARAM_FILE,
+            config.effective_param_stack[-1],
+        )
+        self.assertEqual(defaults.GPS_AIRSPEED_GAZEBO_TARGET, config.gazebo_target)
+        self.assertEqual(defaults.GPS_AIRSPEED_GAZEBO_WORLD_FILE, config.gazebo_world_file)
+
     def test_campaign_cli_rejects_jamming_from_non_jamming_round_robin(self) -> None:
         with self.assertRaises(SystemExit):
             _parse_args([
@@ -2694,11 +2765,15 @@ class GpsFailurePhase2CliTests(unittest.TestCase):
         self.assertIn("accepted_observation", payload["counting_rule"])
         self.assertIn("accepted_repetition", payload["counting_rule"])
         self.assertIn("workflow-complete physical attempts", payload["counting_rule"])
+        self.assertEqual("baseline", payload["envelope"]["name"])
 
     def test_validation_rerun_contract_is_exact_and_stop_rules_are_strict(self) -> None:
         with tempfile.TemporaryDirectory(dir=ROOT / "var") as tmp:
             payload = _campaign_contract_payload(
-                config=GpsFailureConfig(campaign_root=Path(tmp)),
+                config=GpsFailureConfig(
+                    campaign_root=Path(tmp),
+                    envelope_name=defaults.FAST_CRUISE_18MPS_ENVELOPE_NAME,
+                ),
                 case_ids=["nominal", "slow_drift_0p5_mps", "hard_denial_15s"],
                 runs_per_case=1,
                 inter_attempt_delay_s=0.0,
@@ -2720,6 +2795,10 @@ class GpsFailurePhase2CliTests(unittest.TestCase):
         self.assertIn("lifecycle-window failure", payload["stop_rules"])
         self.assertIn("missing or ambiguous attempt-local raw BIN", payload["stop_rules"])
         self.assertIn("dirty cleanup or surviving simulator process", payload["stop_rules"])
+        self.assertEqual(
+            defaults.FAST_CRUISE_18MPS_ENVELOPE_NAME,
+            payload["envelope"]["name"],
+        )
 
     def test_campaign_contract_rejects_drift_on_existing_root(self) -> None:
         with tempfile.TemporaryDirectory(dir=ROOT / "var") as tmp:

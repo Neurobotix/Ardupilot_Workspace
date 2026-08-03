@@ -48,6 +48,25 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     actions.add_argument("--live-case", dest="live_case_id")
     parser.add_argument("--case", dest="case_id")
     parser.add_argument("--campaign-root", type=Path, default=None)
+    parser.add_argument(
+        "--envelope",
+        choices=defaults.ENVELOPE_NAMES,
+        default=defaults.BASELINE_ENVELOPE_NAME,
+        help="Named GPS envelope variant for mission, param stack, and source-contract expectations.",
+    )
+    parser.add_argument(
+        "--mission-file",
+        type=Path,
+        default=None,
+        help="Explicit mission override. Defaults to the selected envelope mission.",
+    )
+    parser.add_argument(
+        "--extra-param-file",
+        type=Path,
+        action="append",
+        default=[],
+        help="Extra parameter file appended after the selected envelope stack.",
+    )
     parser.add_argument("--mavlink", default="udpin:0.0.0.0:14551")
     parser.add_argument(
         "--mission-timeout",
@@ -170,6 +189,13 @@ def _config_from_args(args: argparse.Namespace) -> GpsFailureConfig:
             if args.campaign_root
             else defaults.default_campaign_root()
         ),
+        envelope_name=args.envelope,
+        mission_file=(
+            args.mission_file.resolve()
+            if args.mission_file
+            else defaults.mission_file_for_envelope(args.envelope)
+        ),
+        extra_param_files=tuple(path.resolve() for path in args.extra_param_file),
         mavlink_addr=args.mavlink,
         launch_stack=bool(
             args.live_phase2_validation_rerun
@@ -511,6 +537,7 @@ def _campaign_contract_payload(
         "campaign_root": str(config.campaign_root),
         "suite_name": defaults.SUITE_NAME,
         "campaign_mode": campaign_mode,
+        "envelope": config.envelope_metadata,
         "case_ids": list(case_ids),
         "runs_per_case": runs_per_case,
         "phase_h_validation_rerun": campaign_mode == "phase_h_validation_rerun",
