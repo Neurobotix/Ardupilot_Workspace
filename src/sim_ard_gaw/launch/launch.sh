@@ -203,6 +203,41 @@ run_gazebo_sim() {
     return "$status"
 }
 
+# SITL listens on TCP 5760 and MAVProxy forwards to UDP 14550/14551. A killed
+# SITL leaves 5760 in TIME_WAIT, and a fresh arduplane that cannot bind it exits
+# immediately -- the caller then sees "Connection refused" and no heartbeat.
+# TIME_WAIT is a fixed 60s on Linux, so waiting a flat 2s is not enough; poll
+# until the ports are actually free.
+SIM_PORTS="${SIM_PORTS:-5760 5762 5763 14550 14551}"
+SIM_PORT_RELEASE_TIMEOUT_S="${SIM_PORT_RELEASE_TIMEOUT_S:-90}"
+
+ports_still_bound() {
+    local bound="" port=""
+    for port in $SIM_PORTS; do
+        # Match only LISTEN/bound sockets; TIME_WAIT entries have no owning
+        # process and do not block SO_REUSEADDR binds the way a live one does.
+        if ss -tulnH "sport = :$port" 2>/dev/null | grep -q .; then
+            bound="$bound $port"
+        fi
+    done
+    printf '%s' "${bound# }"
+}
+
+wait_for_sim_ports() {
+    local deadline=$(( SECONDS + SIM_PORT_RELEASE_TIMEOUT_S ))
+    local bound=""
+    while :; do
+        bound="$(ports_still_bound)"
+        [ -z "$bound" ] && return 0
+        if [ "$SECONDS" -ge "$deadline" ]; then
+            print_error "Ports still bound after ${SIM_PORT_RELEASE_TIMEOUT_S}s: $bound"
+            ss -tulnp 2>/dev/null | grep -E "$(echo "$SIM_PORTS" | tr ' ' '|')" || true
+            return 1
+        fi
+        sleep 1
+    done
+}
+
 cleanup() {
     print_info "Cleaning up existing processes..."
     pkill -9 -x gz 2>/dev/null || true
@@ -223,6 +258,12 @@ cleanup() {
     if [ -n "$remaining" ]; then
         print_error "Cleanup left simulation processes running:"
         echo "$remaining"
+        return 1
+    fi
+
+    # Processes are gone, but their sockets may not be. Block here rather than
+    # letting the next SITL fail its bind and die silently.
+    if ! wait_for_sim_ports; then
         return 1
     fi
 
