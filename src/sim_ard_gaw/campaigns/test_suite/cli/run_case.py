@@ -12,7 +12,12 @@ from pathlib import Path
 
 from ..core.models import TestCase
 from ..plugins.wind_matrix import defaults
-from ._plugin_select import resolve_runner_plugin_or_exit
+from ._plugin_select import (
+    add_common_actions,
+    emit_case_list,
+    emit_dry_run,
+    resolve_runner_plugin_or_exit,
+)
 from .deprecated_flags import (
     add_deprecated_attempt_strategy,
     consume_deprecated_attempt_strategy,
@@ -23,10 +28,11 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix",
                    help="Plugin name (default: wind_matrix)")
+    add_common_actions(p)
     add_deprecated_attempt_strategy(p)
-    p.add_argument("--x", type=int, required=True, choices=defaults.WIND_VALUES)
-    p.add_argument("--y", type=int, required=True, choices=defaults.WIND_VALUES)
-    p.add_argument("--rep", type=int, required=True)
+    p.add_argument("--x", type=int, choices=defaults.WIND_VALUES)
+    p.add_argument("--y", type=int, choices=defaults.WIND_VALUES)
+    p.add_argument("--rep", type=int)
     p.add_argument("--campaign-root", type=Path,
                    default=defaults.DEFAULT_CAMPAIGN_ROOT)
     p.add_argument("--mission-file", type=Path, default=defaults.MISSION_FILE)
@@ -50,6 +56,18 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--no-force-arm", action="store_true")
     args = p.parse_args()
     consume_deprecated_attempt_strategy(args, p)
+    # --x/--y/--rep stay mandatory for an actual run; the inspection actions
+    # are the only invocations that may omit them.
+    if not (args.list_cases or args.dry_run):
+        missing = [
+            flag for flag, value in
+            (("--x", args.x), ("--y", args.y), ("--rep", args.rep))
+            if value is None
+        ]
+        if missing:
+            p.error(
+                "the following arguments are required: " + ", ".join(missing)
+            )
     if args.auto_wind_phase is None:
         args.auto_wind_phase = defaults.default_auto_wind_phase(
             auto_control=args.auto,
@@ -63,11 +81,44 @@ def run_from_args(args: argparse.Namespace, *, title: str = "test_suite.cli.run_
     Shared by the flag path (`main`) and the interactive wizard, so both
     resolve settings through exactly one code path.
     """
-    if not (1 <= args.rep <= defaults.RUNS_PER_COMBO):
-        sys.exit(f"ERROR: --rep must be 1..{defaults.RUNS_PER_COMBO}")
-
     from ..plugins.wind_matrix import build_plugin
     from ..plugins.wind_matrix.config import WindMatrixConfig
+
+    # Inspection actions never launch a stack. run_case targets one combo, so
+    # it lists the combos --x/--y can select from.
+    if getattr(args, "list_cases", False) or getattr(args, "dry_run", False):
+        preview = WindMatrixConfig(
+            campaign_root=args.campaign_root.resolve(),
+            mission_file=args.mission_file.resolve(),
+        )
+        cases = list(build_plugin(preview).case_generator.iter_cases())
+        if args.x is not None and args.y is not None:
+            selected = defaults.combo_key(args.x, args.y)
+            cases = [c for c in cases if c.case_id == selected]
+        if args.list_cases:
+            emit_case_list(cases)
+        else:
+            emit_dry_run(
+                "wind_matrix",
+                {
+                    "x": args.x,
+                    "y": args.y,
+                    "rep": args.rep,
+                    "campaign_root": args.campaign_root.resolve(),
+                    "mission_file": args.mission_file.resolve(),
+                    "mavlink": args.mavlink,
+                    "auto_control": args.auto,
+                    "auto_wind_phase": args.auto_wind_phase,
+                    "accept_square_only": args.accept_square_only,
+                    "mission_timeout_s": args.mission_timeout,
+                    "launch_stack": False,
+                },
+                cases,
+            )
+        return
+
+    if not (1 <= args.rep <= defaults.RUNS_PER_COMBO):
+        sys.exit(f"ERROR: --rep must be 1..{defaults.RUNS_PER_COMBO}")
 
     print()
     defaults.log("=" * 60)

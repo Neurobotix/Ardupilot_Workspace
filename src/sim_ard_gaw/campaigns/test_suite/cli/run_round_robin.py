@@ -14,7 +14,12 @@ from pathlib import Path
 from ..core.scheduler import RoundRobinScheduler
 from ..core.suite_runner import SuiteRunner, SuiteRunSettings
 from ..plugins.wind_matrix import defaults
-from ._plugin_select import resolve_runner_plugin_or_exit
+from ._plugin_select import (
+    add_common_actions,
+    emit_case_list,
+    emit_dry_run,
+    resolve_runner_plugin_or_exit,
+)
 from .deprecated_flags import (
     add_deprecated_attempt_strategy,
     consume_deprecated_attempt_strategy,
@@ -30,6 +35,7 @@ def _parse_int_list(text: str) -> list[int]:
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix")
+    add_common_actions(p)
     add_deprecated_attempt_strategy(p)
     p.add_argument("--x-values", type=_parse_int_list, default=[0, 4, 8, 12])
     p.add_argument("--y-values", type=_parse_int_list, default=[0, 4, 8, 12])
@@ -115,6 +121,43 @@ def run_from_args(
 
     args.campaign_root = args.campaign_root.resolve()
     args.mission_file = args.mission_file.resolve()
+
+    # Inspection actions resolve settings but never touch the stack or the
+    # campaign manifest, so they run before contract validation side effects.
+    if getattr(args, "list_cases", False) or getattr(args, "dry_run", False):
+        preview = WindMatrixConfig(
+            x_values=tuple(args.x_values),
+            y_values=tuple(args.y_values),
+            runs_per_combo=args.runs_per_combo,
+            campaign_root=args.campaign_root,
+            mission_file=args.mission_file,
+        )
+        cases = list(build_plugin(preview).case_generator.iter_cases())
+        if args.list_cases:
+            emit_case_list(cases)
+        else:
+            emit_dry_run(
+                "wind_matrix",
+                {
+                    "x_values": list(args.x_values),
+                    "y_values": list(args.y_values),
+                    "runs_per_combo": args.runs_per_combo,
+                    "campaign_root": args.campaign_root,
+                    "mission_file": args.mission_file,
+                    "mavlink": args.mavlink,
+                    "slot_minutes": args.slot_minutes,
+                    "monitor_minutes": args.monitor_minutes,
+                    "max_passes": args.max_passes,
+                    "require_analysis": args.require_analysis,
+                    "wind_world_mode": args.wind_world_mode,
+                    "auto_wind_phase": args.auto_wind_phase,
+                    "accept_square_only": args.accept_square_only,
+                    "scheduler": "round_robin",
+                },
+                cases,
+            )
+        return
+
     validate_square_wind_mission_contract(args.mission_file)
     param_files = defaults.resolve_param_files(
         param_base=args.param_base,

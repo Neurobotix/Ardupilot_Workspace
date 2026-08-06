@@ -20,6 +20,7 @@ from ..plugins.airspeed_failure import defaults
 from ..plugins.airspeed_failure.environment import build_reference_wind_artifact
 from ..plugins.airspeed_failure.wind_profiles import WIND_PROFILES
 from ..plugins.airspeed_failure.stimulus import build_injection_artifact
+from ._plugin_select import unsupported_operation
 
 
 def _parse_biases(text: str) -> tuple[int, ...]:
@@ -33,6 +34,15 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list-cases", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--round-robin",
+        action="store_true",
+        help=(
+            "Not supported on this lane; airspeed cases are ordered by the "
+            "sequential scheduler. Present so the flag reports its own "
+            "absence rather than failing as an unknown argument."
+        ),
+    )
     parser.add_argument("--case", dest="case_id")
     parser.add_argument("--full-ratio-sweep", action="store_true")
     parser.add_argument("--bias-percent", type=_parse_biases, default=None)
@@ -94,6 +104,13 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--no-wipe-eeprom", action="store_true")
     parser.add_argument("--rebuild", action="store_true")
     args = parser.parse_args(argv)
+    if args.round_robin:
+        unsupported_operation(
+            "airspeed_failure",
+            "--round-robin",
+            "cases run under the sequential scheduler; use --live-case or the "
+            "sim-test wizard suite path",
+        )
     if (
         not args.list_cases
         and not args.dry_run

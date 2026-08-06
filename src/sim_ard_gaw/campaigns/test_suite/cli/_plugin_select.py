@@ -68,6 +68,46 @@ def unsupported_operation(plugin: str, operation: str, reason: str) -> None:
     sys.exit(f"ERROR: {plugin} does not support {operation}: {reason}")
 
 
+def add_common_actions(parser) -> None:
+    """Add the lane-neutral inspection actions every lane must support.
+
+    `--list-cases` and `--dry-run` never launch a simulator stack, so they are
+    safe on any lane and give every lane the same name for the same job.
+    """
+    parser.add_argument(
+        "--list-cases",
+        action="store_true",
+        help="Print the case ids this invocation would run, then exit.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print resolved settings and cases without launching anything.",
+    )
+
+
+def emit_case_list(cases: Iterable[object]) -> None:
+    for case in cases:
+        print(getattr(case, "case_id", case))
+
+
+def emit_dry_run(plugin: str, settings: dict, cases: Iterable[object]) -> None:
+    """Print a resolved-settings dump plus the case list.
+
+    Doubles as the parity evidence between the wizard and the flag path:
+    the same settings dict is produced by whichever path resolved it.
+    """
+    import json
+
+    payload = {
+        "plugin": plugin,
+        "launch_performed": False,
+        "settings": {k: str(v) for k, v in sorted(settings.items())},
+        "cases": [str(getattr(c, "case_id", c)) for c in cases],
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True))
+
+
 def select_case_or_exit(cases: Iterable[object], case_id: str):
     """Pick one case by its lane-neutral string id."""
     available: list[str] = []
