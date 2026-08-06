@@ -14,6 +14,7 @@ from typing import Literal
 import questionary
 from questionary import Style
 
+from ..core.suite_runner import SuiteRunSettings
 from ..plugins.wind_matrix import defaults as wm
 from ..plugins.airspeed_failure import defaults as af
 
@@ -302,6 +303,12 @@ def _wizard_airspeed_failure(ns: argparse.Namespace) -> None:
         "Vehicle ratio already verified (skip calibration)?", default=False
     )
     ns.af_runs_per_case = _ask_int("Runs per case", default=1, lo=1)
+    # Framework default (SuiteRunSettings.max_attempts_per_case). Asked here so
+    # the retry budget is an operator choice rather than a silent override.
+    default_max_attempts = SuiteRunSettings().max_attempts_per_case or 12
+    ns.af_max_attempts_per_case = _ask_int(
+        "Max attempts per case", default=default_max_attempts, lo=1
+    )
 
     ns.mission_file  = Path(_ask("Mission file", default=str(af.MISSION_FILE)))
     ns.campaign_root = Path(_ask("Campaign root (leave blank = auto timestamped)",
@@ -337,6 +344,7 @@ def _print_summary(plugin: str, mode: RunMode, ns: argparse.Namespace) -> None:
             f"   biases : {ns.af_bias_percents}",
             f"   ratio  : {ns.af_vehicle_arspd_ratio}  verified={ns.af_verified_vehicle_ratio}",
             f"   runs   : {ns.af_runs_per_case}",
+            f"   retries: max {ns.af_max_attempts_per_case} attempts/case",
             f"   wind   : {ns.af_wind_profile}",
             f"   speed  : {ns.af_speed_source}",
             f"   mech   : {ns.af_mechanism_tier}",

@@ -372,7 +372,7 @@ def _run_airspeed_failure_body(args) -> None:
         manifest=plugin.manifest,
         attempt_dir_factory=plugin.attempt_dir_factory(),
         settings=SuiteRunSettings(
-            max_attempts_per_case=1,
+            max_attempts_per_case=args.af_max_attempts_per_case,
             inter_attempt_delay_s=0.0,
         ),
     ).run()
