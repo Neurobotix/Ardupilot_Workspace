@@ -1,11 +1,8 @@
 """Run one attempt for a single case.
 
-Mirrors the flag surface of the historical `run_one.py`. The default
-`--attempt-strategy staged` uses the extracted stage adapters (stimulus,
-mavlink control, monitor, analysis, verdict). The `legacy` strategy
-(delegating to the retained `run_one` monolith) is being retired; staged
-became the default on the strength of the Phase 3F/3G single-combo
-live parity comparison.
+Mirrors the flag surface of the historical `run_one.py` where that surface is
+still live. The attempt pipeline uses the extracted stage adapters (stimulus,
+MAVLink control, monitor, analysis, verdict).
 """
 from __future__ import annotations
 
@@ -15,15 +12,17 @@ from pathlib import Path
 
 from ..core.models import TestCase
 from ..plugins.wind_matrix import defaults
+from .deprecated_flags import (
+    add_deprecated_attempt_strategy,
+    consume_deprecated_attempt_strategy,
+)
 
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix",
                    help="Plugin name (default: wind_matrix)")
-    p.add_argument("--attempt-strategy", choices=("staged",),
-                   default="staged",
-                   help="Attempt implementation path (staged only; legacy retired)")
+    add_deprecated_attempt_strategy(p)
     p.add_argument("--x", type=int, required=True, choices=defaults.WIND_VALUES)
     p.add_argument("--y", type=int, required=True, choices=defaults.WIND_VALUES)
     p.add_argument("--rep", type=int, required=True)
@@ -49,9 +48,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--no-preloaded-wind-refresh", action="store_true")
     p.add_argument("--no-force-arm", action="store_true")
     args = p.parse_args()
+    consume_deprecated_attempt_strategy(args, p)
     if args.auto_wind_phase is None:
         args.auto_wind_phase = defaults.default_auto_wind_phase(
-            args.attempt_strategy,
             auto_control=args.auto,
         )
     return args
@@ -109,7 +108,6 @@ def main() -> None:
             if args.preloaded_wind_world is not None else None
         ),
         preloaded_wind_refresh=not args.no_preloaded_wind_refresh,
-        attempt_strategy=args.attempt_strategy,
     )
 
     plugin = build_plugin(config)

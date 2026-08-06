@@ -106,21 +106,13 @@ Source: `src/sim_ard_gaw/campaigns/test_suite/cli/run.py` and
   remain readable through the generic view and the legacy wind-specific fields
   remain the compatibility surface. Framework additive writes use the same
   campaign manifest lock as the legacy unsafe manifest transactions.
-- Feature Phase 3 adds an opt-in staged attempt path for the new
-  `test_suite.cli.*` entry points through `--attempt-strategy staged`.
-  The default remains `--attempt-strategy legacy`, which delegates to the
-  proven `run_one.run_one(...)` body. Do not treat staged mode as campaign
-  parity evidence until a dated live SITL/Gazebo comparison exists. Feature
-  Phase 3B proved the staged wind boundary is not hidden behind
-  `run_one.run_one(...)`, but it also found staged mode still depends on
-  legacy runner helper code. Phase 3C-3G must build the full zero-legacy
-  staged wind system before staged mode is treated as replacement or generic
-  runtime proof. The 2026-05-31 Phase 3C follow-up restored atomic plugin
-  manifest writes, staged `running`/terminal manifest persistence, stale
-  running-record reconciliation, and plugin-owned stimulus run-config/path
-  helpers; staged environment launch/readiness, MAVLink control/monitoring,
-  runtime wind injection, analysis, summary, and terminal helper execution
-  still remain Phase 3D-3G legacy-dependency work.
+- The `test_suite.cli.*` wind-matrix entry points now use the staged attempt
+  pipeline directly. The migration-era attempt-strategy choice is retired:
+  older commands that still pass `--attempt-strategy staged` are accepted with
+  a deprecation warning, and `legacy` is rejected with a retired-flag message.
+  Phase 3G accepted the zero-legacy staged wind proof on 2026-06-01; retained
+  legacy wind runners remain separate compatibility entry points, not a
+  `test_suite` strategy choice.
 - The square campaign validates its mission contract before a matrix launcher
   starts a stack and again before the delegated attempt relies on square,
   loiter, and landing sequence assumptions. The contract includes the

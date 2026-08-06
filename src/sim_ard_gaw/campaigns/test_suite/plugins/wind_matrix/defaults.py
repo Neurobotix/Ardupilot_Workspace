@@ -104,12 +104,8 @@ def preferred_python() -> str:
     return str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
 
 
-def default_auto_wind_phase(
-    attempt_strategy: str,
-    *,
-    auto_control: bool,
-) -> str:
-    if attempt_strategy == "staged" and auto_control:
+def default_auto_wind_phase(*, auto_control: bool) -> str:
+    if auto_control:
         return DEFAULT_STAGED_AUTO_WIND_PHASE
     return DEFAULT_AUTO_WIND_PHASE
 

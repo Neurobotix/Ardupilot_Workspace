@@ -125,8 +125,6 @@ def _ask_advanced_common(ns: argparse.Namespace) -> None:
     ns.mission_file = Path(
         _ask("Mission file", default=str(wm.MISSION_FILE))
     )
-    # staged is the only supported strategy (legacy retired).
-    ns.attempt_strategy = "staged"
     ns.heartbeat_timeout = _ask_float("Heartbeat timeout (s)", wm.DEFAULT_HEARTBEAT_TIMEOUT)
     ns.mission_timeout   = _ask_float("Mission timeout (s)",   wm.DEFAULT_MISSION_TIMEOUT)
     ns.ready_timeout     = _ask_float("Ready timeout (s)",     wm.DEFAULT_READY_TIMEOUT)
@@ -139,7 +137,6 @@ def _apply_advanced_defaults_common(ns: argparse.Namespace) -> None:
     ns.mavlink            = wm.DEFAULT_MAVLINK
     ns.campaign_root      = wm.DEFAULT_CAMPAIGN_ROOT
     ns.mission_file       = wm.MISSION_FILE
-    ns.attempt_strategy   = "staged"
     ns.heartbeat_timeout  = wm.DEFAULT_HEARTBEAT_TIMEOUT
     ns.mission_timeout    = wm.DEFAULT_MISSION_TIMEOUT
     ns.ready_timeout      = wm.DEFAULT_READY_TIMEOUT
@@ -174,7 +171,7 @@ def _wizard_case(ns: argparse.Namespace) -> None:
         _apply_advanced_defaults_common(ns)
 
     ns.auto_wind_phase = wm.default_auto_wind_phase(
-        ns.attempt_strategy, auto_control=ns.auto
+        auto_control=ns.auto
     )
 
 
@@ -211,7 +208,7 @@ def _wizard_suite(ns: argparse.Namespace) -> None:
         ns.retry_delay_s  = wm.DEFAULT_RETRY_DELAY
 
     ns.auto_wind_phase = wm.default_auto_wind_phase(
-        ns.attempt_strategy, auto_control=True
+        auto_control=True
     )
 
 
@@ -251,7 +248,7 @@ def _wizard_round_robin(ns: argparse.Namespace) -> None:
         ns.retry_delay_s  = wm.DEFAULT_RETRY_DELAY
 
     ns.auto_wind_phase = wm.default_auto_wind_phase(
-        ns.attempt_strategy, auto_control=True
+        auto_control=True
     )
 
 
@@ -324,9 +321,6 @@ def _wizard_airspeed_failure(ns: argparse.Namespace) -> None:
         ns.arm_timeout      = 60.0
         ns.mode_timeout     = 30.0
 
-    # not used by airspeed_failure body but keep namespace uniform
-    ns.attempt_strategy = "legacy"
-
 
 # ── summary ───────────────────────────────────────────────────────────────────
 
@@ -355,7 +349,6 @@ def _print_summary(plugin: str, mode: RunMode, ns: argparse.Namespace) -> None:
             f"   control: {'auto' if ns.auto else 'manual'}",
             f"   mavlink: {ns.mavlink}",
             f"   root   : {ns.campaign_root}",
-            f"   strat  : {ns.attempt_strategy}",
         ]
     else:
         lines += [
@@ -364,7 +357,6 @@ def _print_summary(plugin: str, mode: RunMode, ns: argparse.Namespace) -> None:
             f"   runs   : {ns.runs_per_combo}",
             f"   mavlink: {ns.mavlink}",
             f"   root   : {ns.campaign_root}",
-            f"   strat  : {ns.attempt_strategy}",
         ]
     lines += ["  ══════════════════════════════════════", ""]
     for line in lines:

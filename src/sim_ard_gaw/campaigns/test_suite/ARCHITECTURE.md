@@ -1,7 +1,7 @@
 # Automated Test Suite — Architecture
 
-This lane is the compatibility implementation of the automated test-suite
-blueprint. Its active migration state is governed by
+This lane is the organized implementation of the automated test-suite
+blueprint. Its migration history is governed by
 `governance/runbooks/migration/phase_5_campaign_test_migration.md`. The
 feature-level migration plan and per-phase notes live under
 `governance/runbooks/features/test_suite_migration/`; the
@@ -110,12 +110,11 @@ adapters are thin wrappers that delegate into the legacy modules:
 | `WindMatrixVerdict`              | success classes from `run_one.run_one` |
 | `WindMatrixManifest`             | legacy-compatible wind manifest shape, plus additive generic view fields |
 
-For Phase 1 the wind plugin uses a `LegacyDelegateAttemptStrategy` that calls
-`run_one.run_one(...)` as the single body of stages 4–10. The intent is to keep
-legacy behavior, manifest schema, and artifact layout unchanged while the new
-entry points exercise the framework boundary. Live SITL/Gazebo parity still
-needs to be validated with the checks below before this is treated as
-runtime-proven.
+Phase 1 used an opaque delegate body around `run_one.run_one(...)` for stages
+4-10 so the new entry points could exercise the framework boundary while
+preserving legacy behavior, manifest schema, and artifact layout. That
+migration-era delegate path has since been retired; the wind plugin now uses
+the explicit staged adapters described in the later phases below.
 
 ## Blueprint Refactor Stages
 
@@ -155,9 +154,10 @@ without mutating older manifests.
   - generic manifest contract/view → `core/manifest.py`
   - wind-compatible manifest implementation → `plugins/wind_matrix/manifest.py`
 - Add a real framework-driven staged path in `AttemptRunner.run` that calls
-  each stage adapter. As of feature Phase 3 on 2026-05-25 this path is
-  available only with `--attempt-strategy staged`; `legacy` remains the
-  default until live SITL/Gazebo parity evidence exists. Staged
+  each stage adapter. As of feature Phase 3 on 2026-05-25 this path was
+  available through a now-retired attempt-strategy flag while the legacy
+  delegate remained the default until live SITL/Gazebo parity evidence existed.
+  Staged
   `auto_wind_phase=after-takeoff` is blocked because the legacy behavior
   applies wind after AUTO takeoff altitude while the generic staged order
   applies stimulus before control.
@@ -187,8 +187,8 @@ Phase 3B.
 - Move staged defaults, case IDs, path naming, manifest implementation, and
   CLI bootstrap into test-suite-owned modules.
 - Generic core must not contain wind-specific legacy manifest behavior.
-- `attempt_strategy="staged"` must construct with legacy runner imports
-  blocked. Legacy mode may keep the delegate fallback.
+- Staged wind-matrix construction must work with legacy runner imports
+  blocked.
 
 Implemented on 2026-05-29 for no-SITL foundation scope only. Staged
 `WindMatrixConfig`, case generation, plugin construction,
@@ -259,10 +259,10 @@ handling) is now test-suite-owned in `plugins/wind_matrix/wind_injection.py`;
 path is fully zero-legacy (environment, MAVLink control/monitor, and wind
 injection). A first live completed staged run (`success_full`, strict gz echo
 verified) was captured. Evidence:
-`evidence/reports/features/2026-06-01_test_suite_migration_phase_3f.md`. The
-only remaining staged-path use of `run_one` is the legacy-strategy delegate
-(`_legacy_run_one_body`), which is intended. Stage 3G (matched live legacy
-comparison) is the remaining gate before Phase 4.
+`evidence/reports/features/2026-06-01_test_suite_migration_phase_3f.md`. At
+this point the only remaining staged-path use of `run_one` was the migration
+delegate fallback. Stage 3G (matched live legacy comparison) was the remaining
+gate before Phase 4.
 
 ### Stage 3G — full zero-legacy staged wind proof — ACCEPTED 2026-06-01
 - The zero-legacy staged wind system was run live and compared against the
@@ -313,6 +313,11 @@ ones, not in place of them.
 Feature Phase 3 added `--attempt-strategy {legacy,staged}` to the new
 `test_suite.cli.*` entry points. The default is `legacy`; `staged` is an
 explicit opt-in for the extracted wind-matrix stage adapters.
+
+Current state: the attempt-strategy choice is retired. The staged pipeline is
+the only wind-matrix implementation path in `test_suite`; the old
+`--attempt-strategy staged` spelling is accepted and ignored so older scripts
+fail softly, while `legacy` reports that the flag was retired.
 
 ## Risks
 

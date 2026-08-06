@@ -153,7 +153,7 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                 sys.meta_path.insert(0, BlockLegacy())
 
                 from sim_ard_gaw.campaigns.test_suite.cli import run_case, run_round_robin, run_suite
-                from sim_ard_gaw.campaigns.test_suite.core.attempt_runner import LegacyDelegateStrategy, StagedStrategy
+                from sim_ard_gaw.campaigns.test_suite.core.attempt_runner import StagedStrategy
                 from sim_ard_gaw.campaigns.test_suite.core.models import AttemptContext, AttemptRecord, AttemptStatus, TestCase, Verdict, VerdictClass
                 from sim_ard_gaw.campaigns.test_suite.core.suite_runner import SuiteRunner
                 from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.case_generator import WindMatrixCaseGenerator
@@ -174,7 +174,6 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                     x_values=(0,),
                     y_values=(4,),
                     launch_stack=False,
-                    attempt_strategy="staged",
                 )
                 assert default_staged_cfg.auto_control is True
                 assert default_staged_cfg.auto_wind_phase == DEFAULT_STAGED_AUTO_WIND_PHASE
@@ -187,10 +186,7 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                     y_values=(4,),
                     auto_control=False,
                     launch_stack=False,
-                    attempt_strategy="staged",
                 )
-                assert cfg.attempt_strategy == "staged"
-                assert WindMatrixConfig().attempt_strategy == "staged"
 
                 cases = list(WindMatrixCaseGenerator(cfg).iter_cases())
                 assert [case.case_id for case in cases] == ["wind_x_00_y_04"]
@@ -317,7 +313,6 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                 plugin = build_plugin(cfg)
                 runner = plugin.attempt_runner()
                 assert isinstance(runner._strategy, StagedStrategy)
-                assert not isinstance(runner._strategy, LegacyDelegateStrategy)
                 assert str(
                     plugin.attempt_dir_factory()(plugin.manifest, cases[0], 1)
                 ).endswith(
@@ -325,7 +320,7 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                 )
 
                 with mock.patch.object(sys, "argv", ["run_case", "--x", "0", "--y", "4", "--rep", "1"]):
-                    assert run_case._parse_args().attempt_strategy == "staged"
+                    assert not hasattr(run_case._parse_args(), "attempt_strategy")
                 with mock.patch.object(sys, "argv", ["run_case", "--x", "0", "--y", "4", "--rep", "1", "--attempt-strategy", "legacy"]):
                     rejected = False
                     try:
@@ -335,12 +330,14 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                         rejected = True
                     assert rejected, "argparse should reject the retired legacy choice"
                 with mock.patch.object(sys, "argv", ["run_suite", "--attempt-strategy", "staged"]):
-                    suite_args = run_suite._parse_args()
-                    assert suite_args.attempt_strategy == "staged"
+                    with contextlib.redirect_stderr(io.StringIO()):
+                        suite_args = run_suite._parse_args()
+                    assert not hasattr(suite_args, "attempt_strategy")
                     assert suite_args.auto_wind_phase == DEFAULT_STAGED_AUTO_WIND_PHASE
                 with mock.patch.object(sys, "argv", ["run_round_robin", "--attempt-strategy", "staged"]):
-                    rr_args = run_round_robin._parse_args()
-                    assert rr_args.attempt_strategy == "staged"
+                    with contextlib.redirect_stderr(io.StringIO()):
+                        rr_args = run_round_robin._parse_args()
+                    assert not hasattr(rr_args, "attempt_strategy")
                     assert rr_args.auto_wind_phase == DEFAULT_STAGED_AUTO_WIND_PHASE
 
                 def noop_run(self):
@@ -350,7 +347,6 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                     mock.patch.object(SuiteRunner, "run", noop_run),
                     mock.patch.object(sys, "argv", [
                         "run_suite",
-                        "--attempt-strategy", "staged",
                         "--auto-wind-phase", "before-arm",
                         "--campaign-root", str(root / "suite_cli"),
                         "--x-values", "0",
@@ -365,7 +361,6 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                     mock.patch.object(SuiteRunner, "run", noop_run),
                     mock.patch.object(sys, "argv", [
                         "run_round_robin",
-                        "--attempt-strategy", "staged",
                         "--auto-wind-phase", "before-arm",
                         "--campaign-root", str(root / "rr_cli"),
                         "--x-values", "0",
@@ -396,7 +391,6 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                     y_values=(4,),
                     launch_stack=True,
                     auto_control=False,
-                    attempt_strategy="staged",
                 )
                 env3d = WindMatrixEnvironment(launch_cfg)
                 launch_case = cases[0]
@@ -434,7 +428,6 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                     y_values=(4,),
                     launch_stack=False,
                     auto_control=True,
-                    attempt_strategy="staged",
                 )
                 phase3e_plugin = build_plugin(phase3e_cfg)
                 phase3e_case = cases[0]
@@ -493,7 +486,6 @@ class Phase3CZeroLegacyFoundationTests(unittest.TestCase):
                     launch_stack=False,
                     auto_control=True,
                     auto_wind_phase="before-arm",
-                    attempt_strategy="staged",
                 )
                 phase3f_stimulus = WindMatrixStimulus(phase3f_cfg)
                 phase3f_ctx = AttemptContext(
@@ -598,7 +590,6 @@ class Phase3DEnvironmentOwnershipTests(unittest.TestCase):
                 y_values=(4,),
                 launch_stack=True,
                 auto_control=False,
-                attempt_strategy="staged",
             )
             plugin = build_plugin(cfg)
             env = plugin.environment
@@ -682,7 +673,6 @@ class Phase3EControlMonitorOwnershipTests(unittest.TestCase):
                 y_values=(4,),
                 launch_stack=False,
                 auto_control=True,
-                attempt_strategy="staged",
             )
             plugin = build_plugin(cfg)
             case = TestCase(
@@ -760,7 +750,6 @@ class Phase3FWindInjectionOwnershipTests(unittest.TestCase):
                 launch_stack=False,
                 auto_control=True,
                 auto_wind_phase="before-arm",
-                attempt_strategy="staged",
             )
             case = TestCase(
                 suite_name="wind_matrix",

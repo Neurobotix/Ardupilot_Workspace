@@ -3,6 +3,7 @@ from __future__ import annotations
 # pyright: reportMissingImports=false
 
 import contextlib
+import io
 import json
 import os
 import subprocess
@@ -20,7 +21,6 @@ from sim_ard_gaw.campaigns.wind_matrix import run_one  # noqa: E402
 from sim_ard_gaw.campaigns.test_suite.core.analysis import Analyzer, AnalyzerChain  # noqa: E402
 from sim_ard_gaw.campaigns.test_suite.core.attempt_runner import (  # noqa: E402
     AttemptRunner,
-    LegacyDelegateStrategy,
     StagedStrategy,
 )
 from sim_ard_gaw.campaigns.test_suite.core.control import ControlStrategy  # noqa: E402
@@ -484,13 +484,11 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     campaign_root=Path(temp_dir),
                     launch_stack=False,
                     auto_control=False,
-                    attempt_strategy="staged",
                 )
             )
 
             strategy = plugin.attempt_runner()._strategy  # noqa: SLF001
             self.assertIsInstance(strategy, StagedStrategy)
-            self.assertNotIsInstance(strategy, LegacyDelegateStrategy)
             assert isinstance(strategy, StagedStrategy)
             self.assertIn(
                 "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix",
@@ -503,7 +501,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 "from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix import build_plugin\n"
                 "from sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix.config import WindMatrixConfig\n"
                 f"plugin = build_plugin(WindMatrixConfig(campaign_root=Path({temp_dir!r}), "
-                "launch_stack=False, auto_control=False, attempt_strategy='staged'))\n"
+                "launch_stack=False, auto_control=False))\n"
                 "print(type(plugin.attempt_runner()._strategy).__name__)\n"
             )
             result = subprocess.run(
@@ -527,7 +525,6 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     campaign_root=root,
                     launch_stack=False,
                     auto_control=False,
-                    attempt_strategy="staged",
                 )
             )
             assert isinstance(plugin.staged_strategy, StagedStrategy)
@@ -635,7 +632,6 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     campaign_root=root,
                     launch_stack=False,
                     auto_control=True,
-                    attempt_strategy="staged",
                 )
             )
             attempt_dir = defaults.attempt_dir(root, "wind_x_00_y_04", 1)
@@ -865,7 +861,6 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     campaign_root=root,
                     launch_stack=False,
                     auto_control=False,
-                    attempt_strategy="staged",
                 )
             )
             assert isinstance(plugin.staged_strategy, StagedStrategy)
@@ -961,7 +956,6 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     campaign_root=root,
                     launch_stack=False,
                     auto_control=False,
-                    attempt_strategy="staged",
                 )
             )
             events: list[str] = []
@@ -1001,17 +995,6 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 saved[0]["schema_version"],
             )
             self.assertIn("exception: launch boom", saved[0]["notes"])
-
-    def test_legacy_delegate_path_is_retired(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with self.assertRaises(ValueError):
-                build_plugin(
-                    WindMatrixConfig(
-                        campaign_root=Path(temp_dir),
-                        launch_stack=False,
-                        attempt_strategy="legacy",
-                    )
-                )
 
     def test_square_loiter_early_cleanup_and_flush_happen_before_bin_collection(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1202,7 +1185,6 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                         launch_stack=True,
                         auto_control=True,
                         auto_wind_phase="after-takeoff",
-                        attempt_strategy="staged",
                     )
                 )
         self.assertEqual([], events)
@@ -1215,7 +1197,6 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     campaign_root=root,
                     launch_stack=False,
                     auto_control=False,
-                    attempt_strategy="staged",
                 )
             )
             assert isinstance(plugin.staged_strategy, StagedStrategy)
@@ -1251,7 +1232,6 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                             campaign_root=root,
                             launch_stack=False,
                             auto_control=False,
-                            attempt_strategy="staged",
                         )
                     )
                     assert isinstance(plugin.staged_strategy, StagedStrategy)
@@ -1420,13 +1400,14 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             self.assertEqual(1, combo["accepted_runs"])
             self.assertEqual(0, combo["remaining_runs"])
 
-    def test_cli_attempt_strategy_defaults_and_explicit_selection(self) -> None:
+    def test_cli_attempt_strategy_flag_is_retired_but_staged_is_accepted(self) -> None:
         with patch.object(
             sys,
             "argv",
             ["run_case", "--x", "0", "--y", "4", "--rep", "1"],
         ):
-            self.assertEqual("staged", cli_run_case._parse_args().attempt_strategy)
+            args = cli_run_case._parse_args()
+            self.assertFalse(hasattr(args, "attempt_strategy"))
 
         with patch.object(
             sys,
@@ -1434,23 +1415,30 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             ["run_case", "--x", "0", "--y", "4", "--rep", "1",
              "--attempt-strategy", "legacy"],
         ):
-            # legacy is retired and no longer a valid CLI choice.
-            with self.assertRaises(SystemExit):
+            stderr = io.StringIO()
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(stderr):
                 cli_run_case._parse_args()
+            self.assertIn("--attempt-strategy was retired", stderr.getvalue())
 
         with patch.object(sys, "argv", ["run_suite", "--attempt-strategy", "staged"]):
-            args = cli_run_suite._parse_args()
-            self.assertEqual("staged", args.attempt_strategy)
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                args = cli_run_suite._parse_args()
+            self.assertFalse(hasattr(args, "attempt_strategy"))
             self.assertEqual("before-arm", args.auto_wind_phase)
+            self.assertIn("retired and ignored", stderr.getvalue())
 
         with patch.object(
             sys,
             "argv",
             ["run_round_robin", "--attempt-strategy", "staged"],
         ):
-            args = cli_run_round_robin._parse_args()
-            self.assertEqual("staged", args.attempt_strategy)
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                args = cli_run_round_robin._parse_args()
+            self.assertFalse(hasattr(args, "attempt_strategy"))
             self.assertEqual("before-arm", args.auto_wind_phase)
+            self.assertIn("retired and ignored", stderr.getvalue())
 
     def test_cli_staged_after_takeoff_mode_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1459,8 +1447,6 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 "argv",
                 [
                     "run_suite",
-                    "--attempt-strategy",
-                    "staged",
                     "--auto-wind-phase",
                     "after-takeoff",
                     "--campaign-root",
@@ -1478,7 +1464,6 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                         campaign_root=Path(args.campaign_root),
                         auto_control=True,
                         auto_wind_phase=args.auto_wind_phase,
-                        attempt_strategy=args.attempt_strategy,
                     )
                 )
 
@@ -1823,7 +1808,6 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             auto_wind_phase=auto_wind_phase,
             wipe_eeprom=wipe_eeprom,
             param_file_stack=(param_base, param_airspeed, param_local),
-            attempt_strategy="staged",
         )
         stimulus = WindMatrixStimulus(cfg)
         case = _case()

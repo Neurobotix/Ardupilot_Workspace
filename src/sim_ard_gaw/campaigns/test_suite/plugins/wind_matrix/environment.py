@@ -110,8 +110,6 @@ class WindMatrixEnvironment(EnvironmentAdapter):
         runtime.ensure_process_alive("Gazebo", gazebo_proc, gazebo_log)
 
     def assert_ready(self, case: TestCase, ctx: AttemptContext) -> None:
-        if self._config.attempt_strategy != "staged":
-            return None
         master = mavlink_control.wait_for_heartbeat(
             self._config.mavlink_addr,
             analysis_helpers.clamp_timeout_to_slot(

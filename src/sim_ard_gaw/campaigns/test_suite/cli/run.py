@@ -101,7 +101,6 @@ def _run_case_body(args) -> None:
             if args.preloaded_wind_world is not None else None
         ),
         preloaded_wind_refresh=not args.no_preloaded_wind_refresh,
-        attempt_strategy=args.attempt_strategy,
     )
     plugin = build_plugin(config)
     runner = plugin.attempt_runner()
@@ -188,7 +187,6 @@ def _run_suite_body(args) -> None:
         wind_world_mode=args.wind_world_mode,
         param_file_stack=param_files,
         isolated_sitl_state=True,
-        attempt_strategy=args.attempt_strategy,
     )
     plugin = build_plugin(config)
     SuiteRunner(
@@ -282,7 +280,6 @@ def _run_round_robin_body(args) -> None:
         stack_log_subdir="round_robin_logs",
         isolated_sitl_state=True,
         slot_deadline_margin_s=defaults.CLEANUP_TIMEOUT_S + args.retry_delay_s,
-        attempt_strategy=args.attempt_strategy,
     )
     plugin = build_plugin(config)
     SuiteRunner(

@@ -1,12 +1,8 @@
 """Run an automated suite — sequential scheduler.
 
-Mirrors the flag surface of the historical `run_matrix.py`. With `--plugin
-wind_matrix`, the default `--attempt-strategy staged` body uses the
-extracted stage adapters. The `legacy` strategy (delegating to the retained
-`run_one` monolith) is being retired; staged became the default on the
-strength of the Phase 3F/3G single-combo live parity comparison. Campaign-
-scale (multi-combo/round-robin) staged-vs-legacy parity is not separately
-evidenced; see the retirement evidence report for the accepted-risk note.
+Mirrors the flag surface of the historical `run_matrix.py` where that surface
+is still live. The wind-matrix attempt pipeline uses the extracted stage
+adapters.
 """
 from __future__ import annotations
 
@@ -17,6 +13,10 @@ from pathlib import Path
 from ..core.scheduler import SequentialScheduler
 from ..core.suite_runner import SuiteRunner, SuiteRunSettings
 from ..plugins.wind_matrix import defaults
+from .deprecated_flags import (
+    add_deprecated_attempt_strategy,
+    consume_deprecated_attempt_strategy,
+)
 
 
 def _parse_wind_values(text: str) -> list[int]:
@@ -35,8 +35,7 @@ def _parse_wind_values(text: str) -> list[int]:
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix")
-    p.add_argument("--attempt-strategy", choices=("staged",),
-                   default="staged")
+    add_deprecated_attempt_strategy(p)
     p.add_argument("--x-values", type=_parse_wind_values, default=[0, 4, 8, 12])
     p.add_argument("--y-values", type=_parse_wind_values, default=[0, 4, 8, 12])
     p.add_argument("--runs-per-combo", type=int, default=defaults.RUNS_PER_COMBO)
@@ -75,13 +74,13 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--param-local", type=Path, default=None)
     p.add_argument("--no-param-local", action="store_true")
     args = p.parse_args()
+    consume_deprecated_attempt_strategy(args, p)
     if args.runs_per_combo < 1:
         p.error("--runs-per-combo must be >= 1")
     if args.max_attempts_per_combo < 1:
         p.error("--max-attempts-per-combo must be >= 1")
     if args.auto_wind_phase is None:
         args.auto_wind_phase = defaults.default_auto_wind_phase(
-            args.attempt_strategy,
             auto_control=True,
         )
     return args
@@ -163,7 +162,6 @@ def main() -> None:
         wind_world_mode=args.wind_world_mode,
         param_file_stack=param_files,
         isolated_sitl_state=True,
-        attempt_strategy=args.attempt_strategy,
     )
 
     plugin = build_plugin(config)

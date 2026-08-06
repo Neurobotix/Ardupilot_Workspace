@@ -1,14 +1,9 @@
 """Run an automated suite — round-robin scheduler.
 
-Mirrors the flag surface of the historical `run_matrix_round_robin.py`,
-including bounded slot timing, analysis-required acceptance, focus-combo
-filtering, and isolated SITL state for BIN selection. With `--plugin
-wind_matrix`, the default `--attempt-strategy staged` body uses the
-extracted stage adapters. The `legacy` strategy (delegating to the retained
-`run_one` monolith) is being retired; staged became the default on the
-strength of the Phase 3F/3G single-combo live parity comparison. Campaign-
-scale round-robin staged-vs-legacy parity is not separately evidenced; see
-the retirement evidence report for the accepted-risk note.
+Mirrors the flag surface of the historical `run_matrix_round_robin.py` where
+that surface is still live, including bounded slot timing, analysis-required
+acceptance, focus-combo filtering, and isolated SITL state for BIN selection.
+The wind-matrix attempt pipeline uses the extracted stage adapters.
 """
 from __future__ import annotations
 
@@ -19,6 +14,10 @@ from pathlib import Path
 from ..core.scheduler import RoundRobinScheduler
 from ..core.suite_runner import SuiteRunner, SuiteRunSettings
 from ..plugins.wind_matrix import defaults
+from .deprecated_flags import (
+    add_deprecated_attempt_strategy,
+    consume_deprecated_attempt_strategy,
+)
 
 
 def _parse_int_list(text: str) -> list[int]:
@@ -30,8 +29,7 @@ def _parse_int_list(text: str) -> list[int]:
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix")
-    p.add_argument("--attempt-strategy", choices=("staged",),
-                   default="staged")
+    add_deprecated_attempt_strategy(p)
     p.add_argument("--x-values", type=_parse_int_list, default=[0, 4, 8, 12])
     p.add_argument("--y-values", type=_parse_int_list, default=[0, 4, 8, 12])
     p.add_argument("--runs-per-combo", type=int, default=4)
@@ -70,6 +68,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--rebuild", action="store_true")
     p.add_argument("--focus-combo", metavar="KEY", default=None)
     args = p.parse_args()
+    consume_deprecated_attempt_strategy(args, p)
     if args.runs_per_combo < 1:
         p.error("--runs-per-combo must be >= 1")
     if args.slot_minutes <= 0:
@@ -91,7 +90,6 @@ def _parse_args() -> argparse.Namespace:
         args.y_values = [fy]
     if args.auto_wind_phase is None:
         args.auto_wind_phase = defaults.default_auto_wind_phase(
-            args.attempt_strategy,
             auto_control=True,
         )
     return args
@@ -218,7 +216,6 @@ def main() -> None:
         stack_log_subdir="round_robin_logs",
         isolated_sitl_state=True,
         slot_deadline_margin_s=defaults.CLEANUP_TIMEOUT_S + args.retry_delay_s,
-        attempt_strategy=args.attempt_strategy,
     )
 
     plugin = build_plugin(config)

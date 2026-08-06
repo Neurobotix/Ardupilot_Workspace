@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-06
+
+- Retired migration-era test-suite attempt-strategy scaffolding: removed the
+  dead delegate strategy, removed `WindMatrixConfig.attempt_strategy`
+  thread-through, and kept old `--attempt-strategy staged` CLI input as a
+  hidden deprecated no-op.
+
 ## 2026-06-07
 
 - Added unified interactive CLI entry point `sim-test`

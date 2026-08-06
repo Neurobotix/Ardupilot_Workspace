@@ -30,6 +30,12 @@ framework boundary is generic.
 See `src/sim_ard_gaw/campaigns/test_suite/ARCHITECTURE.md` for the
 detailed layering, lifecycle, and risk register.
 
+2026-08-06 cleanup note: the plan below is historical. The live
+attempt-strategy flag/config field and delegate strategy scaffolding described
+in Phase 3 have been retired; current operator guidance lives in
+`docs/campaigns/wind_matrix.md` and current architecture in
+`src/sim_ard_gaw/campaigns/test_suite/ARCHITECTURE.md`.
+
 ## Current architecture (as of 2026-05-29)
 
 ```
