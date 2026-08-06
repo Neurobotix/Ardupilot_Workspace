@@ -1,9 +1,9 @@
 # Troubleshooting
 
 Common issues running ArduPilot SITL with Gazebo Sim in
-`ardupilot_workspace_next`. This is the canonical troubleshooting reference and
-replaces the archived `docs/archive/src_docs/TROUBLESHOOTING.md`. Entries below
-marked "verified" were observed and resolved during Phase 2 runtime parity
+`ardupilot_workspace_next`. This is the canonical troubleshooting reference.
+Entries below marked "verified" were observed and resolved during 2026-05-20
+runtime validation
 (`evidence/reports/migration/PHASE_2_RUNTIME_PARITY_2026-05-20.md`).
 
 ## `make doctor` reports missing references (verified)

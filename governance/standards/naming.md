@@ -31,7 +31,7 @@ Examples:
 - `change_control.md`
 - `records_lifecycle.md`
 - `workspace_map.md`
-- `migration_status.md`
+- `workspace_status.md`
 
 This applies to current docs under `docs/`, current standards under
 `governance/standards/`, and stable agent protocol files under `.ai/` except

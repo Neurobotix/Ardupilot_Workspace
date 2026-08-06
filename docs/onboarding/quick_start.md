@@ -27,10 +27,10 @@ If `sim-test` is not on your PATH, activate the entry point:
 env/bin/pip install -e .
 ```
 
-The wizard asks: sensor family → run mode → case parameters → "customise
-advanced parameters?" (timeouts, MAVLink address, campaign root, attempt
-strategy). All defaults match the plugin's production values so pressing Enter
-through the advanced block is safe for a standard run.
+The wizard asks: sensor family -> run mode -> case parameters -> "customise
+advanced parameters?" (timeouts, MAVLink address, campaign root). All defaults
+match the plugin's production values so pressing Enter through the advanced
+block is safe for a standard run.
 
 Core runtime dependencies expected inside this workspace as ignored local
 runtime state:
@@ -45,20 +45,23 @@ The Gazebo plugin is workspace-built only. Follow
 `docs/onboarding/installation.md` when the build output is missing; governed
 entrypoints do not fall back to an installed plugin.
 
-During migration, `make test-parity` uses `./env/bin/python3` when present.
-Phase 2 runtime evidence must prefer the local environment and record any
-fallback explicitly.
+For focused unit and integration checks, use the local environment when
+present:
+
+```bash
+python -m pytest tests/unit -q
+python -m pytest tests/integration -q
+```
 
 `make doctor` runs `scripts/ops/doctor.sh`, which delegates to
-`scripts/maintenance/validate_structure.sh` for Phase 1 structure checks.
+`scripts/maintenance/validate_structure.sh` for structure checks.
 Run the maintenance script directly when investigating a structure failure.
 
-This workspace is production for the bounded Phase 7 cutover scope accepted in
-`governance/decisions/ADR-0005-workspace-next-cutover.md`. The old workspace is
-deprecated fallback/reference. Launch and campaign entrypoints perform broad
-pre-run cleanup by policy so a governed simulation run starts from a clean
-simulator stack.
+This workspace is production for the governed ArduPilot + Gazebo
+fault-injection workflows accepted in
+`governance/decisions/ADR-0005-workspace-next-cutover.md`. Launch and campaign
+entrypoints perform broad pre-run cleanup by policy so a governed simulation
+run starts from a clean simulator stack.
 
-For migration work, follow `governance/runbooks/migration/full_migration_plan.md`
-and the change-control rules in `governance/standards/change_control.md`.
-Current human status lives in `docs/operations/migration_status.md`.
+For current status, use `docs/operations/workspace_status.md`. For changes,
+follow the change-control rules in `governance/standards/change_control.md`.

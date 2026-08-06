@@ -34,7 +34,7 @@ selected by Gazebo:
 build/ardupilot_gazebo/libArduPilotPlugin.so
 ```
 
-If that file is absent, launch and wind-matrix compatibility entrypoints fail
+If that file is absent, launch and wind-matrix entrypoints fail
 closed. The first Phase 5 `4,4` comparison remediation showed why: an installed
 plugin fallback let Gazebo wind topic echo verification pass while the
 ArduPilot-side estimated wind stayed low. The corrected recheck loaded the

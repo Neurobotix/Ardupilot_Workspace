@@ -2,18 +2,14 @@
 
 Setup for ArduPilot SITL with Gazebo Sim in `ardupilot_workspace_next`.
 
-This guide is the canonical install reference. It replaces the archived
-`docs/archive/src_docs/INSTALLATION.md`, which targeted the production
-workspace and named Gazebo Harmonic generically.
+This guide is the canonical install reference for the active workspace.
 
 ## Evidence boundary
 
-Phase 2 runtime parity
-(`evidence/reports/migration/PHASE_2_RUNTIME_PARITY_2026-05-20.md`) proves the current
-workspace launch surface against the local runtime used for that report. The
-curated runtime captures identify ArduPilot SITL at commit `f198baa9`
-(ArduPlane/ArduCopter `V4.7.0-dev`). Phase 2 records the plugin path used at
-that time; current governed runs follow
+The current launch surface has dated runtime evidence in
+`evidence/reports/migration/PHASE_2_RUNTIME_PARITY_2026-05-20.md`. The curated
+runtime captures identify ArduPilot SITL at commit `f198baa9`
+(ArduPlane/ArduCopter `V4.7.0-dev`). Current governed runs follow
 `governance/decisions/ADR-0004-clean-run-and-workspace-plugin-policy.md` and
 must use the workspace-built Gazebo plugin described below.
 
@@ -24,7 +20,7 @@ calling them parity-verified.
 
 System build tooling: `git`, `cmake`, `build-essential`, Python 3 development
 packages, and `ripgrep` (`rg`). `ripgrep` is required by `make doctor` — the
-structure validator uses it for `.private` policy and migration-plan-link
+structure validator uses it for `.private` policy and workspace-status-link
 checks. Install it with `sudo apt install ripgrep`.
 
 ## Step 1: Gazebo Sim
@@ -86,11 +82,12 @@ cd /home/ahmed/ardupilot_workspace_next
 source setup.bash
 test "$GZ_SIM_SYSTEM_PLUGIN_PATH" = "$PWD/build/ardupilot_gazebo"
 make doctor
-make test-parity
+python -m pytest tests/unit -q
+python -m pytest tests/integration -q
 scripts/ops/launch.sh help
 ```
 
-All three should pass. For a runtime check, follow
+All four should pass. For a runtime check, follow
 `docs/operations/launch_targets.md` and run a vehicle target with its Gazebo
 world in a second terminal (a SITL vehicle launched with `-f JSON` waits for
 Gazebo — never run a vehicle target alone).

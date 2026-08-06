@@ -2,6 +2,10 @@
 
 ## 2026-08-06
 
+- Reframed the workspace's present-tense documentation around the active
+  fault-injection evidence framework, moved live status to
+  `docs/operations/workspace_status.md`, and reduced completed migration facts
+  to dated historical pointers.
 - Retired migration-era test-suite attempt-strategy scaffolding: removed the
   dead delegate strategy, removed `WindMatrixConfig.attempt_strategy`
   thread-through, and kept old `--attempt-strategy staged` CLI input as a

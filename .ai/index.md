@@ -3,7 +3,8 @@
 - Fixed agent entry point: `AGENTS.md`
 - Detailed agent task router: `.ai/entrypoint.md`
 - Workspace map: `docs/architecture/workspace_map.md`
-- Full migration plan: `governance/runbooks/migration/full_migration_plan.md`
+- Workspace status: `docs/operations/workspace_status.md`
+- Historical migration plan: `governance/runbooks/migration/full_migration_plan.md`
 - Change control standard: `governance/standards/change_control.md`
 - Git commit style standard: `governance/standards/git_commit_style.md`
 - Naming standard: `governance/standards/naming.md`
@@ -123,7 +124,7 @@
   `evidence/curated_logs/pillar_a_flight_results_20260602/`
 - Superseded Phase 8 partial-retirement evidence:
   `evidence/reports/migration/PHASE_8_COMPAT_RETIREMENT_2026-05-22.md`
-- Human migration status: `docs/operations/migration_status.md`
+- Human workspace status: `docs/operations/workspace_status.md`
 - Installation guide: `docs/onboarding/installation.md`
 - Quick start: `docs/onboarding/quick_start.md`
 - Troubleshooting guide: `docs/operations/troubleshooting.md`

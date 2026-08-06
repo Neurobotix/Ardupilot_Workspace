@@ -88,11 +88,11 @@ runbooks belong under `operations/`, and feature work belongs under
 
 ## Structure Validation Rule
 
-`scripts/maintenance/validate_structure.sh` is the canonical Phase 1 structure
+`scripts/maintenance/validate_structure.sh` is the canonical structure
 validator and is called by `make doctor`. It enforces required top-level homes,
 broken symlink checks, raw log leakage checks, nested `.private` checks,
 `.private/` policy checks, gitignore coverage, stale canonical reference scans,
-and required migration-plan links.
+and required workspace-status links.
 
 `.private/` may contain local overlays, notes, backups, and local environment
 files. It must not contain `.private/docs`, `.private/scripts`, duplicate
