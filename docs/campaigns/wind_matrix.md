@@ -74,19 +74,50 @@ sim-test
 Or pass sub-commands to use the existing flag surface directly:
 
 ```bash
-sim-test case   --x 0 --y 4 --rep 1
-sim-test suite  --x-values 0,4,8,12 --y-values 0,4,8,12
-sim-test rr     --x-values 0,4,8,12
+sim-test case      --x 0 --y 4 --rep 1
+sim-test suite     --x-values 0,4,8,12 --y-values 0,4,8,12
+sim-test rr        --x-values 0,4,8,12
+sim-test airspeed  --list-cases
+sim-test gps       --list-cases
 ```
 
-The wizard selects sensor family (`wind_matrix` or `airspeed_failure`), run
-mode, case parameters, and optionally advanced timeouts. For `wind_matrix` it
-mirrors the full flag surface of `run_case`, `run_suite`, and `run_round_robin`.
-For `airspeed_failure` it asks which fixed fault cases to include, ratio bias
-percents, vehicle `ARSPD_RATIO`, and whether the ratio is already verified.
+The wizard selects sensor family (`wind_matrix`, `airspeed_failure`, or
+`gps_failure`), run mode, case parameters, and optionally advanced timeouts.
+For `wind_matrix` it mirrors the full flag surface of `run_case`, `run_suite`,
+and `run_round_robin`. For `airspeed_failure` it asks which fixed fault cases
+to include, ratio bias percents, vehicle `ARSPD_RATIO`, whether the ratio is
+already verified, and the max attempts per case. For `gps_failure` it asks for
+an action rather than a run mode; see
+`docs/operations/gps_failure_runbook.md`.
 
-Source: `src/sim_ard_gaw/campaigns/test_suite/cli/run.py` and
-`src/sim_ard_gaw/campaigns/test_suite/cli/interactive.py`.
+The wizard does not reimplement any runner. It builds an argparse namespace and
+hands it to the same `run_from_args` function the flag path calls, so the two
+paths cannot resolve settings differently.
+
+### Inspection actions
+
+Every lane supports the same two no-SITL actions. Neither launches a stack,
+writes a manifest, or validates the mission contract:
+
+```bash
+sim-test suite --x-values 0,4 --y-values 0 --list-cases
+sim-test suite --x-values 0,4 --y-values 0 --dry-run
+```
+
+`--list-cases` prints the case ids the invocation would run. `--dry-run` prints
+a resolved-settings dump plus that case list, which is also how to compare a
+wizard run against a flag run.
+
+`--plugin` on `run_case`, `run_suite`, and `run_round_robin` accepts
+`wind_matrix` only. Those runners take wind case coordinates
+(`--x`/`--y`/`--x-values`/`--y-values`) and validate the square-wind mission
+contract, so they cannot drive another lane. Passing `--plugin gps_failure`
+exits non-zero and names the entry point that works. Use `sim-test airspeed`
+and `sim-test gps` for the other lanes.
+
+Source: `src/sim_ard_gaw/campaigns/test_suite/cli/run.py`,
+`src/sim_ard_gaw/campaigns/test_suite/cli/interactive.py`, and
+`src/sim_ard_gaw/campaigns/test_suite/cli/_plugin_select.py`.
 
 ## Phase 5 Safety Policy
 
