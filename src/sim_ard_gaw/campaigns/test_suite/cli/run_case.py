@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ..core.models import TestCase
 from ..plugins.wind_matrix import defaults
+from ._plugin_select import resolve_runner_plugin_or_exit
 from .deprecated_flags import (
     add_deprecated_attempt_strategy,
     consume_deprecated_attempt_strategy,
@@ -56,10 +57,12 @@ def _parse_args() -> argparse.Namespace:
     return args
 
 
-def main() -> None:
-    args = _parse_args()
-    if args.plugin != "wind_matrix":
-        sys.exit(f"Phase-1 supports only wind_matrix; got {args.plugin}")
+def run_from_args(args: argparse.Namespace, *, title: str = "test_suite.cli.run_case") -> None:
+    """Execute one attempt from parsed args.
+
+    Shared by the flag path (`main`) and the interactive wizard, so both
+    resolve settings through exactly one code path.
+    """
     if not (1 <= args.rep <= defaults.RUNS_PER_COMBO):
         sys.exit(f"ERROR: --rep must be 1..{defaults.RUNS_PER_COMBO}")
 
@@ -68,7 +71,7 @@ def main() -> None:
 
     print()
     defaults.log("=" * 60)
-    defaults.log("Square Wind Matrix - test_suite.cli.run_case")
+    defaults.log(f"Square Wind Matrix - {title}")
     defaults.log(f"  Wind : x={args.x} m/s (East)   y={args.y} m/s (North)")
     defaults.log(f"  Rep  : {args.rep}/{defaults.RUNS_PER_COMBO}")
     defaults.log(f"  Listen: {args.mavlink}")
@@ -133,6 +136,12 @@ def main() -> None:
         attempt_index=attempt_index,
         attempt_dir=attempt_dir,
     )
+
+
+def main() -> None:
+    args = _parse_args()
+    resolve_runner_plugin_or_exit(args.plugin, "run_case")
+    run_from_args(args)
 
 
 if __name__ == "__main__":

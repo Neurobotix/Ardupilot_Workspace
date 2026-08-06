@@ -14,6 +14,7 @@ from pathlib import Path
 from ..core.scheduler import RoundRobinScheduler
 from ..core.suite_runner import SuiteRunner, SuiteRunSettings
 from ..plugins.wind_matrix import defaults
+from ._plugin_select import resolve_runner_plugin_or_exit
 from .deprecated_flags import (
     add_deprecated_attempt_strategy,
     consume_deprecated_attempt_strategy,
@@ -95,11 +96,17 @@ def _parse_args() -> argparse.Namespace:
     return args
 
 
-def main() -> None:
-    args = _parse_args()
-    if args.plugin != "wind_matrix":
-        sys.exit(f"Phase-1 supports only wind_matrix; got {args.plugin}")
+def run_from_args(
+    args: argparse.Namespace,
+    *,
+    title: str = "test_suite.cli.run_round_robin",
+) -> None:
+    """Execute a round-robin suite from parsed args.
 
+    Shared by the flag path (`main`) and the interactive wizard, so both
+    resolve settings — including the slot/monitor budget — through exactly
+    one code path.
+    """
     from ..plugins.wind_matrix import build_plugin
     from ..plugins.wind_matrix.config import WindMatrixConfig
     from sim_ard_gaw.campaigns.mission_contract import (
@@ -168,7 +175,7 @@ def main() -> None:
 
     print()
     defaults.log("=" * 60)
-    defaults.log("Square Wind Matrix - test_suite.cli.run_round_robin")
+    defaults.log(f"Square Wind Matrix - {title}")
     defaults.log(f"  Campaign root : {args.campaign_root}")
     defaults.log(f"  Mission       : {args.mission_file}")
     defaults.log(f"  X values      : {args.x_values}")
@@ -234,6 +241,12 @@ def main() -> None:
         ),
     )
     suite.run()
+
+
+def main() -> None:
+    args = _parse_args()
+    resolve_runner_plugin_or_exit(args.plugin, "run_round_robin")
+    run_from_args(args)
 
 
 if __name__ == "__main__":
