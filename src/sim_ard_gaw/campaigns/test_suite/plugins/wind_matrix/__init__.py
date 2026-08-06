@@ -1,11 +1,8 @@
-"""Wind matrix — first reference plugin.
+"""Wind-matrix plugin for CTE wind campaign attempts.
 
-Default strategy: delegate into the legacy `run_one.py` / `run_matrix.py`
-modules so the campaign runtime keeps the proven compatibility path.
-
-Feature Phase 3 adds an opt-in staged strategy that pulls wind/square
-logic into this package and framework stage adapters. It is not the
-default until live parity evidence exists.
+The plugin wires wind case generation, SITL/Gazebo environment control, wind
+stimulus, square-mission monitoring, analysis, and manifest emission into the
+generic test-suite lifecycle.
 """
 from .plugin import build_plugin
 

@@ -1,8 +1,7 @@
 """Foundation defaults and naming helpers for the wind_matrix plugin.
 
-These values mirror the retained legacy wind-matrix runners, but they live in
-the test_suite plugin so staged construction can happen without importing the
-legacy runner modules.
+These values define the CTE wind campaign's default missions, paths, timeouts,
+parameter stacks, and Gazebo wind-topic settings for framework-driven attempts.
 """
 from __future__ import annotations
 

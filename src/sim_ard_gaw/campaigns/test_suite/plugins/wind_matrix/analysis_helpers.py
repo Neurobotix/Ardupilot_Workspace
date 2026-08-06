@@ -1,7 +1,7 @@
 """Wind-matrix analysis helpers for staged attempts.
 
-These helpers mirror the legacy run_one behavior but live in the plugin
-so staged execution does not depend on legacy runner imports.
+These helpers collect BIN logs, run square/loiter analysis, shape attempt
+summaries, and normalize analysis errors for wind-matrix manifest records.
 """
 from __future__ import annotations
 

@@ -1,9 +1,8 @@
-"""Phase 3F owned wind injection and SDF wind artifact helpers.
+"""Wind-matrix wind injection and SDF wind artifact helpers.
 
 This module owns runtime wind-topic publish/echo verification and preloaded
-SDF wind artifact validation for the staged wind plugin. It does not import
-any legacy runner module (run_one, run_matrix, run_matrix_round_robin). All
-constants/helpers come from defaults and wind_world.
+SDF wind artifact validation for framework-driven wind attempts. Constants and
+SDF parsing helpers come from defaults and wind_world.
 """
 from __future__ import annotations
 

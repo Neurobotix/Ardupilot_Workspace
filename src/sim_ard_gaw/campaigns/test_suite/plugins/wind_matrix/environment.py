@@ -1,9 +1,8 @@
 """Wind-matrix environment adapter.
 
-Phase 3D: launch() and cleanup() are now owned by the plugin via runtime.py.
-The environment no longer calls run_matrix.*/run_one.* during SITL/Gazebo
-launch or stack cleanup. Phase 3E: assert_ready() now uses plugin-owned
-MAVLink readiness helpers, with no legacy runner import.
+The adapter prepares per-attempt directories, launches and verifies the
+SITL/Gazebo stack when requested, records runtime context, and delegates cleanup
+through the shared launch cleanup entry point.
 """
 from __future__ import annotations
 
@@ -28,16 +27,14 @@ class WindMatrixEnvironment(EnvironmentAdapter):
         self._config = config
 
     def prepare_case(self, case: TestCase) -> None:
-        # The legacy `run_one.ensure_scaffold` runs at the campaign root,
-        # not per-case. Phase 1 keeps it there; this hook is a no-op so
-        # the boundary exists for future plugins that need per-case
-        # scaffolding.
+        # Wind-matrix scaffolding is campaign-root scoped; this hook exists for
+        # plugins that need per-case preparation.
         return None
 
     def launch(self, case: TestCase, ctx: AttemptContext) -> None:
         if not self._config.launch_stack:
-            # Single-case run_one parity: the operator owns SITL+Gazebo
-            # launch, while this wrapper only delegates to run_one.
+            # Manual/operator runs can attach to an already-owned SITL+Gazebo
+            # stack instead of launching one here.
             return
 
         x = case.parameters["wind_x_mps"]
@@ -85,7 +82,7 @@ class WindMatrixEnvironment(EnvironmentAdapter):
 
         if self._config.wind_world_mode == "calm-runtime":
             # Start calm so high-wind cases don't flip the parked aircraft.
-            # The legacy run_one body applies requested wind later by topic.
+            # The stimulus stage applies requested wind later by topic.
             runtime.write_static_wind_world(0.0, 0.0, gazebo_world)
             ctx.extra["preloaded_wind_world"] = None
             ctx.extra["preloaded_wind_refresh"] = True
