@@ -20,7 +20,14 @@ def _airspeed_failure_factory(**kwargs):
     return build_plugin(AirspeedFailureConfig(**kwargs))
 
 
+def _gps_failure_factory(**kwargs):
+    from ..plugins.gps_failure import build_plugin
+    from ..plugins.gps_failure.config import GpsFailureConfig
+    return build_plugin(GpsFailureConfig(**kwargs))
+
+
 PLUGINS: dict[str, Callable[..., object]] = {
     "airspeed_failure": _airspeed_failure_factory,
+    "gps_failure": _gps_failure_factory,
     "wind_matrix": _wind_matrix_factory,
 }

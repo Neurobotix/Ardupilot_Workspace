@@ -32,6 +32,7 @@ from sim_ard_gaw.campaigns.test_suite.core.models import (  # noqa: E402
     AttemptContext,
     AttemptRecord,
     AttemptStatus,
+    MonitorResult,
     TestCase,
     Verdict,
     VerdictClass,
@@ -311,6 +312,25 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
         self.assertEqual(False, generic["verdict"]["retryable"])
         self.assertEqual(record.duration_wall_s, generic["duration_wall_s"])
 
+    def test_generic_attempt_fields_persist_monitor_result(self) -> None:
+        record = _generic_success_record(
+            "wind_x_00_y_04__rep_01__attempt_001"
+        )
+        record.monitor_result = MonitorResult(
+            completed=False,
+            reason="exception: mission upload failed",
+            duration_s=3.5,
+            waypoints_seen=[1, 2],
+        )
+
+        generic = attempt_record_to_generic_fields(record)
+
+        self.assertEqual(
+            "exception: mission upload failed",
+            generic["monitor_result"]["reason"],
+        )
+        self.assertEqual([1, 2], generic["monitor_result"]["waypoints_seen"])
+
     def test_square_only_generic_verdict_stays_partial_not_success(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -366,6 +386,7 @@ class TestSuiteGenericManifestViewTests(unittest.TestCase):
             self.assertEqual({}, attempt["stimulus_result"])
             self.assertEqual([], attempt["analysis_results"])
             self.assertEqual("failed", attempt["verdict"]["class"])
+            self.assertIsNone(attempt["monitor_result"])
             self.assertEqual({}, attempt["artifacts"])
             self.assertIsNone(attempt["started_at"])
             self.assertIsNone(attempt["finished_at"])

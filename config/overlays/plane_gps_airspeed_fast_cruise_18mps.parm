@@ -1,0 +1,22 @@
+# ArduPlane Parameters - GPS Failure Fast Cruise Airspeed Envelope
+#
+# Apply after config/vehicles/plane_base.parm and config/overlays/plane_gps.parm.
+# This is GPS-lane owned: it enables the Gazebo JSON airspeed sensor for the
+# fast_cruise_18mps envelope without loading the CTE/airspeed-failure overlay
+# or any local/private plane override.
+
+ARSPD_TYPE 100
+ARSPD_USE 1
+ARSPD_AUTOCAL 0
+ARSPD_SKIP_CAL 1
+ARSPD_OFFSET 0
+
+AIRSPEED_CRUISE 18
+AIRSPEED_MIN 12
+AIRSPEED_MAX 22
+STALL_PREVENTION 1
+
+SIM_WIND_SPD 0
+SIM_WIND_DIR 180
+SIM_WIND_TURB 0
+AHRS_WIND_MAX 15

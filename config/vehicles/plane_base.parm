@@ -8,6 +8,7 @@
 #
 # Feature overlays:
 # - plane_airspeed.parm
+# - plane_gps.parm
 # - plane_lidar.parm
 
 # Enable JSON backend for Gazebo

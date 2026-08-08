@@ -51,6 +51,23 @@ class AttemptStrategy(ABC):
     def execute(self, ctx: AttemptContext) -> AttemptRecord:
         ...
 
+    def prepare_for_cleanup(self, ctx: AttemptContext) -> "PreparedAttempt":
+        """Run the strategy body and return its terminal-record finalizer.
+
+        Compatibility strategies keep their historical behavior: their whole
+        body runs before cleanup. Staged strategies override this boundary so
+        analysis and verdict construction can consume cleanup-finalized logs.
+        """
+        record = self.execute(ctx)
+        return PreparedAttempt(finalize=lambda: record)
+
+
+@dataclass(frozen=True)
+class PreparedAttempt:
+    """Attempt work that is ready for environment cleanup and finalization."""
+
+    finalize: Callable[[], AttemptRecord]
+
 
 @dataclass
 class StagedStrategy(AttemptStrategy):
@@ -65,20 +82,46 @@ class StagedStrategy(AttemptStrategy):
 
     def execute(self, ctx: AttemptContext) -> AttemptRecord:
         try:
-            return self._execute_stages(ctx)
+            monitor_result = self._execute_pre_cleanup_stages(ctx)
+            return self._finalize_stages(ctx, monitor_result)
         except Exception as exc:
             if self.on_exception is None:
                 raise
             return self.on_exception(ctx, exc)
 
-    def _execute_stages(self, ctx: AttemptContext) -> AttemptRecord:
+    def prepare_for_cleanup(self, ctx: AttemptContext) -> PreparedAttempt:
+        try:
+            monitor_result = self._execute_pre_cleanup_stages(ctx)
+        except Exception as exc:
+            if self.on_exception is None:
+                raise
+            record = self.on_exception(ctx, exc)
+            return PreparedAttempt(finalize=lambda: record)
+
+        def finalize() -> AttemptRecord:
+            try:
+                return self._finalize_stages(ctx, monitor_result)
+            except Exception as exc:
+                if self.on_exception is None:
+                    raise
+                return self.on_exception(ctx, exc)
+
+        return PreparedAttempt(finalize=finalize)
+
+    def _execute_pre_cleanup_stages(self, ctx: AttemptContext) -> MonitorResult:
         ctx.stimulus_result = self.stimulus.apply(ctx.case, ctx)
         verify_payload = self.stimulus.verify(ctx.case, ctx)
         if verify_payload:
             ctx.stimulus_result.setdefault("verify", verify_payload)
 
         self.control.execute(ctx.case, ctx)
-        monitor_result: MonitorResult = self.monitor.run(ctx.case, ctx)
+        return self.monitor.run(ctx.case, ctx)
+
+    def _finalize_stages(
+        self,
+        ctx: AttemptContext,
+        monitor_result: MonitorResult,
+    ) -> AttemptRecord:
         analysis_results = self.analyzers.run(ctx.case, ctx)
         verdict: Verdict = self.verdict_policy.classify(
             ctx.case, monitor_result, analysis_results,
@@ -205,6 +248,7 @@ class AttemptRunner:
 
         running_persisted = False
         terminal_persisted = False
+        cleanup_attempted = False
         try:
             if self._prewrite_running_record:
                 running_record = (
@@ -218,7 +262,17 @@ class AttemptRunner:
             self._env.prepare_case(case)
             self._env.launch(case, ctx)
             self._env.assert_ready(case, ctx)
-            record = self._strategy.execute(ctx)
+            prepared = self._strategy.prepare_for_cleanup(ctx)
+            # Cleanup is part of a successful attempt, not best-effort work that
+            # happens after success has already been persisted. A cleanup error
+            # must therefore enter the exception path and prevent a success row.
+            cleanup_attempted = True
+            self._env.cleanup(case, ctx)
+            record = prepared.finalize()
+            # Cleanup adapters may emit final artifacts or a structured cleanup
+            # result. Refresh the already-built strategy record before terminal
+            # persistence so that proof is not lost.
+            _refresh_record_from_context(record, ctx)
             if not record.end_time_utc:
                 record.end_time_utc = _utc_now_iso()
             record.duration_wall_s = time.time() - ctx.start_wall_s
@@ -228,6 +282,19 @@ class AttemptRunner:
         except BaseException as exc:
             self._log(f"[attempt_runner] error in {case.case_id}: "
                       f"{type(exc).__name__}: {exc}")
+            cleanup_exc: BaseException | None = None
+            if not cleanup_attempted:
+                cleanup_attempted = True
+                try:
+                    self._env.cleanup(case, ctx)
+                except BaseException as caught_cleanup_exc:
+                    cleanup_exc = caught_cleanup_exc
+                    # The earlier stage error remains the primary failure.
+                    self._log(
+                        "[attempt_runner] cleanup error: "
+                        f"{type(caught_cleanup_exc).__name__}: "
+                        f"{caught_cleanup_exc}"
+                    )
             if running_persisted and not terminal_persisted:
                 try:
                     record = (
@@ -235,6 +302,23 @@ class AttemptRunner:
                         if self._exception_record_factory is not None
                         else _exception_attempt_record(ctx, exc)
                     )
+                    _refresh_record_from_context(record, ctx)
+                    if cleanup_exc is not None:
+                        cleanup_error = {
+                            "type": type(cleanup_exc).__name__,
+                            "message": str(cleanup_exc),
+                        }
+                        record.plugin_manifest_fields["cleanup_exception"] = (
+                            cleanup_error
+                        )
+                        record.notes.append(
+                            "cleanup exception: "
+                            f"{cleanup_error['type']}: {cleanup_error['message']}"
+                        )
+                        if record.verdict is not None:
+                            record.verdict.metadata["cleanup_exception"] = (
+                                cleanup_error
+                            )
                     if not record.end_time_utc:
                         record.end_time_utc = _utc_now_iso()
                     record.duration_wall_s = time.time() - ctx.start_wall_s
@@ -246,12 +330,20 @@ class AttemptRunner:
                         f"{type(persist_exc).__name__}: {persist_exc}"
                     )
             raise
-        finally:
-            try:
-                self._env.cleanup(case, ctx)
-            except Exception as cleanup_exc:
-                self._log(f"[attempt_runner] cleanup error: "
-                          f"{type(cleanup_exc).__name__}: {cleanup_exc}")
+
+
+def _refresh_record_from_context(
+    record: AttemptRecord,
+    ctx: AttemptContext,
+) -> None:
+    record.artifacts.update({
+        name: str(path) for name, path in ctx.artifacts.items()
+    })
+    cleanup_result = ctx.extra.get("cleanup_result")
+    if isinstance(cleanup_result, dict):
+        record.plugin_manifest_fields["cleanup"] = dict(cleanup_result)
+    if record.plugin_manifest_fields:
+        record.plugin_manifest_fields["artifacts"] = dict(record.artifacts)
 
 
 def _default_attempt_id(ctx: AttemptContext) -> str:

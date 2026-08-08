@@ -1,0 +1,47 @@
+QGC WPL 110
+# GPS FAILURE BEHAVIOR MISSION v6
+# Shorter final-science candidate geometry for the gps_failure lane.
+# A v2 live nominal completed its 100 m climb around 323 m East; v3 fixed the
+# pre-trigger turnback by moving the settle point to 500 m East, and v4 extended
+# the workflow-validation legs to 2000 m. V5 replaced the reciprocal box with a
+# one-way science line but was slow operationally. V6 keeps the seq-4 trigger
+# contract and the 30 s loiter while shortening the one-way line: controlled
+# pre-trigger baseline to 1000 m East, 6000 m straight fault-active observation,
+# 1000 m straight recovery/continuation, then a short terminal/loiter section
+# before RTL. This keeps return-home geometry out of the main evidence window
+# and gives 0.2 m/s slow drift roughly 400 s of straight-line exposure.
+# GPS faults still inject on entering seq 4 after front-half progress through
+# seq 1 and seq 3; seq 2 may be skipped by MISSION_CURRENT.
+#
+# Home
+0	1	0	16	0	0	0	0	-35.3632620	149.1652370	584.00	1
+#
+# WP1: TAKEOFF East, climb to 100 m AGL.
+1	0	3	22	15.0	0	0	0	-35.3632620	149.1668924	100.00	1
+#
+# WP2: Command target speed = 15 m/s.
+# MAV_CMD_DO_CHANGE_SPEED (178): param1=0, param2=15.
+2	0	0	178	0	15.0	0	0	0	0	0	1
+#
+# WP3: Controlled baseline/settle gate, 1000 m East of home.
+3	0	3	16	0	0	0	0	-35.3632620	149.1762649	100.00	1
+#
+# WP4: End of 6000 m straight fault-active observation leg, 7000 m East.
+# INJECTION POINT: fault/no-fault observation starts on entering seq 4 and is
+# observed on the straight seq3->seq4 leg.
+4	0	3	16	0	0	0	0	-35.3632620	149.2424323	100.00	1
+#
+# WP5: Straight recovery/continuation segment, 8000 m East.
+5	0	3	16	0	0	0	0	-35.3632620	149.2534602	100.00	1
+#
+# WP6: Controlled terminal loiter, 30 s at 8000 m East.
+6	0	3	19	30	0	0	0	-35.3632620	149.2534602	100.00	1
+#
+# WP7: Terminal exit gate, 8500 m East.
+7	0	3	16	0	0	0	0	-35.3632620	149.2589742	100.00	1
+#
+# WP8: Planned terminal gate before RTL, 9000 m East.
+8	0	3	16	0	0	0	0	-35.3632620	149.2644881	100.00	1
+#
+# WP9: Return to launch. No landing sequence.
+9	0	3	20	0	0	0	0	0	0	0	1

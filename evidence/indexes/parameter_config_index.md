@@ -1,6 +1,6 @@
 # Parameter And Config Index
 
-Last updated: 2026-06-21
+Last updated: 2026-07-22
 
 Scope: Phase 4 classification of shared runtime parameter files, archives,
 local-only overlays, and recovered historical parameter evidence.
@@ -25,10 +25,14 @@ compatibility runners and wrappers still govern some command surfaces.
 
 | Path | Role | Category | Shared canonical config | SHA-256 | Known runtime stack membership |
 | --- | --- | --- | --- | --- | --- |
-| `config/vehicles/plane_base.parm` | Sensor-neutral Mini Talon base with generic `AIRSPEED_*` defaults. | vehicle base | yes | `8941fa559f762fb4111c150db04e4d36c0ad05d680f8cff2cd28219ba8ceaa01` | First file for `plane`, `plane-cte` / `plane-airspeed`, `plane-lidar`, `plane-staircase`, `plane-airspeed-lidar`, `plane-altitude-wind`, and current CTE campaign callers. |
+| `config/vehicles/plane_base.parm` | Sensor-neutral Mini Talon base with generic `AIRSPEED_*` defaults. | vehicle base | yes | `410226094248709c7660ee51517b07a9077314d1d15a774b8453794c343c09c4` | First file for `plane`, `plane-cte` / `plane-airspeed`, `plane-gps`, `plane-lidar`, `plane-staircase`, `plane-airspeed-lidar`, `plane-altitude-wind`, the `gps_failure` lane, and current CTE campaign callers. |
 | `config/vehicles/copter_params.parm` | Iris frame and Copter SITL defaults. | vehicle base | yes | `fd12b0f6398de5438a1b0d3f2638c5f1b9e682bb672a03ea81fc4d005fe38579` | `copter` and `copter-lidar`; launcher loads with `--wipe-eeprom`. |
 | `config/vehicles/plane_params_rebuild.parm` | Standalone rebuild stack. | vehicle base | yes | `c5d38923b87daed0cb495d85c72ce8023721e089313ed5d44f1ad7375b2ece3e` | `plane-rebuild` only; do not stack with `plane_base.parm` or local plane override. |
 | `config/overlays/plane_airspeed.parm` | Default Gazebo airspeed overlay; production-like conservative 14/10/22 envelope. | overlay | yes | `154bf537b26c6018e55a8a0e8c0c0d2ca2103e7d91931c923db478f0622c6159` | After `plane_base.parm` for `plane-cte` / `plane-airspeed` and current CTE/wind-matrix campaign callers. |
+| `config/overlays/plane_gps.parm` | GPS failure overlay pinning four EKF knee inputs, the complete primary EKF source set, and calm SITL wind; contains no airspeed tuning. | overlay | yes | `f8e4303e1a3e2f9a0b0f013300a4e0cd7334576a407ce0cdb6f1e1826545c70c` | Follows `plane_base.parm` for the `plane-gps` launch target and the `gps_failure` lane; the launcher excludes the local override. Static/no-SITL integration exists; no live readback has occurred. |
+| `config/overlays/plane_gps_airspeed_fast_cruise_18mps.parm` | GPS failure fast-cruise envelope overlay enabling Gazebo JSON airspeed and setting `AIRSPEED_CRUISE=18` without importing the CTE/airspeed-failure overlay or local override. | overlay | yes | `66fae85bcfbdbbc10cb96e34683fe4692caedf9edbff61eb539e4af4a61b9b13` | Appended after `plane_base.parm -> plane_gps.parm` only by the named GPS envelope `fast_cruise_18mps`; pairs with `gazebo-plane-gps-airspeed`. |
+| `config/overlays/plane_gps_ekf_gate300_glitch0.parm` | GPS failure EKF envelope overlay setting `EK3_GLITCH_RAD=0`, `EK3_POS_I_GATE=300`, and `EK3_VEL_I_GATE=300`. | overlay | yes | `249c79fd03be9137dad645e4be54288ee62250f8e88826063fd4436ec69c9a87` | Appended after `plane_base.parm -> plane_gps.parm` only by the named GPS envelope `ekf_gate300_glitch0`; not a default launch target overlay. |
+| `config/overlays/plane_gps_ekf_glitch10.parm` | GPS failure EKF envelope overlay setting `EK3_GLITCH_RAD=10` while leaving baseline innovation gates in place. | overlay | yes | `d2990cf0e4d4837bc40d1241c235ac0910cde744c45dccc62d33faaa3cce48c7` | Appended after `plane_base.parm -> plane_gps.parm` only by the named GPS envelope `ekf_glitch10`; not a default launch target overlay. |
 | `config/overlays/plane_airspeed_cte_high_wind_aggressive.parm` | Deliberately named aggressive high-wind CTE stress overlay (28/18/38). NOT the default airspeed overlay. | overlay | yes | `5fd76251d9d0a4738fec6b57365357200f030604588c1602d22bae0e750c8f95` | None by default; not wired into any launch target or campaign default. Stress experiments only, named explicitly. |
 | `config/overlays/plane_lidar.parm` | MAVLink bridge-backed downward rangefinder overlay. | overlay | yes | `5837ebe4c1e7e23ee7d0343de2318a2044f924ea4f8d5f22d05b01582f77210b` | After `plane_base.parm` for `plane-lidar`; also before staircase nav overlay for `plane-staircase`. |
 | `config/overlays/staircase_plane_params.parm` | Tight nav overlay for staircase LiDAR mission. | overlay | yes | `1b045dde27f2fae2dffbeeedaa695e2b8246a0b11a3397ffe7b6ef0f8acd24a1` | Final shared overlay for `plane-staircase` before any optional local plane override. |
@@ -48,6 +52,8 @@ compatibility runners and wrappers still govern some command surfaces.
 | --- | --- | --- |
 | `plane` | `plane_base.parm` | Optional local plane override when present. |
 | `plane-cte` / `plane-airspeed` | `plane_base.parm` -> `plane_airspeed.parm` | Optional local plane override when present. |
+| `plane-gps` | `plane_base.parm` -> `plane_gps.parm` by default, or the explicit GPS stack passed through `SIM_ARD_GAW_GPS_PARAM_FILES`. | Local override **excluded unconditionally** by the dedicated `build_plane_gps_param_args`. Baseline has no airspeed overlay; the named fast-cruise GPS envelope explicitly appends its own airspeed overlay. Structural only, not yet live-smoke verified after the fast-envelope correction. |
+| `gps_failure` | Baseline named envelope: `plane_base.parm` -> `plane_gps.parm`; `ekf_gate300_glitch0` appends `plane_gps_ekf_gate300_glitch0.parm`; `ekf_glitch10` appends `plane_gps_ekf_glitch10.parm`; `fast_cruise_18mps` appends `plane_gps_airspeed_fast_cruise_18mps.parm` and uses the fast mission. | Plugin targets `plane-gps` and the selected envelope Gazebo target (`gazebo-plane-gps` by default, `gazebo-plane-gps-airspeed` for fast cruise), then passes the selected envelope stack to the launcher; caller-supplied stacks override it. Static/no-SITL only; no corrected fast-envelope live run or readback yet. |
 | `plane-lidar` | `plane_base.parm` -> `plane_lidar.parm` | Optional local plane override when present. |
 | `plane-staircase` | `plane_base.parm` -> `plane_lidar.parm` -> `staircase_plane_params.parm` | Optional local plane override when present. |
 | `plane-airspeed-lidar` | `plane_base.parm` -> campaign `mini_talon_airspeed_lidar/plane_full.parm` | Optional local plane override when present. |

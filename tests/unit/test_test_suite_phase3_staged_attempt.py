@@ -70,9 +70,17 @@ class _FakeManifest:
 
 
 class _RecordingEnvironment(EnvironmentAdapter):
-    def __init__(self, events: list[str], cleanup_raises: bool = False) -> None:
+    def __init__(
+        self,
+        events: list[str],
+        cleanup_raises: bool = False,
+        cleanup_result: dict[str, Any] | None = None,
+        cleanup_artifact: bool = False,
+    ) -> None:
         self.events = events
         self.cleanup_raises = cleanup_raises
+        self.cleanup_result = cleanup_result
+        self.cleanup_artifact = cleanup_artifact
 
     def prepare_case(self, case: TestCase) -> None:
         self.events.append("prepare")
@@ -85,6 +93,10 @@ class _RecordingEnvironment(EnvironmentAdapter):
 
     def cleanup(self, case: TestCase, ctx: AttemptContext) -> None:
         self.events.append("cleanup")
+        if self.cleanup_result is not None:
+            ctx.extra["cleanup_result"] = dict(self.cleanup_result)
+        if self.cleanup_artifact:
+            ctx.artifacts["cleanup.json"] = ctx.attempt_dir / "cleanup.json"
         if self.cleanup_raises:
             raise RuntimeError("cleanup failed")
 
@@ -176,6 +188,10 @@ def _runner(
     *,
     control_error: BaseException | None = None,
     verdict_class: VerdictClass = VerdictClass.SUCCESS,
+    cleanup_raises: bool = False,
+    cleanup_result: dict[str, Any] | None = None,
+    cleanup_artifact: bool = False,
+    prewrite_running_record: bool = False,
 ) -> tuple[AttemptRunner, _FakeManifest]:
     manifest = _FakeManifest()
     strategy = StagedStrategy(
@@ -187,11 +203,17 @@ def _runner(
     )
     return (
         AttemptRunner(
-            environment=_RecordingEnvironment(events),
+            environment=_RecordingEnvironment(
+                events,
+                cleanup_raises=cleanup_raises,
+                cleanup_result=cleanup_result,
+                cleanup_artifact=cleanup_artifact,
+            ),
             strategy=strategy,
             manifest=manifest,  # type: ignore[arg-type]
             artifact_root=Path("/tmp/campaign"),
             log=lambda _msg: None,
+            prewrite_running_record=prewrite_running_record,
         ),
         manifest,
     )
@@ -213,9 +235,9 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                 "stimulus.verify",
                 "control",
                 "monitor",
+                "cleanup",
                 "analyze",
                 "verdict",
-                "cleanup",
             ],
             events,
         )
@@ -241,6 +263,40 @@ class Phase3StagedAttemptTests(unittest.TestCase):
 
         self.assertIn("cleanup", events)
 
+    def test_cleanup_failure_cannot_leave_a_terminal_success_record(self) -> None:
+        events: list[str] = []
+        runner, manifest = _runner(
+            events,
+            cleanup_raises=True,
+            prewrite_running_record=True,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "cleanup failed"):
+            runner.run(_case(), 1, 1, Path("/tmp/attempt"))
+
+        self.assertEqual(
+            [AttemptStatus.RUNNING, AttemptStatus.ERROR],
+            [record.status for record in manifest.records],
+        )
+        self.assertNotIn(AttemptStatus.SUCCESS, [record.status for record in manifest.records])
+        self.assertNotIn("analyze", events)
+        self.assertNotIn("verdict", events)
+
+    def test_cleanup_result_is_in_terminal_record_before_persistence(self) -> None:
+        events: list[str] = []
+        runner, manifest = _runner(
+            events,
+            cleanup_result={"ok": True, "remaining_processes": []},
+        )
+
+        record = runner.run(_case(), 1, 1, Path("/tmp/attempt"))
+
+        self.assertEqual(
+            {"ok": True, "remaining_processes": []},
+            record.plugin_manifest_fields["cleanup"],
+        )
+        self.assertEqual(record, manifest.records[0])
+
     def test_cleanup_runs_on_failure(self) -> None:
         events: list[str] = []
         runner, _manifest = _runner(
@@ -251,6 +307,61 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             runner.run(_case(), 1, 1, Path("/tmp/attempt"))
 
         self.assertIn("cleanup", events)
+
+    def test_failure_cleanup_proof_is_persisted_before_terminal_record(self) -> None:
+        events: list[str] = []
+        runner, manifest = _runner(
+            events,
+            control_error=RuntimeError("primary control failure"),
+            cleanup_result={"ok": True, "remaining_processes": []},
+            cleanup_artifact=True,
+            prewrite_running_record=True,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "primary control failure"):
+            runner.run(_case(), 1, 1, Path("/tmp/attempt"))
+
+        terminal = manifest.records[-1]
+        self.assertEqual(AttemptStatus.ERROR, terminal.status)
+        self.assertEqual(
+            {"ok": True, "remaining_processes": []},
+            terminal.plugin_manifest_fields["cleanup"],
+        )
+        self.assertEqual(
+            "/tmp/attempt/cleanup.json",
+            terminal.artifacts["cleanup.json"],
+        )
+        self.assertEqual(
+            "primary control failure",
+            terminal.verdict.metadata["exception"],  # type: ignore[union-attr]
+        )
+
+    def test_cleanup_exception_does_not_replace_primary_failure(self) -> None:
+        events: list[str] = []
+        runner, manifest = _runner(
+            events,
+            control_error=RuntimeError("primary control failure"),
+            cleanup_raises=True,
+            cleanup_result={"ok": False, "errors": ["child survived"]},
+            prewrite_running_record=True,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "primary control failure"):
+            runner.run(_case(), 1, 1, Path("/tmp/attempt"))
+
+        terminal = manifest.records[-1]
+        self.assertEqual(
+            "primary control failure",
+            terminal.verdict.metadata["exception"],  # type: ignore[union-attr]
+        )
+        self.assertEqual(
+            {"type": "RuntimeError", "message": "cleanup failed"},
+            terminal.verdict.metadata["cleanup_exception"],  # type: ignore[union-attr]
+        )
+        self.assertEqual(
+            {"ok": False, "errors": ["child survived"]},
+            terminal.plugin_manifest_fields["cleanup"],
+        )
 
     def test_cleanup_runs_on_interrupt_like_error(self) -> None:
         events: list[str] = []
@@ -380,6 +491,7 @@ class Phase3StagedAttemptTests(unittest.TestCase):
             strategy = plugin.attempt_runner()._strategy  # noqa: SLF001
             self.assertIsInstance(strategy, StagedStrategy)
             self.assertNotIsInstance(strategy, LegacyDelegateStrategy)
+            assert isinstance(strategy, StagedStrategy)
             self.assertIn(
                 "sim_ard_gaw.campaigns.test_suite.plugins.wind_matrix",
                 type(strategy.stimulus).__module__,
@@ -506,8 +618,8 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     "wind_stimulus.verify",
                     "wind_control",
                     "wind_monitor",
-                    "wind_analysis",
                     "cleanup",
+                    "wind_analysis",
                 ],
                 events,
             )
@@ -736,11 +848,11 @@ class Phase3StagedAttemptTests(unittest.TestCase):
                     "control.settle",
                     "control.auto",
                     "monitor",
+                    "cleanup",
                     "analysis.collect_bin",
                     "analysis.alias",
                     "analysis.run",
                     "analysis.summary",
-                    "cleanup",
                 ],
                 events,
             )
