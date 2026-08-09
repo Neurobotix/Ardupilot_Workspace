@@ -22,6 +22,32 @@ keeps evidence provenance intact, and avoids broad cosmetic renames.
 5. Before creating a new file, check the nearest `README.md` or directory
    naming guidance and this standard.
 
+## The Word "Lane"
+
+"Lane" alone is ambiguous in this workspace and must not be used unqualified in
+new docs, code comments, or commit messages. It names two different things on
+two different axes:
+
+- **Simulation lane** — an aircraft + world + launcher + bridge combination.
+  Registry: `docs/architecture/simulation_lanes.md`.
+- **Campaign lane** — an end-to-end fault investigation: fault injected, cases
+  swept, verdicts classified, evidence produced. Registered in
+  `src/sim_ard_gaw/campaigns/test_suite/cli/_registry.py`. Registry:
+  `docs/architecture/campaign_lanes.md`.
+
+A campaign lane **runs on** a simulation lane. The two are not interchangeable
+and neither is a subset of the other.
+
+Always write the qualified form — "simulation lane" or "campaign lane" — on
+first use in a document and wherever the surrounding text does not already
+make the axis unambiguous. Existing unqualified uses are not renamed for
+cosmetics; qualify them when the surrounding text is edited for other reasons.
+
+Campaign lane names are `lower_snake_case` and must match the plugin directory
+under `src/sim_ard_gaw/campaigns/test_suite/plugins/` and the key registered in
+`cli/_registry.py`. Simulation lane target names are `kebab-case` because they
+are `scripts/ops/launch.sh` arguments.
+
 ## Stable Docs
 
 Stable living Markdown docs use `lower_snake_case.md`.
