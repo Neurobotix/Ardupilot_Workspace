@@ -6,6 +6,7 @@ import math
 import time
 from typing import Any, Iterable
 
+from ...core.heartbeat import OperatorHeartbeat
 from ...core.models import AttemptContext, MonitorResult, TestCase
 from ...core.monitor import CompletionMonitor
 from . import defaults
@@ -73,8 +74,11 @@ class _LiveGpsMonitor:
         self.loss_of_control = False
         self.timeout = False
         self.pre_injection_estimator_flags: int | None = None
-        self._operator_status_period_s = 15.0
-        self._last_operator_status_s = self.started_monotonic
+        self._heartbeat = OperatorHeartbeat(
+            prefix="gps_monitor",
+            case_id=self.case.case_id,
+            started_monotonic_s=self.started_monotonic,
+        )
         self._logged_clean_trigger_sequences: set[int] = set()
         self._logged_stale_trigger_sequences: set[int] = set()
         self._logged_mission_current_sequences: set[int] = set()
@@ -1257,33 +1261,82 @@ class _LiveGpsMonitor:
         )
 
     def _log_periodic_operator_status(self, now_s: float) -> None:
-        if now_s - self._last_operator_status_s < self._operator_status_period_s:
-            return
-        self._last_operator_status_s = now_s
-        remaining_s = max(0.0, self.deadline - now_s)
+        self._heartbeat.maybe_emit(now_s, self._heartbeat_fields(now_s))
+
+    def _heartbeat_fields(self, now_s: float) -> dict[str, str]:
+        """Physical state that decides whether this attempt is admissible.
+
+        `gap` is the lane's primary measurement: `silent_drift` is by
+        definition invisible in health flags, so the truth-vs-belief distance
+        is the only live signal that reveals it. `ratio` is the knee signal
+        from ADR-0018 — below 1.0 the corrupted fix is being fused, at/above
+        it the fix is rejected. `sats`/`fix` separate the injected fault from
+        an unintended denial, and `drift_cmd` is the dose, which distinguishes
+        a working injection from one that silently failed.
+        """
+        fields: dict[str, str] = {
+            "mode": self.current_mode or "?",
+            "seq": _format_optional_int(self.max_seq_reached),
+        }
         if not self.triggered:
-            defaults.log(
-                f"[gps_monitor] {self.case.case_id}: still waiting for clean "
-                f"seq-{defaults.INJECTION_TRIGGER['seq']} trigger; "
-                f"max_seq={self.max_seq_reached}, reached={self.reached}, "
-                f"mode={self.current_mode}, deadline_in={remaining_s:.0f}s"
+            fields["phase"] = (
+                f"awaiting-seq-{defaults.INJECTION_TRIGGER['seq']}-trigger"
             )
-            return
-        post_s = self._post_injection_s(now_s)
-        rtl_wait = ""
-        if self.rtl_transition_monotonic_s is not None:
-            rtl_wait_s = max(
-                0.0,
-                defaults.RTL_STABILIZE_S
-                - (now_s - self.rtl_transition_monotonic_s),
+        else:
+            fields["phase"] = (
+                f"post-trigger+{self._post_injection_s(now_s):.0f}s"
+                f"/{self._required_post_injection_s():.0f}s"
             )
-            rtl_wait = f", rtl_stabilize_remaining={rtl_wait_s:.0f}s"
-        defaults.log(
-            f"[gps_monitor] {self.case.case_id}: observing post-trigger "
-            f"+{post_s:.1f}s/{self._required_post_injection_s():.1f}s; "
-            f"mode={self.current_mode}, max_seq={self.max_seq_reached}, "
-            f"reached={self.reached}{rtl_wait}, deadline_in={remaining_s:.0f}s"
-        )
+        fields["gap"] = _format_optional_metres(self._latest_horizontal_gap_m())
+        fields["ratio"] = _format_optional_ratio(self._latest_pos_test_ratio())
+        fix_type, sats = self._latest_gps_fix_and_satellites()
+        fields["fix"] = _format_optional_int(fix_type)
+        fields["sats"] = _format_optional_int(sats)
+        fields["drift_cmd"] = self._commanded_drift_label()
+        fields["deadline_in"] = f"{max(0.0, self.deadline - now_s):.0f}s"
+        return fields
+
+    def _latest_horizontal_gap_m(self) -> float | None:
+        """Most recent truth-vs-belief distance, or None if unpairable.
+
+        Reuses the same pairing (and 0.1 s skew rejection) as the artifact,
+        so the operator sees the quantity the analysis will later report.
+        """
+        paired = _pair_live_truth_belief(self.normalized_messages)
+        if not paired:
+            return None
+        return float(paired[-1]["horizontal_gap_m"])
+
+    def _latest_pos_test_ratio(self) -> float | None:
+        for sample in reversed(self.normalized_messages):
+            if sample["type"] != "EKF_STATUS_REPORT":
+                continue
+            if not sample.get("ok"):
+                continue
+            ratio = sample.get("pos_test_ratio")
+            if isinstance(ratio, (int, float)) and not isinstance(ratio, bool):
+                return float(ratio)
+        return None
+
+    def _latest_gps_fix_and_satellites(self) -> tuple[int | None, int | None]:
+        for sample in reversed(self.normalized_messages):
+            if sample["type"] != "GPS_RAW_INT":
+                continue
+            return sample.get("fix_type"), sample.get("satellites_visible")
+        return None, None
+
+    def _commanded_drift_label(self) -> str:
+        """The dose actually commanded for this case, never a default."""
+        parameters = self.case.parameters
+        if parameters.get("fault_type") != "slow_drift":
+            return str(parameters.get("fault_type") or "n/a")
+        recipe = parameters.get("fault_recipe")
+        rate = recipe.get("drift_rate_mps") if isinstance(recipe, dict) else None
+        if rate is None:
+            rate = parameters.get("drift_rate_mps")
+        if not isinstance(rate, (int, float)) or isinstance(rate, bool):
+            return "?"
+        return f"{float(rate):.2f}m/s"
 
     def _trigger_latitude_field(self, mission_arrival_s: float) -> dict[str, Any]:
         for sample in reversed(self.normalized_messages):
@@ -1471,6 +1524,24 @@ def _format_optional_seconds(value: object) -> str:
     if parsed is None:
         return "n/a"
     return f"{parsed:.2f}s"
+
+
+def _format_optional_int(value: object) -> str:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "?"
+    return str(int(value))
+
+
+def _format_optional_metres(value: object) -> str:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "?"
+    return f"{float(value):.1f}m"
+
+
+def _format_optional_ratio(value: object) -> str:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "?"
+    return f"{float(value):.2f}"
 
 
 def _sample_age(newer: object, older: object) -> float | None:

@@ -960,7 +960,7 @@ class GpsFailurePhase2MavlinkTelemetryTests(unittest.TestCase):
             master,
         )
 
-        with patch.object(defaults, "log") as log:
+        with patch("sim_ard_gaw.campaigns.test_suite.core.heartbeat.log") as log:
             live._log_periodic_operator_status(live.started_monotonic + 16.0)
             live.triggered = True
             live.injection_monotonic_s = live.started_monotonic + 20.0
@@ -969,9 +969,112 @@ class GpsFailurePhase2MavlinkTelemetryTests(unittest.TestCase):
             live._log_periodic_operator_status(live.started_monotonic + 36.0)
 
         messages = [str(call.args[0]) for call in log.call_args_list]
-        self.assertTrue(any("still waiting for clean seq-4 trigger" in msg for msg in messages))
-        self.assertTrue(any("observing post-trigger" in msg for msg in messages))
+        self.assertTrue(any("awaiting-seq-4-trigger" in msg for msg in messages))
+        self.assertTrue(any("post-trigger+" in msg for msg in messages))
+        # The heartbeat exists to show physical state, not mission progress:
+        # every line must carry the truth-vs-belief gap and the knee ratio,
+        # rendered as "?" rather than fabricated when no sample has arrived.
+        for msg in messages:
+            self.assertIn("gap=", msg)
+            self.assertIn("ratio=", msg)
+        self.assertTrue(any("mode=AUTO" in msg for msg in messages))
         self.assertEqual([], master.set_order)
+
+    def test_heartbeat_reports_live_gap_ratio_and_commanded_dose(self) -> None:
+        """The operator must be able to see `silent_drift` while it happens.
+
+        A growing truth-vs-belief gap while `posTestRatio` stays under the 1.0
+        knee and the mode stays AUTO is exactly the band ADR-0018 names
+        `silent_drift`; no health flag reports it, so the heartbeat is the
+        only live view of it.
+        """
+        ctx = _ctx(ROOT / "var" / "tmp_test_gps_phase2_heartbeat_physical")
+        live = _LiveGpsMonitor(
+            GpsFailureConfig(launch_stack=True),
+            ctx.case,
+            ctx,
+            _FakeMonitorConnection(),
+        )
+        base = live.started_monotonic + 20.0
+        # ~12 m north offset between SIMSTATE truth and the believed position.
+        live.normalized_messages.extend(
+            [
+                {
+                    "type": "SIMSTATE",
+                    "arrival_monotonic_s": base,
+                    "lat_deg_e7": 377000000,
+                    "lon_deg_e7": -1223000000,
+                },
+                {
+                    "type": "GLOBAL_POSITION_INT",
+                    "arrival_monotonic_s": base + 0.02,
+                    "lat_deg_e7": 377001078,
+                    "lon_deg_e7": -1223000000,
+                },
+                {
+                    "type": "EKF_STATUS_REPORT",
+                    "arrival_monotonic_s": base,
+                    "ok": True,
+                    "pos_test_ratio": 0.84,
+                },
+                {
+                    "type": "GPS_RAW_INT",
+                    "arrival_monotonic_s": base,
+                    "fix_type": 3,
+                    "satellites_visible": 11,
+                },
+            ]
+        )
+        live.triggered = True
+        live.injection_monotonic_s = base
+        live.current_mode = "AUTO"
+
+        fields = live._heartbeat_fields(live.started_monotonic + 36.0)
+
+        self.assertEqual("12.0m", fields["gap"])
+        self.assertEqual("0.84", fields["ratio"])
+        self.assertEqual("3", fields["fix"])
+        self.assertEqual("11", fields["sats"])
+        self.assertEqual("AUTO", fields["mode"])
+
+    def test_heartbeat_renders_missing_physical_data_without_fabricating(self) -> None:
+        """A heartbeat that lies is worse than no heartbeat."""
+        ctx = _ctx(ROOT / "var" / "tmp_test_gps_phase2_heartbeat_missing")
+        live = _LiveGpsMonitor(
+            GpsFailureConfig(launch_stack=True),
+            ctx.case,
+            ctx,
+            _FakeMonitorConnection(),
+        )
+
+        fields = live._heartbeat_fields(live.started_monotonic + 16.0)
+
+        for key in ("gap", "ratio", "fix", "sats", "mode", "seq"):
+            self.assertEqual("?", fields[key])
+
+    def test_heartbeat_reports_commanded_drift_rate_as_the_dose(self) -> None:
+        """`drift_cmd` separates a working injection from a silent no-op."""
+        cases = {
+            case.case_id: case
+            for case in GpsFailureCaseGenerator(
+                GpsFailureConfig(launch_stack=True)
+            ).iter_cases()
+        }
+        ctx = _ctx(ROOT / "var" / "tmp_test_gps_phase2_heartbeat_dose")
+        for case_id, expected in (
+            ("slow_drift_0p2_mps", "0.20m/s"),
+            ("slow_drift_8p0_mps", "8.00m/s"),
+            ("nominal", "nominal"),
+        ):
+            with self.subTest(case_id=case_id):
+                live = _LiveGpsMonitor(
+                    GpsFailureConfig(launch_stack=True),
+                    cases[case_id],
+                    ctx,
+                    _FakeMonitorConnection(),
+                )
+                fields = live._heartbeat_fields(live.started_monotonic + 16.0)
+                self.assertEqual(expected, fields["drift_cmd"])
 
 
 class GpsFailurePhase2BinAnalysisTests(unittest.TestCase):
