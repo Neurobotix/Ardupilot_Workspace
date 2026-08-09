@@ -497,8 +497,7 @@ def run_live_round_robin_campaign(
     )
 
     # No slot budget: GPS attempt length is governed by the lane's mission
-    # timeout, and publishing a deadline here would clamp live phase timeouts
-    # that the hand-rolled campaign loop never clamped.
+    # timeout, so publishing a deadline here would clamp live phase timeouts.
     SuiteRunner(
         case_generator=_FixedCaseGenerator(cases),
         scheduler=RoundRobinScheduler(
@@ -553,12 +552,12 @@ def _gps_attempt_dir_factory(plugin: Any) -> Callable[[Any, Any, int], Path]:
 
 
 class _GpsCampaignRunner:
-    """Re-attach the campaign attempt metadata the old loop passed by hand.
+    """Attach the campaign attempt metadata to every scheduled attempt.
 
     The scheduler supplies `pass_index`; these three keys are campaign facts
     the scheduler has no reason to know, so the lane merges them in. Keys the
-    scheduler already set win, and `campaign_round_index` keeps its old name
-    for the pass number so attempt context is unchanged.
+    scheduler already set win, and the pass number is published as
+    `campaign_round_index` for the attempt context.
     """
 
     def __init__(

@@ -30,12 +30,11 @@ class SuiteRunSettings:
     inter_attempt_delay_s: float = 0.0
     continue_on_attempt_error: bool = False
     on_attempt_complete: Callable[["AttemptRecord"], str | None] | None = None
-    """Lane hook classifying a completed attempt, called once per attempt.
+    """Lane hook classifying an attempt that produced a record.
 
-    Returning `None` continues the campaign, which is what every lane did
-    before this hook existed. Returning a string aborts the run with that
-    message, letting a lane whose campaign has fatal stop rules express them
-    without core knowing which lane it is or what the rules mean.
+    Returning `None` continues the campaign. Returning a string aborts the
+    run with that message, letting a lane whose campaign has fatal stop rules
+    express them without core knowing which lane it is or what the rules mean.
     """
 
 

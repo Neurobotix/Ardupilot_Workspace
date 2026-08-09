@@ -40,8 +40,6 @@ def _progress(manifest: Manifest, case: TestCase) -> int:
     """Runs already banked toward this case's target.
 
     Delegates to the manifest so the progress rule stays a lane property.
-    `Manifest.progress_count` defaults to `accepted_count`, so a lane that
-    does not override it schedules exactly as it always has.
     """
     return manifest.progress_count(case)
 
