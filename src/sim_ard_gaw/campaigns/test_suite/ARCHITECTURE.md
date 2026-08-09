@@ -71,6 +71,24 @@ An attempt has five high-level phases:
 plugin-specific policy) until requested acceptance counts, budgets, or stop
 conditions are reached.
 
+Scheduling is a **method** capability: how a campaign is ordered says nothing
+about which sensor it perturbs, so every lane reaches the same policies through
+the same path. Two seams keep that true without core knowing lane names:
+
+- **Progress rule.** Schedulers ask `Manifest.progress_count(case)`, not
+  `accepted_count`. The default makes them identical. A lane whose campaign
+  counts a weaker milestone overrides it — `gps_failure` counts
+  workflow-complete runs, because a run that flew and injected cleanly is a
+  spent physical repetition even when its behavior was not accepted.
+- **Slot budget.** `RoundRobinScheduler(per_attempt_budget_s=None)` gives fair
+  ordering with no deadline published, for a lane whose attempt length is
+  governed by its own mission timeout. A budget still publishes a deadline and
+  clamps per-phase timeouts, which is what `wind_matrix` relies on.
+
+Campaign stop rules stay with the lane via
+`SuiteRunSettings.on_attempt_complete`: returning `None` continues, and
+returning a message aborts. Core never interprets the reason.
+
 ## Ownership
 
 | Concern | Owner |
@@ -81,6 +99,8 @@ conditions are reached.
 | Slot deadlines and retry accounting | core |
 | Control-mode plumbing | core |
 | Scheduler policies | core |
+| Progress rule (`progress_count`) | plugin (defaults to `accepted_count`) |
+| Campaign stop rules (`on_attempt_complete`) | plugin |
 | Case enumeration | plugin |
 | Scenario, mission, and parameter stack selection | plugin |
 | Environment launch commands and readiness semantics | plugin |

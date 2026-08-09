@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-08-09
+
+- Made round-robin scheduling reachable through one path for every campaign
+  lane, so a method capability stops differing between lanes:
+  - `gps_failure` now runs its live campaign on `core.scheduler`'s
+    `RoundRobinScheduler` via `SuiteRunner`. It previously reimplemented
+    scheduling as a hand-rolled loop in `cli/run_gps_failure.py` that never
+    touched core; "round robin" was a shared name over two implementations.
+  - Generalized the scheduler's progress rule instead of forcing GPS onto
+    core's. `Manifest.progress_count` is what schedulers now ask, defaulting
+    to `accepted_count`; `gps_failure` overrides it to
+    `workflow_complete_count`. Core learns no plugin name, and lanes that do
+    not override it schedule exactly as before. The distinction is load-bearing:
+    a GPS run that flew and injected cleanly but whose behavior was not
+    accepted is a spent physical repetition, and scheduling it on
+    `accepted_count` would have re-flown it.
+  - Made the round-robin slot budget optional. `per_attempt_budget_s=None`
+    gives fair ordering with no deadline published, because GPS attempt length
+    is governed by the lane's mission timeout; publishing a deadline would have
+    newly clamped live phase timeouts through `clamp_timeout_to_slot`.
+  - Added `SuiteRunSettings.on_attempt_complete`, a lane hook for campaigns
+    with fatal stop rules. GPS keeps zero automatic retries and stops on
+    workflow failure while tolerating a workflow-complete unaccepted run.
+  - Confirmation gates (`--confirm-live-phase2`, `--confirm-validation-rerun`,
+    `--confirm-live-campaign`), the non-jamming case-set restriction, and the
+    campaign contract payload are unchanged.
+  - Added `tests/unit/test_scheduler_lane_parity.py`, which replays the
+    pre-change GPS loop as an oracle and asserts the scheduler reproduces its
+    exact schedule across acceptance, non-acceptance, and fatal-failure cases.
+  - Not done, reported instead: `airspeed_failure` did not gain round-robin.
+    Its `--round-robin` flag already reported the lane as sequential; the
+    lane's wizard campaign path is deliberately `SequentialScheduler`, and
+    nothing in this change alters that.
+
 ## 2026-08-06
 
 - Unified the test-suite CLI so every lane is reachable and behaves
