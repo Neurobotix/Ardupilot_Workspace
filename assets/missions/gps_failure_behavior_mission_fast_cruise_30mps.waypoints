@@ -1,0 +1,39 @@
+QGC WPL 110
+# GPS FAILURE BEHAVIOR MISSION v6 FAST CRUISE 30 MPS
+# Envelope variant of gps_failure_behavior_mission.waypoints.
+# Geometry, seq-4 trigger contract, 30 s loiter, seq-8 terminal gate, and
+# seq-9 RTL are unchanged. Only the explicit DO_CHANGE_SPEED command is raised
+# from 15 m/s to 30 m/s so the same science geometry is flown faster.
+#
+# Home
+0	1	0	16	0	0	0	0	-35.3632620	149.1652370	584.00	1
+#
+# WP1: TAKEOFF East, climb to 100 m AGL.
+1	0	3	22	15.0	0	0	0	-35.3632620	149.1668924	100.00	1
+#
+# WP2: Command target speed = 30 m/s.
+# MAV_CMD_DO_CHANGE_SPEED (178): param1=0, param2=30.
+2	0	0	178	0	30.0	0	0	0	0	0	1
+#
+# WP3: Controlled baseline/settle gate, 1000 m East of home.
+3	0	3	16	0	0	0	0	-35.3632620	149.1762649	100.00	1
+#
+# WP4: End of 6000 m straight fault-active observation leg, 7000 m East.
+# INJECTION POINT: fault/no-fault observation starts on entering seq 4 and is
+# observed on the straight seq3->seq4 leg.
+4	0	3	16	0	0	0	0	-35.3632620	149.2424323	100.00	1
+#
+# WP5: Straight recovery/continuation segment, 8000 m East.
+5	0	3	16	0	0	0	0	-35.3632620	149.2534602	100.00	1
+#
+# WP6: Controlled terminal loiter, 30 s at 8000 m East.
+6	0	3	19	30	0	0	0	-35.3632620	149.2534602	100.00	1
+#
+# WP7: Terminal exit gate, 8500 m East.
+7	0	3	16	0	0	0	0	-35.3632620	149.2589742	100.00	1
+#
+# WP8: Planned terminal gate before RTL, 9000 m East.
+8	0	3	16	0	0	0	0	-35.3632620	149.2644881	100.00	1
+#
+# WP9: Return to launch. No landing sequence.
+9	0	3	20	0	0	0	0	0	0	0	1
