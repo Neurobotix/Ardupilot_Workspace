@@ -57,6 +57,18 @@ class Manifest(ABC):
     def accepted_count(self, case: TestCase) -> int:
         """How many accepted runs the case currently has."""
 
+    def progress_count(self, case: TestCase) -> int:
+        """How many runs count as scheduling progress for this case.
+
+        Schedulers ask this, not `accepted_count`, when deciding whether a
+        case still needs slots. The default makes the two identical, which
+        is the right rule for a lane whose acceptance predicate is also its
+        progress predicate. A lane whose campaign counts a weaker milestone
+        (for example a physically complete run whose behavior was not
+        accepted) overrides this without core knowing which lane it is.
+        """
+        return self.accepted_count(case)
+
     @abstractmethod
     def next_attempt_index(self, case: TestCase) -> int:
         """Next attempt index for this case, used in directory naming."""

@@ -36,8 +36,14 @@ class SchedulerPolicy(ABC):
         """Choose the next case (or signal completion)."""
 
 
-def _accepted(manifest: Manifest, case: TestCase) -> int:
-    return manifest.accepted_count(case)
+def _progress(manifest: Manifest, case: TestCase) -> int:
+    """Runs already banked toward this case's target.
+
+    Delegates to the manifest so the progress rule stays a lane property.
+    `Manifest.progress_count` defaults to `accepted_count`, so a lane that
+    does not override it schedules exactly as it always has.
+    """
+    return manifest.progress_count(case)
 
 
 class SequentialScheduler(SchedulerPolicy):
@@ -46,7 +52,7 @@ class SequentialScheduler(SchedulerPolicy):
     def initial_pending(self, cases: Iterable[TestCase], manifest: Manifest) -> list[TestCase]:
         out: list[TestCase] = []
         for c in cases:
-            if _accepted(manifest, c) < c.acceptance_target_runs:
+            if _progress(manifest, c) < c.acceptance_target_runs:
                 out.append(c)
         return out
 
@@ -56,7 +62,7 @@ class SequentialScheduler(SchedulerPolicy):
         manifest: Manifest,
     ) -> SchedulerDecision:
         for c in pending:
-            if _accepted(manifest, c) < c.acceptance_target_runs:
+            if _progress(manifest, c) < c.acceptance_target_runs:
                 return SchedulerDecision(case=c, slot_deadline_monotonic_s=None,
                                          reason="sequential")
         return SchedulerDecision(case=None, slot_deadline_monotonic_s=None,
@@ -66,13 +72,22 @@ class SequentialScheduler(SchedulerPolicy):
 class RoundRobinScheduler(SchedulerPolicy):
     """Bounded-slot fairness across pending cases.
 
-    Each call to `next_case` advances a pointer and grants a wall-clock
-    budget to the chosen case. The `AttemptRunner` enforces the budget
-    via `AttemptContext.slot_deadline_monotonic_s`.
+    Each call to `next_case` advances a pointer and, when a budget is set,
+    grants a wall-clock budget to the chosen case. The `AttemptRunner`
+    enforces the budget via `AttemptContext.slot_deadline_monotonic_s`.
+
+    `per_attempt_budget_s=None` means fair ordering with no slot budget: no
+    deadline is published, so per-phase timeouts are left untouched. That is
+    the right mode for a campaign whose attempt length is governed by the
+    lane's own mission timeout rather than by a scheduling slot.
     """
 
-    def __init__(self, per_attempt_budget_s: float, max_passes: int = 0) -> None:
-        if per_attempt_budget_s <= 0:
+    def __init__(
+        self,
+        per_attempt_budget_s: float | None,
+        max_passes: int = 0,
+    ) -> None:
+        if per_attempt_budget_s is not None and per_attempt_budget_s <= 0:
             raise ValueError("per_attempt_budget_s must be > 0")
         if max_passes < 0:
             raise ValueError("max_passes must be >= 0")
@@ -94,7 +109,7 @@ class RoundRobinScheduler(SchedulerPolicy):
             if self._position >= len(self._pass_cases):
                 active = [
                     c for c in pending
-                    if _accepted(manifest, c) < c.acceptance_target_runs
+                    if _progress(manifest, c) < c.acceptance_target_runs
                 ]
                 if not active:
                     return SchedulerDecision(None, None, "all_cases_complete")
@@ -106,14 +121,17 @@ class RoundRobinScheduler(SchedulerPolicy):
 
             c = self._pass_cases[self._position]
             self._position += 1
-            if _accepted(manifest, c) >= c.acceptance_target_runs:
+            if _progress(manifest, c) >= c.acceptance_target_runs:
                 continue
+            metadata: dict[str, Any] = {"pass_index": self._pass_index}
+            if self._budget_s is None:
+                deadline = None
+            else:
+                deadline = time.monotonic() + self._budget_s
+                metadata["slot_budget_s"] = self._budget_s
             return SchedulerDecision(
                 case=c,
-                slot_deadline_monotonic_s=time.monotonic() + self._budget_s,
+                slot_deadline_monotonic_s=deadline,
                 reason="round_robin",
-                metadata={
-                    "pass_index": self._pass_index,
-                    "slot_budget_s": self._budget_s,
-                },
+                metadata=metadata,
             )

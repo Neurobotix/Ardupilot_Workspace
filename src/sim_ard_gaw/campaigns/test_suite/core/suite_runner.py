@@ -10,12 +10,18 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable, Protocol
 
-from .attempt_runner import AttemptRunner
 from .case_generator import CaseGenerator
 from .manifest import Manifest
+from .models import AttemptRecord
 from .scheduler import SchedulerPolicy
+
+
+class AttemptRunnerLike(Protocol):
+    """What SuiteRunner actually needs from an attempt runner."""
+
+    def run(self, **kwargs: Any) -> AttemptRecord: ...
 
 
 @dataclass
@@ -23,6 +29,14 @@ class SuiteRunSettings:
     max_attempts_per_case: int | None = 12
     inter_attempt_delay_s: float = 0.0
     continue_on_attempt_error: bool = False
+    on_attempt_complete: Callable[["AttemptRecord"], str | None] | None = None
+    """Lane hook classifying a completed attempt, called once per attempt.
+
+    Returning `None` continues the campaign, which is what every lane did
+    before this hook existed. Returning a string aborts the run with that
+    message, letting a lane whose campaign has fatal stop rules express them
+    without core knowing which lane it is or what the rules mean.
+    """
 
 
 class SuiteRunner:
@@ -30,7 +44,9 @@ class SuiteRunner:
         self,
         case_generator: CaseGenerator,
         scheduler: SchedulerPolicy,
-        attempt_runner: AttemptRunner,
+        # Structural: SuiteRunner only ever calls `.run(...)`, so a lane may
+        # pass a decorator around its AttemptRunner.
+        attempt_runner: "AttemptRunnerLike",
         manifest: Manifest,
         attempt_dir_factory: Callable[[Manifest, "object", int], Path],
         settings: SuiteRunSettings | None = None,
@@ -67,7 +83,7 @@ class SuiteRunner:
                     f"({self._settings.max_attempts_per_case})"
                 )
 
-            target_run_index = self._manifest.accepted_count(case) + 1
+            target_run_index = self._manifest.progress_count(case) + 1
             attempt_index = self._manifest.next_attempt_index(case)
             attempt_dir = self._attempt_dir_factory(
                 self._manifest,
@@ -114,3 +130,9 @@ class SuiteRunner:
                     )
                 if self._settings.inter_attempt_delay_s > 0:
                     time.sleep(self._settings.inter_attempt_delay_s)
+
+            hook = self._settings.on_attempt_complete
+            if hook is not None and record is not None:
+                stop_reason = hook(record)
+                if stop_reason:
+                    raise SystemExit(stop_reason)
