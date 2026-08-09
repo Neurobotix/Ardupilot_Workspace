@@ -1,0 +1,63 @@
+# ArduPlane Parameters - GPS Failure INS-Only Discovery Overlay
+# Apply after config/vehicles/plane_base.parm for the gps_failure
+# ins_only_no_gps envelope.
+#
+# This is a discovery baseline, not a safety or dead-reckoning success claim.
+# It removes GPS as a sensor/source and keeps the simulated IMU clean so the
+# first question is whether ArduPlane/EKF will initialize, arm, or enter useful
+# modes without GPS from boot.
+
+# Disable the first GPS driver and the SITL GPS instance.
+GPS1_TYPE 0
+GPS2_TYPE 0
+SIM_GPS1_TYPE 0
+SIM_GPS1_ENABLE 0
+SIM_GPS2_TYPE 0
+SIM_GPS2_ENABLE 0
+SIM_GPS3_TYPE 0
+SIM_GPS3_ENABLE 0
+SIM_GPS4_TYPE 0
+SIM_GPS4_ENABLE 0
+SIM_GPS1_GLTCH_X 0
+SIM_GPS1_GLTCH_Y 0
+SIM_GPS1_GLTCH_Z 0
+SIM_GPS1_JAM 0
+
+# Primary EKF source set:
+# horizontal position/velocity = none, vertical position = barometer,
+# vertical velocity = none, yaw = compass.
+EK3_SRC_OPTIONS 0
+EK3_SRC1_POSXY 0
+EK3_SRC1_VELXY 0
+EK3_SRC1_POSZ 1
+EK3_SRC1_VELZ 0
+EK3_SRC1_YAW 1
+
+# Keep only one simulated IMU for the clean discovery baseline so the applied
+# profile is unambiguous. Later realism work may deliberately mirror settings
+# across multiple IMUs.
+SIM_IMU_COUNT 1
+
+# Clean synthetic IMU profile. These are intentionally zero for Layer 2
+# baseline characterization; BMI270-derived degradation belongs in later cases.
+SIM_DRIFT_SPEED 0
+SIM_DRIFT_TIME 0
+SIM_ACC1_BIAS_X 0
+SIM_ACC1_BIAS_Y 0
+SIM_ACC1_BIAS_Z 0
+SIM_GYR1_BIAS_X 0
+SIM_GYR1_BIAS_Y 0
+SIM_GYR1_BIAS_Z 0
+SIM_ACC1_SCAL_X 0
+SIM_ACC1_SCAL_Y 0
+SIM_ACC1_SCAL_Z 0
+SIM_GYR1_SCALE_X 0
+SIM_GYR1_SCALE_Y 0
+SIM_GYR1_SCALE_Z 0
+SIM_ACC1_RND 0
+SIM_GYR1_RND 0
+
+# Calm SITL wind; GPS absence is the independent setup condition.
+SIM_WIND_SPD 0
+SIM_WIND_DIR 180
+SIM_WIND_TURB 0
