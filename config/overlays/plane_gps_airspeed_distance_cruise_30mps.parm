@@ -1,0 +1,27 @@
+# ArduPlane Parameters - GPS Failure Distance-Denial 30 m/s Envelope
+#
+# Apply after config/vehicles/plane_base.parm and config/overlays/plane_gps.parm.
+# The high-speed Gazebo world supplies extra propulsion; this overlay only sets
+# the aircraft-side speed-control envelope.
+
+ARSPD_TYPE 100
+ARSPD_USE 1
+ARSPD_AUTOCAL 0
+ARSPD_SKIP_CAL 1
+ARSPD_OFFSET 0
+
+AIRSPEED_CRUISE 30
+AIRSPEED_MIN 18
+AIRSPEED_MAX 40
+STALL_PREVENTION 1
+
+THR_MAX 100
+TRIM_THROTTLE 70
+TECS_SPDWEIGHT 1.8
+TECS_CLMB_MAX 8
+TECS_SINK_MAX 3
+
+SIM_WIND_SPD 0
+SIM_WIND_DIR 180
+SIM_WIND_TURB 0
+AHRS_WIND_MAX 15

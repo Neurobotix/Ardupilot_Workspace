@@ -1,0 +1,27 @@
+# ArduPlane Parameters - GPS Failure Distance-Denial 40 m/s Envelope
+#
+# Apply after config/vehicles/plane_base.parm and config/overlays/plane_gps.parm.
+# This is a simulation test-rig envelope, not a claim about the stock Mini Talon
+# propulsion model.
+
+ARSPD_TYPE 100
+ARSPD_USE 1
+ARSPD_AUTOCAL 0
+ARSPD_SKIP_CAL 1
+ARSPD_OFFSET 0
+
+AIRSPEED_CRUISE 40
+AIRSPEED_MIN 24
+AIRSPEED_MAX 52
+STALL_PREVENTION 1
+
+THR_MAX 100
+TRIM_THROTTLE 80
+TECS_SPDWEIGHT 1.9
+TECS_CLMB_MAX 8
+TECS_SINK_MAX 3
+
+SIM_WIND_SPD 0
+SIM_WIND_DIR 180
+SIM_WIND_TURB 0
+AHRS_WIND_MAX 15
