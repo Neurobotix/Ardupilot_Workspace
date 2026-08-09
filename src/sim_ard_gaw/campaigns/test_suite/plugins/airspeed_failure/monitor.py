@@ -6,6 +6,7 @@ import math
 import time
 from typing import Any, Iterable
 
+from ...core.heartbeat import OperatorHeartbeat
 from ...core.models import AttemptContext, MonitorResult, TestCase
 from ...core.monitor import CompletionMonitor
 from . import defaults
@@ -180,6 +181,11 @@ class _LiveAttemptMonitor:
         self.loss_of_control = False
         self.timeout = False
         self.stop_reason = "unknown"
+        self._heartbeat = OperatorHeartbeat(
+            prefix="airspeed_monitor",
+            case_id=self.case.case_id,
+            started_monotonic_s=self.started_wall,
+        )
 
     def run(self) -> MonitorResult:
         defaults.log(
@@ -264,6 +270,7 @@ class _LiveAttemptMonitor:
                 continue
             self._handle_message(msg)
             self._maybe_apply_due_schedule_steps()
+            self._heartbeat.maybe_emit(time.time(), self._heartbeat_fields())
             if self._should_stop():
                 return
         self.timeout = True
@@ -605,6 +612,58 @@ class _LiveAttemptMonitor:
                 self.stop_reason = "planned_rtl_stabilized"
                 return True
         return False
+
+    def _heartbeat_fields(self) -> dict[str, str]:
+        """Physical state that decides whether this attempt is admissible.
+
+        This lane's science is dose-response, so the operator needs the dose
+        (`bias`), the response (`ARSP` against the pitot-independent `GS`),
+        and the controlled variable (`wind`). ADR-0010 makes verified
+        reference wind a hard gate: an unverified wind makes the ARSP-GPS
+        interpretation invalid, so an attempt flying under `wind=unverified`
+        is not an airspeed experiment and is worth aborting immediately.
+        """
+        airspeed = _clean_float(self.current.get("airspeed_mps"))
+        groundspeed = _clean_float(self.current.get("groundspeed_mps"))
+        fields: dict[str, str] = {
+            "mode": self.current.get("mode") or "?",
+            "seq": _format_optional_int(self.current.get("seq")),
+            "wind": self._reference_wind_label(),
+            "ARSP": _format_optional_speed(airspeed),
+            "GS": _format_optional_speed(groundspeed),
+        }
+        if airspeed is not None and groundspeed is not None:
+            # The live truth-vs-belief gap: GS is independent of the pitot.
+            fields["ARSP-GS"] = f"{airspeed - groundspeed:+.1f}"
+        else:
+            fields["ARSP-GS"] = "?"
+        fields["bias"] = self._active_bias_label()
+        return fields
+
+    def _reference_wind_label(self) -> str:
+        """Commanded reference wind plus its ADR-0010 verification state."""
+        artifact = self.ctx.extra.get("reference_wind")
+        if not isinstance(artifact, dict):
+            return "?"
+        requested = artifact.get("requested_mps")
+        if not isinstance(requested, dict):
+            return "?"
+        x = _clean_float(requested.get("x"))
+        y = _clean_float(requested.get("y"))
+        if x is None or y is None:
+            return "?"
+        state = "verified" if artifact.get("verified") else "UNVERIFIED"
+        return f"({x:+.0f},{y:+.0f}){state}"
+
+    def _active_bias_label(self) -> str:
+        """The dose currently applied, never a scheduled-but-unapplied one."""
+        phase = self.current_schedule_phase
+        if not isinstance(phase, dict):
+            return "none"
+        bias = phase.get("bias_percent")
+        if not isinstance(bias, (int, float)) or isinstance(bias, bool):
+            return "?"
+        return f"{int(bias):+d}%"
 
     def _append_sample(self, source: str) -> None:
         now = time.time()
@@ -1153,6 +1212,18 @@ def _clean_float(value: Any) -> float | None:
     if math.isnan(fval) or math.isinf(fval):
         return None
     return fval
+
+
+def _format_optional_int(value: Any) -> str:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "?"
+    return str(int(value))
+
+
+def _format_optional_speed(value: float | None) -> str:
+    if value is None:
+        return "?"
+    return f"{value:.1f}"
 
 
 def _values(samples: list[dict[str, Any]], key: str) -> list[float]:

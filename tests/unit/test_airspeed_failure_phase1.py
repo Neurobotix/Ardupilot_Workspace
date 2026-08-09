@@ -51,6 +51,7 @@ from sim_ard_gaw.campaigns.test_suite.plugins.airspeed_failure.manifest import (
     AirspeedFailureManifest,
 )
 from sim_ard_gaw.campaigns.test_suite.plugins.airspeed_failure.monitor import (  # noqa: E402
+    _LiveAttemptMonitor,
     first_seq4_edge_after_front_half,
     trigger_metadata,
 )
@@ -936,6 +937,68 @@ class AirspeedFailurePhase1Tests(unittest.TestCase):
             text = (plugin_dir / path).read_text(encoding="utf-8")
             with self.subTest(path=path):
                 self.assertNotIn("NotImplementedError", text)
+
+
+class AirspeedFailureHeartbeatTests(unittest.TestCase):
+    """The live heartbeat must show dose, response, and controlled variable."""
+
+    def _monitor(self) -> Any:
+        config = AirspeedFailureConfig()
+        case = AirspeedFailureCaseGenerator(config).get_case("healthy_reference")
+        ctx = cast(Any, _StubAttemptContext())
+        return _LiveAttemptMonitor(config, case, ctx, object())
+
+    def test_heartbeat_reports_dose_response_and_reference_wind(self) -> None:
+        live = self._monitor()
+        live.ctx.extra["reference_wind"] = {
+            "requested_mps": {"x": -5.0, "y": 0.0, "z": 0.0},
+            "verified": True,
+        }
+        live.current.update(
+            {
+                "mode": "AUTO",
+                "seq": 3,
+                "airspeed_mps": 19.6,
+                "groundspeed_mps": 14.7,
+            }
+        )
+        live.current_schedule_phase = {"bias_percent": -30, "phase": "fault"}
+
+        fields = live._heartbeat_fields()
+
+        self.assertEqual("(-5,+0)verified", fields["wind"])
+        self.assertEqual("19.6", fields["ARSP"])
+        self.assertEqual("14.7", fields["GS"])
+        # ADR-0010 expects ARSP-GPS ~ +5 Eastbound; this is the free
+        # per-attempt observability check, visible live.
+        self.assertEqual("+4.9", fields["ARSP-GS"])
+        self.assertEqual("-30%", fields["bias"])
+
+    def test_heartbeat_marks_unverified_reference_wind(self) -> None:
+        """An unverified wind makes the attempt inadmissible under ADR-0010."""
+        live = self._monitor()
+        live.ctx.extra["reference_wind"] = {
+            "requested_mps": {"x": -5.0, "y": 0.0, "z": 0.0},
+            "verified": False,
+        }
+
+        self.assertEqual("(-5,+0)UNVERIFIED", live._heartbeat_fields()["wind"])
+
+    def test_heartbeat_renders_missing_physical_data_without_fabricating(self) -> None:
+        live = self._monitor()
+
+        fields = live._heartbeat_fields()
+
+        for key in ("wind", "ARSP", "GS", "ARSP-GS", "mode", "seq"):
+            self.assertEqual("?", fields[key])
+        self.assertEqual("none", fields["bias"])
+
+
+class _StubAttemptContext:
+    """Minimal attempt context: the heartbeat only reads `extra`."""
+
+    def __init__(self) -> None:
+        self.extra: dict[str, Any] = {}
 
 
 if __name__ == "__main__":
