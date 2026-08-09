@@ -8,6 +8,21 @@ from ...core.models import AttemptContext, MonitorResult, TestCase
 from ...core.monitor import CompletionMonitor
 
 
+def _commanded_wind_mps(case: TestCase) -> tuple[float, float] | None:
+    """The cell's commanded wind vector: this lane's independent variable.
+
+    Returns None rather than a default when either component is missing, so
+    the heartbeat prints `?` instead of implying a wind that was never
+    commanded.
+    """
+    x = case.parameters.get("wind_x_mps")
+    y = case.parameters.get("wind_y_mps")
+    for value in (x, y):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+    return float(x), float(y)  # type: ignore[arg-type]
+
+
 @dataclass
 class WindMatrixDisarmCompletionMonitor(CompletionMonitor):
     """Completion monitor for the square wind mission ending in disarm."""
@@ -38,6 +53,8 @@ class WindMatrixDisarmCompletionMonitor(CompletionMonitor):
             ),
             mission_pre_loaded=self.mission_pre_loaded,
             stop_on_square_loiter=self.stop_on_square_loiter,
+            case_id=case.case_id,
+            commanded_wind_mps=_commanded_wind_mps(case),
         )
         ctx.extra["wind_monitor_state"] = state
         completed = bool(

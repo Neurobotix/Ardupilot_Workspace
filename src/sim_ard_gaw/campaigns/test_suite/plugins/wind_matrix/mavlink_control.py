@@ -30,6 +30,7 @@ from pymavlink import mavutil, mavwp
 
 from sim_ard_gaw.campaigns.mission_contract import SQUARE_WIND_MISSION_CONTRACT
 
+from ...core.heartbeat import OperatorHeartbeat
 from . import defaults
 
 
@@ -612,15 +613,35 @@ def set_auto_mode(master: mavutil.mavfile, timeout: float) -> None:
 def monitor_until_disarm(master: mavutil.mavfile, monitor_log: Path,
                          timeout_s: float, *,
                          mission_pre_loaded: bool = False,
-                         stop_on_square_loiter: bool = False) -> dict[str, Any]:
+                         stop_on_square_loiter: bool = False,
+                         case_id: str | None = None,
+                         commanded_wind_mps: tuple[float, float] | None = None,
+                         ) -> dict[str, Any]:
     """
     Passive listener. Records mission progress and returns when the vehicle
     DISARMS (clean landing) or the timeout expires.
 
     No commands are sent. The user flies the mission via MAVProxy console.
+
+    `case_id` and `commanded_wind_mps` are display-only: they let the periodic
+    operator heartbeat name the cell being flown and the wind commanded for
+    it. This lane subscribes to HEARTBEAT/MISSION_*/STATUSTEXT only, so the
+    response side of the experiment (groundspeed, cross-track error) is not
+    reachable here without adding telemetry.
     """
     defaults.log(f"Passive monitoring started (timeout {timeout_s/60:.0f} min) …")
     defaults.log("Waiting for vehicle to ARM …")
+
+    started_s = time.time()
+    heartbeat = OperatorHeartbeat(
+        prefix="wind_monitor",
+        case_id=case_id or "wind_matrix",
+        started_monotonic_s=started_s,
+    )
+    if commanded_wind_mps is None:
+        wind_label = "?"
+    else:
+        wind_label = f"({commanded_wind_mps[0]:+.0f},{commanded_wind_mps[1]:+.0f})"
 
     deadline = time.time() + timeout_s
     state: dict[str, Any] = {
@@ -657,6 +678,25 @@ def monitor_until_disarm(master: mavutil.mavfile, monitor_log: Path,
             mt = msg.get_type()
             fh.write(f"{defaults.utc_now()} {mt} {msg.to_dict()}\n")
             fh.flush()
+
+            heartbeat.maybe_emit(
+                time.time(),
+                {
+                    "mode": state["last_mode"] or "?",
+                    "seq": (
+                        "?" if state["mission_seq"] is None
+                        else str(state["mission_seq"])
+                    ),
+                    "armed": "yes" if state["armed_now"] else "no",
+                    "wind_cmd": wind_label,
+                    # GS and CTE would be the response side of this lane's
+                    # experiment, but neither VFR_HUD nor
+                    # NAV_CONTROLLER_OUTPUT is subscribed here and adding
+                    # telemetry would change run behaviour.
+                    "GS": "unavailable",
+                    "CTE": "unavailable",
+                },
+            )
 
             if mt == "HEARTBEAT":
                 mode = mavutil.mode_string_v10(msg)

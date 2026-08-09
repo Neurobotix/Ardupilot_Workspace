@@ -159,5 +159,70 @@ class WindMatrixMavlinkControlParityTests(unittest.TestCase):
         self.assertTrue(right.get("timed_out"))
 
 
+class WindMatrixHeartbeatTests(unittest.TestCase):
+    """The heartbeat names the commanded wind and admits what it cannot see."""
+
+    def _messages(self) -> list[_FakeMessage]:
+        return [
+            _FakeMessage("MISSION_CURRENT", seq=seq, total=12)
+            for seq in range(1, 5)
+        ]
+
+    def _run(self, **kwargs: Any) -> list[str]:
+        # Advance the clock 8 s per message so the 15 s cadence fires.
+        ticks = {"n": 0}
+
+        def fake_time() -> float:
+            ticks["n"] += 1
+            return 1_000.0 + ticks["n"] * 8.0
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "monitor.log"
+            with patch.object(mavlink_control.time, "time", fake_time), patch(
+                "sim_ard_gaw.campaigns.test_suite.core.heartbeat.log"
+            ) as log:
+                mavlink_control.monitor_until_disarm(
+                    _FakeMaster(self._messages()),
+                    log_path,
+                    120.0,
+                    mission_pre_loaded=True,
+                    **kwargs,
+                )
+        return [str(call.args[0]) for call in log.call_args_list]
+
+    def test_heartbeat_reports_commanded_wind_for_the_cell(self) -> None:
+        messages = self._run(
+            case_id="wind_x_04_y_08", commanded_wind_mps=(4.0, 8.0)
+        )
+
+        self.assertTrue(messages)
+        for msg in messages:
+            self.assertIn("wind_x_04_y_08", msg)
+            self.assertIn("wind_cmd=(+4,+8)", msg)
+
+    def test_heartbeat_marks_unreachable_response_fields_unavailable(self) -> None:
+        """This lane subscribes to no VFR_HUD/NAV_CONTROLLER_OUTPUT.
+
+        Groundspeed and cross-track error are the response side of the
+        experiment, but sourcing them would require new telemetry, so they
+        must be reported as unavailable rather than invented.
+        """
+        messages = self._run(
+            case_id="wind_x_00_y_00", commanded_wind_mps=(0.0, 0.0)
+        )
+
+        self.assertTrue(messages)
+        for msg in messages:
+            self.assertIn("GS=unavailable", msg)
+            self.assertIn("CTE=unavailable", msg)
+
+    def test_heartbeat_reports_unknown_wind_without_defaulting_to_zero(self) -> None:
+        messages = self._run(case_id="wind_unknown", commanded_wind_mps=None)
+
+        self.assertTrue(messages)
+        for msg in messages:
+            self.assertIn("wind_cmd=?", msg)
+
+
 if __name__ == "__main__":
     unittest.main()
