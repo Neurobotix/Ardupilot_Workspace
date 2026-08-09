@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from ...core.logging import log as _log
 from .wind_profiles import HEADWIND_EASTBOUND
 
 
@@ -242,9 +243,7 @@ def preferred_python() -> str:
     return str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
 
 
-def log(msg: str) -> None:
-    ts = datetime.now().strftime("%H:%M:%S")
-    print(f"[{ts}] {msg}", flush=True)
+log = _log
 
 
 def file_sha256(path: Path) -> str | None:

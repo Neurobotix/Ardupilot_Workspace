@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from ...core.logging import log as _log
+
 
 SRC_ROOT = Path(__file__).resolve().parents[5]
 WORKSPACE_ROOT = Path(os.environ.get("ARDUPILOT_WORKSPACE", SRC_ROOT.parent)).resolve()
@@ -113,9 +115,7 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def log(msg: str) -> None:
-    ts = datetime.now().strftime("%H:%M:%S")
-    print(f"[{ts}] {msg}", flush=True)
+log = _log
 
 
 def write_json(path: Path, data: Any) -> None:

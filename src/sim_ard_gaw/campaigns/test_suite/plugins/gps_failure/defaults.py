@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from ...core.logging import log as _log
+
 
 SRC_ROOT = Path(__file__).resolve().parents[5]
 WORKSPACE_ROOT = Path(os.environ.get("ARDUPILOT_WORKSPACE", SRC_ROOT.parent)).resolve()
@@ -392,8 +394,7 @@ def preferred_python() -> str:
     return str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
 
 
-def log(message: str) -> None:
-    print(message, flush=True)
+log = _log
 
 
 def case_attempt_id(case_id: str, target_run_index: int, attempt_index: int) -> str:
