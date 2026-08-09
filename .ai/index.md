@@ -128,7 +128,16 @@
 - Installation guide: `docs/onboarding/installation.md`
 - Quick start: `docs/onboarding/quick_start.md`
 - Troubleshooting guide: `docs/operations/troubleshooting.md`
-- Simulation lanes and flight modes: `docs/architecture/simulation_lanes.md`
+- Lane terminology: "lane" spans two axes. A **simulation lane** is an
+  aircraft + world + launcher + bridge combination; a **campaign lane** is an
+  end-to-end fault investigation that runs on one. Each axis has its own
+  registry below, and the rule is in `governance/standards/naming.md`.
+- Simulation lane registry (aircraft/world/launcher axis) and flight modes:
+  `docs/architecture/simulation_lanes.md`
+- Campaign lane registry (fault-investigation axis; `wind_matrix`,
+  `airspeed_failure`, `gps_failure`, with the simulation lane, mission,
+  overlay, and CLI entry point each one uses):
+  `docs/architecture/campaign_lanes.md`
 - Airspeed failure behavior lane (behavior characterization; Phase 2 measurement smoke accepted 2026-06-06; Phase 4A ratio/ramp/pulse characterization accepted 2026-06-14; fixed-case Phase 4B remains open): `docs/architecture/airspeed_failure_lane.md`
 - GPS failure behavior lane (behavior characterization under degraded/corrupted GPS; EKF innovation-gate "knee"; Phase 1 accepted 2026-07-13; framework raw/live-validated through v5; mission v6 active but unflown; Phase 2 open, no curated evidence): `docs/architecture/gps_failure_lane.md`
 - Launch target status: `docs/operations/launch_targets.md`

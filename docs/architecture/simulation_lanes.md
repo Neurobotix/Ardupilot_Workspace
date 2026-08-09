@@ -1,9 +1,18 @@
 # Simulation Lanes
 
+A **simulation lane** is an aircraft + world + launcher + bridge combination.
 The project runs several Mini Talon (and Iris) simulation lanes. They serve
-different purposes and are not interchangeable. This is the canonical lane
-reference and replaces the archived
-`docs/archive/src_docs/SIMULATION_LANES.md`.
+different purposes and are not interchangeable.
+
+This is the canonical registry for that axis, and it replaces the archived
+`docs/archive/src_docs/SIMULATION_LANES.md`. It does **not** cover campaign
+lanes — the end-to-end fault investigations (`wind_matrix`,
+`airspeed_failure`, `gps_failure`) that *run on* these simulation lanes. Those
+live in `docs/architecture/campaign_lanes.md`.
+
+The unqualified word "lane" is ambiguous between the two axes; see
+`governance/standards/naming.md` for the terminology rule. Rows below that
+carry a campaign lane's name describe the **simulation** lane it runs on.
 
 The executable source of truth for target names is `scripts/ops/launch.sh help`.
 Per-target runtime status is in `docs/operations/launch_targets.md`.

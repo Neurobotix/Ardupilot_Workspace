@@ -30,6 +30,11 @@ Read this file first, then follow `.ai/entrypoint.md` for the specific task.
   evidence, governance, config, assets, or indexes as applicable.
 - Before creating or renaming files, check the nearest directory `README.md`
   or naming guidance plus `governance/standards/naming.md`.
+- "Lane" is ambiguous: a **simulation lane** is an aircraft + world + launcher
+  + bridge combination (`docs/architecture/simulation_lanes.md`); a **campaign
+  lane** is an end-to-end fault investigation that runs on one
+  (`docs/architecture/campaign_lanes.md`). Never use "lane" unqualified, and
+  ask which axis is meant if a task does not say.
 - Before any commit or push, read
   `governance/standards/git_commit_style.md` and apply that commit-message
   style automatically. Do not rely on private or old-workspace memory for
