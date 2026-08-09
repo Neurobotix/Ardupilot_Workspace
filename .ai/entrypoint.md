@@ -43,7 +43,7 @@ Minimum checks:
 Read:
 
 - `docs/architecture/workspace_map.md`
-- `docs/operations/migration_status.md`
+- `docs/operations/workspace_status.md`
 - relevant existing feature docs under `docs/`
 - relevant tests under `tests/`
 

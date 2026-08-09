@@ -1,13 +1,7 @@
 """AttemptRunner: orchestrates one attempt's lifecycle.
 
-The framework supports two strategy shapes:
-
-- `LegacyDelegateStrategy` hands the attempt body to a plugin-supplied
-  callable for compatibility paths.
-- `StagedStrategy` walks each stage adapter explicitly.
-
-Both strategies share stages 1-3 (environment prepare/launch/ready) and
-stage 12 (cleanup). Those are framework-owned in every case.
+The framework owns stages 1-3 (environment prepare/launch/ready) and stage 12
+(cleanup). The strategy owns the plugin-overridable body between them.
 """
 from __future__ import annotations
 
@@ -54,9 +48,8 @@ class AttemptStrategy(ABC):
     def prepare_for_cleanup(self, ctx: AttemptContext) -> "PreparedAttempt":
         """Run the strategy body and return its terminal-record finalizer.
 
-        Compatibility strategies keep their historical behavior: their whole
-        body runs before cleanup. Staged strategies override this boundary so
-        analysis and verdict construction can consume cleanup-finalized logs.
+        Strategies may override this boundary when analysis and verdict
+        construction need to consume cleanup-finalized logs.
         """
         record = self.execute(ctx)
         return PreparedAttempt(finalize=lambda: record)
@@ -187,15 +180,6 @@ def _status_from_context(ctx: AttemptContext, verdict: Verdict) -> AttemptStatus
         except ValueError:
             pass
     return _status_from_verdict(verdict)
-
-
-@dataclass
-class LegacyDelegateStrategy(AttemptStrategy):
-    """Compatibility escape hatch: hand stages 4-10 to one callable."""
-    body: Callable[[AttemptContext], AttemptRecord]
-
-    def execute(self, ctx: AttemptContext) -> AttemptRecord:
-        return self.body(ctx)
 
 
 class AttemptRunner:

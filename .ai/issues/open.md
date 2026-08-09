@@ -1,16 +1,10 @@
 # Open Issues
 
-## Phase 7 Cutover
+## Current Evidence Gaps
 
-- Phase 7 cutover is PASS as of 2026-05-24:
-  `evidence/reports/migration/CUTOVER_2026-05-24.md`,
-  `evidence/reports/migration/shadow_parity_2026-05-24.md`, and
-  `governance/decisions/ADR-0005-workspace-next-cutover.md`.
-- The 2026-05-21 blocked cutover reports are superseded historical records.
-- The old workspace is deprecated fallback/reference and was not modified
-  during cutover.
-- Accepted residuals remain tracked below: full wind-matrix evidence,
-  non-core launch target runtime evidence, and `copter-lidar` obstacle return.
+- Wider wind-matrix evidence, non-core launch target runtime evidence, and
+  `copter-lidar` obstacle return remain open until dated evidence promotes
+  them.
 
 ## Phase 0 Baseline Blockers
 
@@ -26,7 +20,7 @@
 - `src/ardupilot_gazebo` and `src/SITL_Models` have no discoverable nested
   source commit metadata.
 
-## Existing Migration Issues
+## Existing Platform Issues
 
 - `copter-lidar` proved the SITL/Gazebo/MAVLink/bridge handshake but the
   forward LiDAR captured no obstacle return (the copter flew above the 3 m
@@ -36,9 +30,7 @@
   Gazebo worlds.
 - Gazebo/Python import paths emit protobuf duplicate-descriptor warnings on
   stderr; noisy but non-fatal (bridge imports verified to succeed).
-- `src/sim_ard_gaw/compat_scripts/` remains as thin compatibility wrappers for
-  old imports and script paths. Do not add implementation logic there.
-- Compatibility plane launchers and current CTE campaign callers append
+- Plane launchers and current CTE campaign callers append
   `.private/config/plane_params.local.parm` when it exists. Treat runs using
   that file as local-stack-dependent until their effective stack and hashes are
   recorded with evidence.
@@ -48,13 +40,13 @@
 - `wind-check-altitude` retired until a real validator is implemented.
 - Full wind-matrix campaign evidence beyond the bounded Phase 5 one-case parity
   proof is not yet captured.
-- Old workspace is deprecated fallback/reference after ADR-0005. Do not edit it
-  without explicit operator authorization.
+- The old workspace is deprecated fallback/reference after ADR-0005. Do not
+  edit it without explicit operator authorization.
 
 ## Tooling Notes
 
 - `make doctor` requires `ripgrep` (`rg`); the structure validator uses it for
-  `.private` policy and migration-plan-link checks. Install with
+  `.private` policy and workspace-status-link checks. Install with
   `sudo apt install ripgrep` if `make doctor` reports spurious missing
   references.
 

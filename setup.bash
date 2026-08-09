@@ -25,7 +25,7 @@ export ARDUPILOT_BUILD="$WORKSPACE/build"
 export ARDUPILOT_LOGS="$WORKSPACE/var/logs"
 export CCACHE_DIR="$WORKSPACE/var/cache/ccache"
 export MPLCONFIGDIR="$WORKSPACE/var/cache/matplotlib"
-export PYTHONPATH="$WORKSPACE/src:$WORKSPACE/src/sim_ard_gaw/compat_scripts${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$WORKSPACE/src${PYTHONPATH:+:$PYTHONPATH}"
 
 mkdir -p "$CCACHE_DIR" "$MPLCONFIGDIR" "$ARDUPILOT_LOGS"
 

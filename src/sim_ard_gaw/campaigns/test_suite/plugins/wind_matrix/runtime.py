@@ -1,9 +1,8 @@
-"""Phase 3D owned SITL/Gazebo process launch, world writing, liveness, and cleanup.
+"""Wind-matrix SITL/Gazebo process launch, world writing, liveness, and cleanup.
 
 This module owns SITL/Gazebo launch, static wind-world writing, liveness
-checking, tail logging, and stack cleanup for the staged wind plugin. It does
-not import any legacy runner module (run_one, run_matrix,
-run_matrix_round_robin). All path and env helpers come from defaults.
+checking, tail logging, and stack cleanup for framework-driven wind attempts.
+All path and environment helpers come from defaults.
 """
 from __future__ import annotations
 

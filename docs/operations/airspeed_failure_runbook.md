@@ -33,6 +33,25 @@ This exports `src/` on `PYTHONPATH` so the module CLI is reachable. All
 commands below assume the workspace root as the working directory and a sourced
 shell.
 
+## From the unified `sim-test` wizard
+
+Choosing `airspeed_failure` in the `sim-test` sensor-family menu runs the
+sequential suite through the framework `SuiteRunner`. Alongside the case
+selection it asks two separate settings that are easy to confuse:
+
+- **Runs per case** — how many accepted runs each case needs.
+- **Max attempts per case** — the retry budget before the suite gives up on a
+  case. Defaults to the framework value in `core/suite_runner.py` (12).
+
+Before 2026-08-06 the wizard silently forced the retry budget to 1, so the
+first non-accepted attempt aborted the whole campaign with
+`RuntimeError: exceeded max_attempts_per_case (1)`. If an older campaign
+manifest shows a run ending at `attempt=1`, that is the cause.
+
+`--round-robin` is not supported on this lane: airspeed cases run under the
+sequential scheduler. Passing it exits non-zero with that message rather than
+being silently ignored.
+
 ## No-SITL Commands (verified)
 
 These commands were verified on 2026-06-05 (Phase 1 review) and re-verified on

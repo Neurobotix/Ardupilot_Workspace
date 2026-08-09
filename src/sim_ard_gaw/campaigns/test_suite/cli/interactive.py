@@ -14,8 +14,10 @@ from typing import Literal
 import questionary
 from questionary import Style
 
+from ..core.suite_runner import SuiteRunSettings
 from ..plugins.wind_matrix import defaults as wm
 from ..plugins.airspeed_failure import defaults as af
+from ..plugins.gps_failure import defaults as gps
 
 # ── visual style ──────────────────────────────────────────────────────────────
 _STYLE = Style(
@@ -33,7 +35,7 @@ _STYLE = Style(
 
 RunMode = Literal["case", "suite", "round_robin"]
 
-_PLUGIN_CHOICES = ["wind_matrix", "airspeed_failure"]
+_PLUGIN_CHOICES = ["wind_matrix", "airspeed_failure", "gps_failure"]
 
 _MODE_LABELS: dict[str, RunMode] = {
     "single case              (run_case)": "case",
@@ -125,8 +127,6 @@ def _ask_advanced_common(ns: argparse.Namespace) -> None:
     ns.mission_file = Path(
         _ask("Mission file", default=str(wm.MISSION_FILE))
     )
-    # staged is the only supported strategy (legacy retired).
-    ns.attempt_strategy = "staged"
     ns.heartbeat_timeout = _ask_float("Heartbeat timeout (s)", wm.DEFAULT_HEARTBEAT_TIMEOUT)
     ns.mission_timeout   = _ask_float("Mission timeout (s)",   wm.DEFAULT_MISSION_TIMEOUT)
     ns.ready_timeout     = _ask_float("Ready timeout (s)",     wm.DEFAULT_READY_TIMEOUT)
@@ -139,7 +139,6 @@ def _apply_advanced_defaults_common(ns: argparse.Namespace) -> None:
     ns.mavlink            = wm.DEFAULT_MAVLINK
     ns.campaign_root      = wm.DEFAULT_CAMPAIGN_ROOT
     ns.mission_file       = wm.MISSION_FILE
-    ns.attempt_strategy   = "staged"
     ns.heartbeat_timeout  = wm.DEFAULT_HEARTBEAT_TIMEOUT
     ns.mission_timeout    = wm.DEFAULT_MISSION_TIMEOUT
     ns.ready_timeout      = wm.DEFAULT_READY_TIMEOUT
@@ -174,7 +173,7 @@ def _wizard_case(ns: argparse.Namespace) -> None:
         _apply_advanced_defaults_common(ns)
 
     ns.auto_wind_phase = wm.default_auto_wind_phase(
-        ns.attempt_strategy, auto_control=ns.auto
+        auto_control=ns.auto
     )
 
 
@@ -211,7 +210,7 @@ def _wizard_suite(ns: argparse.Namespace) -> None:
         ns.retry_delay_s  = wm.DEFAULT_RETRY_DELAY
 
     ns.auto_wind_phase = wm.default_auto_wind_phase(
-        ns.attempt_strategy, auto_control=True
+        auto_control=True
     )
 
 
@@ -251,7 +250,7 @@ def _wizard_round_robin(ns: argparse.Namespace) -> None:
         ns.retry_delay_s  = wm.DEFAULT_RETRY_DELAY
 
     ns.auto_wind_phase = wm.default_auto_wind_phase(
-        ns.attempt_strategy, auto_control=True
+        auto_control=True
     )
 
 
@@ -305,6 +304,12 @@ def _wizard_airspeed_failure(ns: argparse.Namespace) -> None:
         "Vehicle ratio already verified (skip calibration)?", default=False
     )
     ns.af_runs_per_case = _ask_int("Runs per case", default=1, lo=1)
+    # Framework default (SuiteRunSettings.max_attempts_per_case). Asked here so
+    # the retry budget is an operator choice rather than a silent override.
+    default_max_attempts = SuiteRunSettings().max_attempts_per_case or 12
+    ns.af_max_attempts_per_case = _ask_int(
+        "Max attempts per case", default=default_max_attempts, lo=1
+    )
 
     ns.mission_file  = Path(_ask("Mission file", default=str(af.MISSION_FILE)))
     ns.campaign_root = Path(_ask("Campaign root (leave blank = auto timestamped)",
@@ -324,8 +329,91 @@ def _wizard_airspeed_failure(ns: argparse.Namespace) -> None:
         ns.arm_timeout      = 60.0
         ns.mode_timeout     = 30.0
 
-    # not used by airspeed_failure body but keep namespace uniform
-    ns.attempt_strategy = "legacy"
+
+# ── gps_failure wizard ────────────────────────────────────────────────────────
+
+def _wizard_gps_failure(ns: argparse.Namespace) -> None:
+    """Ask the safe subset of the GPS lane's action surface.
+
+    Read-only actions are always available. The one live action offered is the
+    non-jamming round-robin campaign, and its --confirm-live-phase2 /
+    --confirm-live-campaign gates are asked here rather than bypassed.
+
+    Deliberately not exposed: --live-phase2-validation-rerun (Phase H gate
+    report), --live-case, --probe-schema and --phase2-validation-rerun-plan.
+    See the runbook for why.
+    """
+    action_labels = {
+        "list cases                     (no SITL)": "list_cases",
+        "dry run a single case          (no SITL)": "dry_run",
+        "preflight readiness report     (no SITL)": "preflight",
+        "live round-robin campaign      (LIVE SITL)": "campaign",
+    }
+    ns.gps_action = action_labels[_select("GPS action", list(action_labels))]
+
+    ns.gps_envelope = _select("Envelope", list(gps.ENVELOPE_NAMES))
+    ns.gps_campaign_root = _ask("Campaign root (leave blank = auto timestamped)",
+                                default="")
+    ns.gps_case_id = None
+    ns.gps_campaign_cases = list(gps.PHASE2_PROTECTED_CASE_IDS)
+    ns.gps_runs_per_case = 1
+    ns.gps_inter_attempt_delay = 2.0
+    ns.gps_confirm_live_phase2 = False
+    ns.gps_confirm_live_campaign = False
+    ns.mavlink = "udpin:0.0.0.0:14551"
+    ns.gps_mission_timeout = gps.PHASE2_MONITOR_TIMEOUT_S
+    ns.gps_no_force_arm = False
+
+    if ns.gps_action == "dry_run":
+        from ..plugins.gps_failure.case_generator import GpsFailureCaseGenerator
+        from ..plugins.gps_failure.config import GpsFailureConfig
+        case_ids = [
+            c.case_id
+            for c in GpsFailureCaseGenerator(
+                GpsFailureConfig(envelope_name=ns.gps_envelope)
+            ).iter_cases()
+        ]
+        ns.gps_case_id = _select("Case", case_ids)
+
+    if ns.gps_action == "campaign":
+        ns.mavlink = _ask("MAVLink address", default=ns.mavlink)
+        questionary.print(
+            "  Live campaign cases are restricted to the non-jamming set.",
+            style="fg:#5f5f5f",
+        )
+        selected = [
+            c for c in gps.PHASE2_NON_JAMMING_CAMPAIGN_CASE_IDS
+            if _confirm(f"    include  {c}?",
+                        default=c in gps.PHASE2_PROTECTED_CASE_IDS)
+        ]
+        if not selected:
+            questionary.print("  ✗  no cases selected; nothing to run",
+                              style="fg:#ff5f5f")
+            sys.exit(1)
+        ns.gps_campaign_cases = selected
+        ns.gps_runs_per_case = _ask_int("Runs per case", default=1, lo=1)
+        ns.gps_inter_attempt_delay = _ask_float("Inter-attempt delay (s)", 2.0)
+        ns.gps_mission_timeout = _ask_float(
+            "Mission timeout (s)", gps.PHASE2_MONITOR_TIMEOUT_S
+        )
+
+        # Same two gates the flag path enforces, asked explicitly.
+        questionary.print(
+            "  This starts a LIVE SITL/Gazebo GPS campaign.", style="bold")
+        ns.gps_confirm_live_phase2 = _confirm(
+            "Confirm live Phase 2 GPS run (--confirm-live-phase2)?",
+            default=False,
+        )
+        ns.gps_confirm_live_campaign = _confirm(
+            "Confirm live GPS campaign (--confirm-live-campaign)?",
+            default=False,
+        )
+        if not (ns.gps_confirm_live_phase2 and ns.gps_confirm_live_campaign):
+            questionary.print(
+                "  ✗  live GPS campaigns require both confirmations",
+                style="fg:#ff5f5f",
+            )
+            sys.exit(1)
 
 
 # ── summary ───────────────────────────────────────────────────────────────────
@@ -343,19 +431,34 @@ def _print_summary(plugin: str, mode: RunMode, ns: argparse.Namespace) -> None:
             f"   biases : {ns.af_bias_percents}",
             f"   ratio  : {ns.af_vehicle_arspd_ratio}  verified={ns.af_verified_vehicle_ratio}",
             f"   runs   : {ns.af_runs_per_case}",
+            f"   retries: max {ns.af_max_attempts_per_case} attempts/case",
             f"   wind   : {ns.af_wind_profile}",
             f"   speed  : {ns.af_speed_source}",
             f"   mech   : {ns.af_mechanism_tier}",
             f"   mavlink: {ns.mavlink}",
             f"   root   : {ns.campaign_root or '(auto)'}",
         ]
+    elif plugin == "gps_failure":
+        lines += [
+            f"   action : {ns.gps_action}",
+            f"   envelope: {ns.gps_envelope}",
+            f"   root   : {ns.gps_campaign_root or '(auto)'}",
+        ]
+        if ns.gps_case_id:
+            lines += [f"   case   : {ns.gps_case_id}"]
+        if ns.gps_action == "campaign":
+            lines += [
+                f"   cases  : {ns.gps_campaign_cases}",
+                f"   runs   : {ns.gps_runs_per_case}",
+                f"   mavlink: {ns.mavlink}",
+                "   LIVE   : confirmed phase2 + campaign gates",
+            ]
     elif mode == "case":
         lines += [
             f"   wind   : x={ns.x}  y={ns.y}  rep={ns.rep}",
             f"   control: {'auto' if ns.auto else 'manual'}",
             f"   mavlink: {ns.mavlink}",
             f"   root   : {ns.campaign_root}",
-            f"   strat  : {ns.attempt_strategy}",
         ]
     else:
         lines += [
@@ -364,7 +467,6 @@ def _print_summary(plugin: str, mode: RunMode, ns: argparse.Namespace) -> None:
             f"   runs   : {ns.runs_per_combo}",
             f"   mavlink: {ns.mavlink}",
             f"   root   : {ns.campaign_root}",
-            f"   strat  : {ns.attempt_strategy}",
         ]
     lines += ["  ══════════════════════════════════════", ""]
     for line in lines:
@@ -389,6 +491,11 @@ def run_wizard() -> tuple[RunMode, argparse.Namespace]:
         mode: RunMode = "suite"
         ns = argparse.Namespace(plugin=plugin)
         _wizard_airspeed_failure(ns)
+    elif plugin == "gps_failure":
+        # gps_failure selects an action rather than a scheduler mode
+        mode = "suite"
+        ns = argparse.Namespace(plugin=plugin)
+        _wizard_gps_failure(ns)
     else:
         label = _select("Run mode", choices=list(_MODE_LABELS))
         mode = _MODE_LABELS[label]

@@ -1,11 +1,8 @@
 """Run one attempt for a single case.
 
-Mirrors the flag surface of the historical `run_one.py`. The default
-`--attempt-strategy staged` uses the extracted stage adapters (stimulus,
-mavlink control, monitor, analysis, verdict). The `legacy` strategy
-(delegating to the retained `run_one` monolith) is being retired; staged
-became the default on the strength of the Phase 3F/3G single-combo
-live parity comparison.
+Mirrors the flag surface of the historical `run_one.py` where that surface is
+still live. The attempt pipeline uses the extracted stage adapters (stimulus,
+MAVLink control, monitor, analysis, verdict).
 """
 from __future__ import annotations
 
@@ -15,18 +12,27 @@ from pathlib import Path
 
 from ..core.models import TestCase
 from ..plugins.wind_matrix import defaults
+from ._plugin_select import (
+    add_common_actions,
+    emit_case_list,
+    emit_dry_run,
+    resolve_runner_plugin_or_exit,
+)
+from .deprecated_flags import (
+    add_deprecated_attempt_strategy,
+    consume_deprecated_attempt_strategy,
+)
 
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix",
                    help="Plugin name (default: wind_matrix)")
-    p.add_argument("--attempt-strategy", choices=("staged",),
-                   default="staged",
-                   help="Attempt implementation path (staged only; legacy retired)")
-    p.add_argument("--x", type=int, required=True, choices=defaults.WIND_VALUES)
-    p.add_argument("--y", type=int, required=True, choices=defaults.WIND_VALUES)
-    p.add_argument("--rep", type=int, required=True)
+    add_common_actions(p)
+    add_deprecated_attempt_strategy(p)
+    p.add_argument("--x", type=int, choices=defaults.WIND_VALUES)
+    p.add_argument("--y", type=int, choices=defaults.WIND_VALUES)
+    p.add_argument("--rep", type=int)
     p.add_argument("--campaign-root", type=Path,
                    default=defaults.DEFAULT_CAMPAIGN_ROOT)
     p.add_argument("--mission-file", type=Path, default=defaults.MISSION_FILE)
@@ -49,27 +55,74 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--no-preloaded-wind-refresh", action="store_true")
     p.add_argument("--no-force-arm", action="store_true")
     args = p.parse_args()
+    consume_deprecated_attempt_strategy(args, p)
+    # --x/--y/--rep stay mandatory for an actual run; the inspection actions
+    # are the only invocations that may omit them.
+    if not (args.list_cases or args.dry_run):
+        missing = [
+            flag for flag, value in
+            (("--x", args.x), ("--y", args.y), ("--rep", args.rep))
+            if value is None
+        ]
+        if missing:
+            p.error(
+                "the following arguments are required: " + ", ".join(missing)
+            )
     if args.auto_wind_phase is None:
         args.auto_wind_phase = defaults.default_auto_wind_phase(
-            args.attempt_strategy,
             auto_control=args.auto,
         )
     return args
 
 
-def main() -> None:
-    args = _parse_args()
-    if args.plugin != "wind_matrix":
-        sys.exit(f"Phase-1 supports only wind_matrix; got {args.plugin}")
-    if not (1 <= args.rep <= defaults.RUNS_PER_COMBO):
-        sys.exit(f"ERROR: --rep must be 1..{defaults.RUNS_PER_COMBO}")
+def run_from_args(args: argparse.Namespace, *, title: str = "test_suite.cli.run_case") -> None:
+    """Execute one attempt from parsed args.
 
+    Shared by the flag path (`main`) and the interactive wizard, so both
+    resolve settings through exactly one code path.
+    """
     from ..plugins.wind_matrix import build_plugin
     from ..plugins.wind_matrix.config import WindMatrixConfig
 
+    # Inspection actions never launch a stack. run_case targets one combo, so
+    # it lists the combos --x/--y can select from.
+    if getattr(args, "list_cases", False) or getattr(args, "dry_run", False):
+        preview = WindMatrixConfig(
+            campaign_root=args.campaign_root.resolve(),
+            mission_file=args.mission_file.resolve(),
+        )
+        cases = list(build_plugin(preview).case_generator.iter_cases())
+        if args.x is not None and args.y is not None:
+            selected = defaults.combo_key(args.x, args.y)
+            cases = [c for c in cases if c.case_id == selected]
+        if args.list_cases:
+            emit_case_list(cases)
+        else:
+            emit_dry_run(
+                "wind_matrix",
+                {
+                    "x": args.x,
+                    "y": args.y,
+                    "rep": args.rep,
+                    "campaign_root": args.campaign_root.resolve(),
+                    "mission_file": args.mission_file.resolve(),
+                    "mavlink": args.mavlink,
+                    "auto_control": args.auto,
+                    "auto_wind_phase": args.auto_wind_phase,
+                    "accept_square_only": args.accept_square_only,
+                    "mission_timeout_s": args.mission_timeout,
+                    "launch_stack": False,
+                },
+                cases,
+            )
+        return
+
+    if not (1 <= args.rep <= defaults.RUNS_PER_COMBO):
+        sys.exit(f"ERROR: --rep must be 1..{defaults.RUNS_PER_COMBO}")
+
     print()
     defaults.log("=" * 60)
-    defaults.log("Square Wind Matrix - test_suite.cli.run_case")
+    defaults.log(f"Square Wind Matrix - {title}")
     defaults.log(f"  Wind : x={args.x} m/s (East)   y={args.y} m/s (North)")
     defaults.log(f"  Rep  : {args.rep}/{defaults.RUNS_PER_COMBO}")
     defaults.log(f"  Listen: {args.mavlink}")
@@ -109,7 +162,6 @@ def main() -> None:
             if args.preloaded_wind_world is not None else None
         ),
         preloaded_wind_refresh=not args.no_preloaded_wind_refresh,
-        attempt_strategy=args.attempt_strategy,
     )
 
     plugin = build_plugin(config)
@@ -135,6 +187,12 @@ def main() -> None:
         attempt_index=attempt_index,
         attempt_dir=attempt_dir,
     )
+
+
+def main() -> None:
+    args = _parse_args()
+    resolve_runner_plugin_or_exit(args.plugin, "run_case")
+    run_from_args(args)
 
 
 if __name__ == "__main__":

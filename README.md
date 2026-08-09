@@ -1,11 +1,17 @@
-# ArduPilot Workspace Next
+# ArduPilot Fault-Injection Evidence Framework
 
-Internal engineering workspace for ArduPilot + Gazebo Harmonic simulation.
+This workspace is a multi-sensor fault-injection and evidence framework for
+ArduPilot + Gazebo Harmonic simulation. It currently supports three working
+lanes: `wind_matrix`, `airspeed_failure`, and `gps_failure`.
 
-This workspace is intentionally not a direct copy of production. It separates:
+The platform's defining contract is that campaign results become dated,
+hash-manifested evidence packages instead of free-floating reports. Runtime
+output stays disposable under `var/`; reviewed proof is promoted under
+`evidence/` with reports, manifests, hashes, and indexes.
 
-- `src/`: owned runtime code plus thin compatibility wrappers for old script
-  paths.
+This workspace separates:
+
+- `src/`: owned runtime code.
 - `assets/`: models, worlds, and missions.
 - `config/`: reproducible shared parameters and campaign config.
 - `docs/`: human onboarding and operations.
@@ -16,8 +22,6 @@ This workspace is intentionally not a direct copy of production. It separates:
 - `.private/`: local overlays and personal notes only, ignored by git.
 
 Production workspace: `/home/ahmed/ardupilot_workspace_next`.
-
-Deprecated fallback/reference: `/home/ahmed/ardupilot_workspace`.
 
 Start here:
 
@@ -38,28 +42,27 @@ before starting a new simulator stack. See
 `docs/onboarding/installation.md` and
 `governance/decisions/ADR-0004-clean-run-and-workspace-plugin-policy.md`.
 
-Phase 8 has retired the old root symlink bridge and moved launch, bridge,
-analysis, wind-matrix runner, and campaign test-suite implementation ownership
-into organized `src/sim_ard_gaw/` homes. `compat_scripts/` remains wrapper-only
-for old import and script paths.
-
-Phase 7 cutover passed on 2026-05-24 under
-`governance/decisions/ADR-0005-workspace-next-cutover.md`,
-`evidence/reports/migration/CUTOVER_2026-05-24.md`, and
-`evidence/reports/migration/shadow_parity_2026-05-24.md`. The cutover does not claim full
-wind-matrix readiness.
-
-`make doctor` runs the Phase 1 structure validator at
+`make doctor` runs the structure and evidence validators through
+`scripts/ops/doctor.sh`, including
 `scripts/maintenance/validate_structure.sh`.
 
-Migration plan:
+Current status and operating entry points:
 
-- `governance/runbooks/migration/full_migration_plan.md`
-- `docs/operations/migration_status.md`
+- `docs/operations/workspace_status.md`
+- `docs/operations/launch_targets.md`
+- `docs/operations/evidence_workflow.md`
 - `governance/standards/change_control.md`
 
 Runbooks live under organized subdirectories of `governance/runbooks/`. See
 `governance/runbooks/README.md` for the layout and rules.
 
-The 2026-05-24 shadow parity checklist is complete for the bounded cutover
-scope. Future expanded claims still require dated evidence.
+## History
+
+The workspace migration completed on 2026-05-24 under
+`governance/decisions/ADR-0005-workspace-next-cutover.md`,
+`evidence/reports/migration/CUTOVER_2026-05-24.md`, and
+`evidence/reports/migration/shadow_parity_2026-05-24.md`. The compatibility
+wrapper layer was fully removed on 2026-06-30 under
+`evidence/reports/migration/PHASE_8_COMPAT_FINAL_REMOVAL_AUDIT_2026-06-30.md`,
+and the wind-matrix legacy attempt strategy was retired the same day under
+`evidence/reports/migration/WIND_MATRIX_LEGACY_STRATEGY_RETIREMENT_2026-06-30.md`.

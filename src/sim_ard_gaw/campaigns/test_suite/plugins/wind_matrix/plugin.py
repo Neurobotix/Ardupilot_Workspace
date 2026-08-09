@@ -5,10 +5,9 @@ plugin's adapters together and exposes `build_plugin(config)` for the
 CLI.
 
 Design:
-- `staged` is the only supported strategy. It wires wind stimulus,
-  MAVLink control, monitoring, analysis, and verdict adapters through
-  the framework. The historical `legacy` strategy (which delegated to
-  the `run_one` monolith) has been retired.
+- The plugin wires wind stimulus, MAVLink control, monitoring, analysis, and
+  verdict adapters through the framework. The historical `legacy` strategy
+  choice has been retired.
 """
 from __future__ import annotations
 
@@ -76,12 +75,6 @@ class WindMatrixPlugin:
     staged_strategy: AttemptStrategy | None = None
 
     def attempt_runner(self) -> AttemptRunner:
-        if self.config.attempt_strategy != "staged":
-            raise ValueError(
-                "wind_matrix supports only attempt_strategy='staged'; got "
-                f"{self.config.attempt_strategy!r}. The legacy run_one delegate "
-                "has been retired."
-            )
         if self.staged_strategy is None:
             raise RuntimeError("staged attempt strategy was not configured")
         strategy: AttemptStrategy = self.staged_strategy
@@ -299,12 +292,6 @@ _LEGACY_STATUS_TO_VERDICT = {
 
 
 def build_plugin(config: WindMatrixConfig) -> WindMatrixPlugin:
-    if config.attempt_strategy != "staged":
-        raise ValueError(
-            "wind_matrix supports only attempt_strategy='staged'; got "
-            f"{config.attempt_strategy!r}. The legacy run_one delegate has "
-            "been retired."
-        )
     if config.auto_control and config.auto_wind_phase == "after-takeoff":
         raise ValueError(
             "staged wind_matrix attempts do not support "

@@ -19,7 +19,7 @@ Per-target runtime status is in `docs/operations/launch_targets.md`.
 
 ## Lane map
 
-| Lane | Purpose | Launcher | Bridge | Phase 2 status |
+| Lane | Purpose | Launcher | Bridge | Current status |
 | --- | --- | --- | --- | --- |
 | Base plane | Clean fixed-wing baseline | `plane` + `gazebo-plane` | No | Verified |
 | CTE / airspeed | Wind and pitot validation | `plane-cte` + `gazebo-plane-cte` | No | Verified |
@@ -34,7 +34,7 @@ Per-target runtime status is in `docs/operations/launch_targets.md`.
 | Rebuild | Incremental wind/airspeed investigation | `plane-rebuild` + `gazebo-plane-rebuild` | No | Not yet tested |
 | Bench | Isolated sensor experiments | `gazebo-plane-bench` and related | Manual | Not a flight lane |
 
-"Verified" statuses are backed by
+Verified statuses are backed by
 `evidence/reports/migration/PHASE_2_RUNTIME_PARITY_2026-05-20.md`.
 
 ## Errata vs the archived lane doc

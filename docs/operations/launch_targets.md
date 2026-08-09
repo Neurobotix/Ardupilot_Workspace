@@ -6,26 +6,22 @@ Source of truth for executable target names is:
 scripts/ops/launch.sh help
 ```
 
-Phase 2 runtime parity evidence:
+Runtime evidence:
 
 - Latest report:
   `evidence/reports/migration/PHASE_2_RUNTIME_PARITY_2026-05-20.md`
-- Production reference command:
-  `/home/ahmed/ardupilot_workspace/src/SIM_ARD_GAW/scripts/launch.sh help`
-- New workspace command: `scripts/ops/launch.sh help`
-- Result: target names match production except for the intentional
-  `wind-check-altitude` behavior change described below.
+- Command: `scripts/ops/launch.sh help`
 
 Known policy:
 
-- Phase 7 cutover passed on 2026-05-24 for the governed core workflows. See
+- The 2026-05-24 cutover accepted the governed core workflows. See
   `evidence/reports/migration/CUTOVER_2026-05-24.md`,
   `evidence/reports/migration/shadow_parity_2026-05-24.md`, and
   `governance/decisions/ADR-0005-workspace-next-cutover.md`.
-- `wind-check-altitude` is retired in this workspace because production
-  referenced a missing altitude-wind log validator. The target remains visible
-  in help for operator awareness, but it exits with a retired-target error
-  instead of claiming validation.
+- `wind-check-altitude` is retired because the historical target referenced a
+  missing altitude-wind log validator. The target remains visible in help for
+  operator awareness, but it exits with a retired-target error instead of
+  claiming validation.
 - Logger output goes to `var/logs/flight_logger/`.
 - Campaign runtime output remains under `var/`: current wind-matrix defaults
   route directly into `var/logs/`, and explicit Phase 5 campaign roots used
@@ -42,10 +38,8 @@ Known policy:
 The launcher resolves owned paths directly: worlds and missions come from
 `assets/`, shared vehicle config is under `config/vehicles/`, overlays are
 under `config/overlays/`, campaign lane config is under `config/campaigns/`,
-and runtime output is under `var/`. The current wind-matrix runners remain a
-compatibility layer, but their default path constants no longer route through
-the retired root bridge. `.private/config/plane_params.local.parm` is an
-optional local-only final overlay when a plane lane names it below.
+and runtime output is under `var/`. `.private/config/plane_params.local.parm`
+is an optional local-only final overlay when a plane lane names it below.
 
 `config/vehicles/plane_base.parm` is intentionally sensor-neutral. It contains
 generic `AIRSPEED_*` defaults while keeping `ARSPD_TYPE` disabled. Gazebo
@@ -73,25 +67,24 @@ launch target or CTE/wind-matrix default and must be named explicitly to use.
 | `plane-altitude-wind` | `config/vehicles/plane_base.parm` -> `config/campaigns/mini_talon_altitude_wind/plane_full.parm` | Same optional local final overlay; the altitude-wind target remains not yet tested in current evidence. |
 | `plane-rebuild` | `config/vehicles/plane_params_rebuild.parm` | Launcher deliberately skips the local plane override. |
 | `copter` / `copter-lidar` | `config/vehicles/copter_params.parm` | No `.private` config is appended by the launcher. |
-| CTE `run_one.py` / `run_matrix.py` and current suite wrappers | `config/vehicles/plane_base.parm` -> `config/overlays/plane_airspeed.parm` | Default campaign callers append the local plane override when present unless `--no-param-local` or an explicit param stack says otherwise. |
-| Legacy CTE `run_one_og.py` caller | `config/vehicles/plane_base.parm` -> `config/overlays/plane_airspeed.parm` | Retained legacy peer still appends the local plane override when invoked. |
+| CTE `run_one.py` / `run_matrix.py` and `test_suite` wind-matrix callers | `config/vehicles/plane_base.parm` -> `config/overlays/plane_airspeed.parm` | Default campaign callers append the local plane override when present unless `--no-param-local` or an explicit param stack says otherwise. |
 
 For comparisons, record the effective parameter file list and content hashes
 with the run evidence. Phase 5 wind-matrix evidence records that provenance in
 the per-attempt run config and manifest record.
 
-## Phase 2 Runtime Status
+## Runtime Status
 
-Phase 2 runtime parity is PASS. Phase 7 accepted this workspace as production
-for the governed core cutover scope on 2026-05-24 with accepted residuals for
-non-core target evidence. Every required
-Phase 2 runtime smoke target was run in
+The current launch-target evidence is PASS for the targets listed below. The
+2026-05-24 cutover accepted this workspace as production for the governed core
+scope with accepted residuals for non-core target evidence. Every listed
+runtime smoke target was run in
 concurrent operator terminals (SITL + Gazebo, plus the bridge for the LiDAR
 lanes) and captured direct SITL/Gazebo/MAVLink handshake evidence. See
 `evidence/reports/migration/PHASE_2_RUNTIME_PARITY_2026-05-20.md` and the per-target
 curated captures in `evidence/curated_logs/phase_2_runtime_2026-05-20/`.
 
-Two runtime defects were found and fixed during Phase 2:
+Two runtime defects were found and fixed during the 2026-05-20 runtime work:
 
 - `copter` / `copter-lidar` would not arm (`Check frame class and type`). The
   copter launchers now load `config/vehicles/copter_params.parm`
@@ -99,7 +92,7 @@ Two runtime defects were found and fixed during Phase 2:
 - `bridge-plane` produced no observable output because Python block-buffers
   piped stdout. Bridge launchers now run `python3 -u`.
 
-| Target | Phase 2 status | Evidence |
+| Target | Status | Evidence |
 | --- | --- | --- |
 | `copter` | PASS | 201 HEARTBEATs, EKF3 + GPS, in-flight yaw alignment, `takeoff 10` reached 10.0 m. `copter_evidence.txt`. |
 | `copter-lidar` | PASS | 793 HEARTBEATs, EKF3 + GPS, armed, flew to 4.04 m. `bridge-copter` connected and streamed 922 `DISTANCE_SENSOR` messages. Caveat: forward LiDAR captured no obstacle return (copter flew above the obstacle band). |

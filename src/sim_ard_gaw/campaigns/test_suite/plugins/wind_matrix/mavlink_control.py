@@ -1,14 +1,12 @@
-"""Phase 3E owned MAVLink readiness/control/monitor helpers.
+"""Wind-matrix MAVLink readiness, mission control, and monitor helpers.
 
 This module owns heartbeat/readiness checks, mission upload/verification,
 arming/AUTO mode control, and passive disarm monitoring for the staged wind
-plugin. It does not import any legacy runner module (run_one, run_matrix,
-run_matrix_round_robin). All constants/helpers come from defaults and mission
-contract.
+plugin. Constants and mission-specific sequence rules come from defaults and
+the square wind mission contract.
 
-Phase 4 core-promotion candidates (do NOT promote now — only after a second
-plugin validates the seam with two real callers; promoting from a sample size
-of one is the architecture theater the migration plan forbids):
+Core-promotion candidates (do NOT promote now — only after another plugin
+validates the boundary with a real caller):
 
 - ``wait_for_heartbeat(addr, timeout)`` — pure connect+wait, no mission knowledge.
 - ``mission_item_count(file)`` / ``mission_item_int(wp, ...)`` — generic

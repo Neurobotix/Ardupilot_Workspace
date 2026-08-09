@@ -39,12 +39,10 @@ class WindMatrixConfig:
     stack_log_subdir: str = "orchestrator_logs"
     isolated_sitl_state: bool = True
     slot_deadline_margin_s: float = 0.0
-    attempt_strategy: str = "staged"
 
     def __post_init__(self) -> None:
         if self.auto_wind_phase is None:
             self.auto_wind_phase = defaults.default_auto_wind_phase(
-                self.attempt_strategy,
                 auto_control=self.auto_control,
             )
         if self.auto_wind_phase not in defaults.AUTO_WIND_PHASES:

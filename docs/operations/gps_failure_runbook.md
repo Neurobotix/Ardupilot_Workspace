@@ -193,6 +193,32 @@ governed raw validation runs above. No curated evidence has been promoted.
   `--mission-file` and `--extra-param-file` are explicit override hooks for
   named experiments; use the named envelopes for comparable reruns.
 
+### From the unified `sim-test` wizard
+
+The GPS lane is reachable from `sim-test` (choose `gps_failure` in the sensor
+family menu). It asks for an action rather than a run mode, because the GPS
+action surface does not match the wind case/suite/round-robin shape.
+
+Exposed in the wizard:
+
+- `list cases`, `dry run a single case`, `preflight readiness report` — no SITL.
+- `live round-robin campaign` — restricted to the non-jamming campaign case
+  set. The wizard asks for both `--confirm-live-phase2` and
+  `--confirm-live-campaign` explicitly and exits non-zero if either is
+  declined. `run_suite_from_args` re-asserts both gates, so a caller cannot
+  reach a live campaign by a path the flag surface would refuse.
+
+Not exposed in the wizard, use the flag surface above:
+
+- `--live-phase2-validation-rerun` — its Phase H gate report needs an operator
+  reading the blocking gate output, not a Y/N prompt.
+- `--live-case` — the campaign path covers the same ground with case-set
+  restrictions applied.
+- `--probe-schema` and `--phase2-validation-rerun-plan` — JSON introspection
+  for tooling rather than operator actions.
+
+Flags on `sim-test gps` are the same as invoking `run_gps_failure` directly.
+
 Example no-SITL and guard checks (the `--live-case nominal` command without
 confirmation must fail before launch):
 

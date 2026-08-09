@@ -11,7 +11,7 @@ which is called by `make doctor`.
   campaign, vehicle documentation, and presentation templates.
 - `governance/` contains standards, decisions, audits, and phase runbooks.
 - `.ai/` contains compact agent pointers and active state.
-- `src/` contains owned code and migration compatibility surfaces.
+- `src/` contains owned runtime code.
 - `tests/` contains unit, integration, and parity checks.
 - `evidence/` contains curated reports, manifests, indexes, and small proof
   artifacts.
@@ -31,10 +31,7 @@ Historical recovered parameter stacks stay under
 not runtime defaults. Local overrides stay under `.private/`; they may affect a
 local run only when a launcher explicitly appends them.
 
-Phase 8 retired the old root symlink bridge after launch and wind-matrix path
-resolution moved directly to `assets/`, `config/`, `var/`, and owned runtime
-directories. The follow-up ownership pass moved launch, bridge, analysis,
-wind-matrix runner, and campaign `test_suite` implementations into real
-organized homes under `src/sim_ard_gaw/`. `src/sim_ard_gaw/compat_scripts/`
-remains only as a thin compatibility-wrapper layer for old imports and script
-paths.
+Launch, bridge, analysis, wind-matrix runner, and campaign `test_suite`
+implementations live under organized homes in `src/sim_ard_gaw/`. Runtime
+paths resolve directly to `assets/`, `config/`, `var/`, and owned runtime
+directories.

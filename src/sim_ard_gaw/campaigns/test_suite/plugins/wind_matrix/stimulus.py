@@ -27,8 +27,8 @@ class WindMatrixStimulus(StimulusAdapter):
         if self.config.auto_control and self.config.auto_wind_phase == "after-takeoff":
             raise RuntimeError(
                 "The staged wind_matrix strategy does not yet support "
-                "auto_wind_phase='after-takeoff'. Use --attempt-strategy legacy "
-                "or choose --auto-wind-phase before-arm."
+                "auto_wind_phase='after-takeoff'. Choose "
+                "--auto-wind-phase before-arm."
             )
 
         preloaded_world = ctx.extra.get(

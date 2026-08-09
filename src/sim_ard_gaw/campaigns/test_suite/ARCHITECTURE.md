@@ -1,437 +1,175 @@
-# Automated Test Suite — Architecture
+# Automated Test Suite Architecture
 
-This lane is the compatibility implementation of the automated test-suite
-blueprint. Its active migration state is governed by
-`governance/runbooks/migration/phase_5_campaign_test_migration.md`. The
-feature-level migration plan and per-phase notes live under
-`governance/runbooks/features/test_suite_migration/`; the
-ArchitectureMD "Stage" labels below map onto the feature phases there
-(`Stage 1` ↔ feature Phase 1, `Stage 2` ↔ feature Phase 2, the old
-`Stage 3` split now maps to feature Phase 3A through Phase 3G, `Stage 4` ↔
-feature Phase 4 after the Phase 3G gate, and `Stage 5` ↔ feature Phase 5
-after Phase 4 acceptance).
+The automated test suite is the reusable campaign framework for the
+fault-injection lanes. It binds a sensor-family plugin to a generic attempt
+lifecycle, records each attempt in a manifest, and keeps raw runtime output
+separate from promoted evidence.
 
-It sits **alongside** the legacy runners. Phase 5 hardens shared campaign
-behavior in `run_one.py`, `run_matrix.py`, `run_matrix_round_robin.py`, and the
-wrapper CLIs without cutting over or retiring those compatibility entrypoints.
-New CLI entry points (`test_suite/cli/*.py`) build a plugin and feed it through
+Current plugin families:
+
+- `wind_matrix`: CTE wind campaign attempts.
+- `airspeed_failure`: degraded/corrupted airspeed behavior characterization.
+- `gps_failure`: degraded/corrupted GPS behavior characterization.
+
+The standalone wind-matrix operator runners under
+`src/sim_ard_gaw/campaigns/wind_matrix/` remain live direct entry points. The
+`test_suite` wind-matrix plugin uses the staged framework pipeline; the retired
+`--attempt-strategy` option is only a deprecated CLI compatibility surface.
+
+## Layered Model
+
+```text
+Campaign config layer
+  argparse / YAML / env vars
+  selects plugin, cases, run mode, timeouts, roots, and operator guards
+
+Plugin layer
+  plugins/<sensor_family>/
+  owns cases, launch/environment details, stimulus mechanics, monitors,
+  analyzers, verdict policy, and plugin-specific manifest fields
+
+Framework layer
+  core/
+  owns attempt and suite lifecycle, scheduler policies, generic manifest view,
+  artifact collection contract, and common model types
+```
+
+The core does not import plugins. Plugins do not import sibling plugins. CLI
+entry points select a plugin by name through `cli/_registry.py` and pass it to
 the framework.
 
-The first plugin must be real before a second plugin is used as proof of
-generality. Because the retained legacy path is wind-specific, a second plugin
-does not prove generic framework readiness while `wind_matrix` still depends
-on wind-specific legacy delegation for its attempt lifecycle.
+## Attempt Pipeline
 
-## Layered model
+An attempt has five high-level phases:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Campaign config layer — argparse / YAML / env vars          │
-│   (which mission, which cases, how many runs, scheduler)    │
-├─────────────────────────────────────────────────────────────┤
-│ Plugin layer — knows the sensor/test family                 │
-│   plugins/wind_matrix/, plugins/<future_sensor>/            │
-│   - case generator                                          │
-│   - environment adapter                                     │
-│   - stimulus adapter                                        │
-│   - analyzers + verdict policy                              │
-├─────────────────────────────────────────────────────────────┤
-│ Framework layer — sensor-agnostic                           │
-│   core/                                                     │
-│   - lifecycle (AttemptRunner, SuiteRunner)                  │
-│   - manifesting + artifacts                                 │
-│   - scheduling policies                                     │
-│   - control strategies (manual / auto / passive)            │
-└─────────────────────────────────────────────────────────────┘
-```
+1. **Prepare and launch:** create per-attempt scaffolding, start or attach to
+   the simulator stack, and assert readiness.
+2. **Apply and drive:** apply the stimulus, verify it took effect, and execute
+   the selected control strategy.
+3. **Observe:** monitor the vehicle until the lane's terminal condition or a
+   guarded failure.
+4. **Collect and analyze:** collect artifacts and run plugin-owned analyzers.
+5. **Classify and persist:** classify the verdict, atomically update the
+   manifest, and always run cleanup.
 
-The core never imports from `plugins/`. Plugins never reach into other
-plugins. The CLI binds a plugin to the core for a given run.
+`AttemptRunner.run(case)` implements those phases through these adapters:
 
-## Lifecycle (per attempt)
+1. `EnvironmentAdapter.prepare_case(case)`
+2. `EnvironmentAdapter.launch(case, ctx)`
+3. `EnvironmentAdapter.assert_ready(case, ctx)`
+4. `StimulusAdapter.apply(case, ctx)`
+5. `StimulusAdapter.verify(case, ctx)`
+6. `ControlStrategy.execute(case, ctx)`
+7. `CompletionMonitor.run(case, ctx)`
+8. `ArtifactStore.collect(case, ctx)`
+9. `AnalyzerChain.analyze(case, ctx)`
+10. `VerdictPolicy.classify(case, monitor, analyses)`
+11. `Manifest.persist(attempt_record)`
+12. `EnvironmentAdapter.cleanup(case, ctx)` in `finally`
 
-`AttemptRunner.run(case)` walks these stages in order; each stage is a
-plugin-overridable adapter:
+`SuiteRunner` loops over a `SchedulerPolicy` (sequential, round-robin, or a
+plugin-specific policy) until requested acceptance counts, budgets, or stop
+conditions are reached.
 
-1. `EnvironmentAdapter.prepare_case(case)` — per-case scaffolding
-2. `EnvironmentAdapter.launch(case, ctx)` — bring up sim/SITL/etc.
-3. `EnvironmentAdapter.assert_ready(case, ctx)` — process supervision
-4. `StimulusAdapter.apply(case, ctx)` — inject the test condition
-5. `StimulusAdapter.verify(case, ctx)` — confirm it took effect
-6. `ControlStrategy.execute(case, ctx)` — drive the subject
-   (manual prompts / auto upload+arm+mode / passive observe)
-7. `CompletionMonitor.run(case, ctx)` — block until done; capture log
-8. `ArtifactStore.collect(case, ctx)` — pull raw evidence into attempt dir
-9. `AnalyzerChain.analyze(case, ctx)` — run analyzers, collect outputs
-10. `VerdictPolicy.classify(case, monitor, analyses)` — pass/partial/fail
-11. `Manifest.persist(attempt_record)` — atomic manifest update
-12. `EnvironmentAdapter.cleanup(case, ctx)` — always runs in `finally`
+## Ownership
 
-`SuiteRunner` loops over a `SchedulerPolicy` (sequential, round-robin, etc.),
-calling `AttemptRunner` for each chosen case until acceptance counts are met
-or budgets are exhausted.
+| Concern | Owner |
+| --- | --- |
+| Attempt id / numbering | core |
+| Generic manifest view and atomic persistence contract | core |
+| Artifact directory root and collection contract | core |
+| Slot deadlines and retry accounting | core |
+| Control-mode plumbing | core |
+| Scheduler policies | core |
+| Case enumeration | plugin |
+| Scenario, mission, and parameter stack selection | plugin |
+| Environment launch commands and readiness semantics | plugin |
+| Stimulus injection mechanics | plugin |
+| Completion monitor and behavior-specific terminal state | plugin |
+| Analyzer scripts and parsing | plugin |
+| Verdict thresholds and accepted-observation rules | plugin |
+| Plugin-specific manifest fields | plugin |
 
-## Generic vs. plugin-owned
+If a new sensor family needs framework edits to ship, treat that as a design
+review trigger: either the framework is missing a real abstraction, or the
+plugin is reaching across an ownership boundary.
 
-| Concern                           | Owner    |
-|-----------------------------------|----------|
-| Attempt id / numbering            | core     |
-| Manifest read/write/atomicity     | core     |
-| Artifact directory root + atomicity | core   |
-| Per-attempt directory naming      | plugin (e.g. `defaults.attempt_dir` -> `attempt_NNN`) |
-| Slot deadlines / retry counting   | core     |
-| Process supervision plumbing      | core     |
-| Control-mode plumbing             | core     |
-| Scheduler policies                | core     |
-| Case enumeration                  | plugin   |
-| Scenario / mission selection      | plugin   |
-| Stimulus injection mechanics      | plugin   |
-| Environment launch commands       | plugin   |
-| Analyzer scripts and parsing      | plugin   |
-| Verdict thresholds                | plugin   |
-| Case-specific summary fields      | plugin   |
+## Manifest And Evidence Contract
 
-If a new sensor needs framework edits to ship, the abstractions are leaking.
+The framework writes additive generic fields (`schema_version`, `case_id`,
+`suite_name`, `parameters`, `stimulus_result`, `analysis_results`, `verdict`,
+`artifacts`, `attempt_id`, `started_at`, `finished_at`) while preserving
+plugin-specific views needed by existing evidence readers. The generic schema
+marker is `test_suite.generic_manifest.v1`.
 
-## Phase-1 wind_matrix plugin
+`Manifest.generic_view()` normalizes old and new rows without mutating older
+manifests. `Manifest.legacy_view()` remains a compatibility API for reading
+existing evidence bundles; renaming it is intentionally out of scope for
+documentation cleanup.
 
-Phase 1 targets wrapper parity with the legacy wind runners. The wind_matrix
-adapters are thin wrappers that delegate into the legacy modules:
+Raw simulator output stays under `var/` or a campaign root. A result becomes a
+workspace claim only after reviewed proof is promoted under `evidence/` with a
+dated report, manifest or curated artifact, raw-output reference, and
+limitations.
 
-| Adapter                          | Delegates to                           |
-|----------------------------------|----------------------------------------|
-| `WindMatrixCaseGenerator`        | `run_matrix.combo_order` + manifest    |
-| `WindMatrixEnvironment.launch`   | `run_matrix.launch_sitl` + `launch_gazebo` |
-| `WindMatrixEnvironment.cleanup`  | `run_matrix.cleanup_stack`             |
-| `WindMatrixStimulus.apply`       | preloaded world via `run_matrix.write_static_wind_world` (auto) or `run_one.inject_wind` (manual) |
-| `AutoControl` / `ManualControl`  | branches inside `run_one.run_one`      |
-| `WindMatrixMonitor`              | `run_one.monitor_until_disarm`         |
-| `WindMatrixAnalyzers`            | `run_one.run_analysis`                 |
-| `WindMatrixVerdict`              | success classes from `run_one.run_one` |
-| `WindMatrixManifest`             | legacy-compatible wind manifest shape, plus additive generic view fields |
+## Current Wind-Matrix Shape
 
-For Phase 1 the wind plugin uses a `LegacyDelegateAttemptStrategy` that calls
-`run_one.run_one(...)` as the single body of stages 4–10. The intent is to keep
-legacy behavior, manifest schema, and artifact layout unchanged while the new
-entry points exercise the framework boundary. Live SITL/Gazebo parity still
-needs to be validated with the checks below before this is treated as
-runtime-proven.
+The wind-matrix plugin owns framework-driven CTE attempts through these
+modules:
 
-## Blueprint Refactor Stages
+- `case_generator.py`: wind combo ordering and case ids.
+- `environment.py` and `runtime.py`: SITL/Gazebo stack ownership.
+- `mavlink_control.py`: mission upload, arming, AUTO mode, and square monitor.
+- `wind_injection.py` and `stimulus.py`: runtime wind-topic injection and SDF
+  wind artifacts.
+- `analysis_helpers.py` and `analyzers.py`: BIN collection, square/loiter
+  analysis, summaries, and verdict inputs.
+- `manifest.py`: wind-compatible manifest fields plus the generic view.
 
-These stage labels predate the workspace governance phase numbering. Governance
-Phase 5 retained the compatibility runners; it did not execute the legacy-script
-retirement stage below.
+The direct wind-matrix runners (`run_one.py`, `run_matrix.py`, and
+`run_matrix_round_robin.py`) are separate operator/campaign entry points. They
+are not compatibility wrappers and are not removed by the test-suite
+architecture.
 
-### Stage 1 — wrap
-- Introduce `core/` interfaces and `SuiteRunner` / `AttemptRunner` shells.
-- Implement `wind_matrix` plugin as wrappers around legacy functions.
-- Add new CLI entry points that go through the framework while keeping the
-  legacy `run_one.py` / `run_matrix.py` / `run_matrix_round_robin.py` CLIs
-  fully functional.
-- No changes to manifest schema or artifact layout.
+## Current Risks
 
-### Stage 2 — generic data model
-- Add framework-level `case_id`, `suite_name`, `parameters`,
-  `stimulus_result`, `analysis_results`, `verdict`, `artifacts`,
-  `attempt_id`, `started_at`, `finished_at`, and `schema_version` fields
-  written **alongside** the existing wind-specific fields (additive, not
-  breaking).
-- Provide a manifest reader that exposes both views.
+- **Framework boundaries:** promote helpers into `core/` only after more than
+  one plugin needs them as real callers.
+- **Manifest schema drift:** generic fields must stay additive. Existing
+  evidence readers rely on older wind-specific fields.
+- **Process ownership:** governed attempts must clean up the simulator stack so
+  stale SITL, Gazebo, MAVProxy, bridge, or logger processes do not contaminate
+  evidence.
+- **Campaign-scale claims:** bounded live proof does not imply a full campaign
+  matrix. Wider readiness claims require their own dated evidence.
+- **Path assumptions:** framework code should not hard-code workspace-relative
+  plugin paths. Paths flow through plugin config.
 
-Implemented in feature Phase 2 on 2026-05-25. The generic view schema marker
-is `test_suite.generic_manifest.v1`; `Manifest.legacy_view()` returns the
-legacy/plugin shape and `Manifest.generic_view()` normalizes old and new rows
-without mutating older manifests.
+## Validation
 
-### Stage 3A — split run_one into opt-in staged plugin pieces
-- Extract from `run_one.py`:
-  - `inject_wind`, `preloaded_wind_artifact`, `parse_wind_echo`,
-    `start_wind_echo` → `plugins/wind_matrix/stimulus.py`
-  - `run_analysis`, `build_run_summary` (wind/CTE-tailored bits)
-    → `plugins/wind_matrix/analyzers.py`
-  - mission upload/arm/mode logic → `core/control.py`
-  - `monitor_until_disarm` → `plugins/wind_matrix/monitor.py`
-  - generic manifest contract/view → `core/manifest.py`
-  - wind-compatible manifest implementation → `plugins/wind_matrix/manifest.py`
-- Add a real framework-driven staged path in `AttemptRunner.run` that calls
-  each stage adapter. As of feature Phase 3 on 2026-05-25 this path is
-  available only with `--attempt-strategy staged`; `legacy` remains the
-  default until live SITL/Gazebo parity evidence exists. Staged
-  `auto_wind_phase=after-takeoff` is blocked because the legacy behavior
-  applies wind after AUTO takeoff altitude while the generic staged order
-  applies stimulus before control.
+Use focused unit and integration tests for code changes:
 
-Stage 3A is accepted as static/unit/integration/CLI proof only. It is staged
-behind fallback and does not claim live staged wind parity or generic
-framework readiness.
-
-### Stage 3B — staged dependency audit and negative proof
-- Prove the current staged path is not hidden behind `run_one.run_one(...)`.
-- Prove and record that it is still not a full replacement system because it
-  imports and calls legacy runner helper code.
-- Cover stage ordering, cleanup, verdict/acceptance, manifest compatibility,
-  and CLI behavior with tests.
-- Record any live staged result or blocker without treating helper reuse as
-  final architecture.
-
-Recorded on 2026-05-29 in
-`evidence/reports/features/2026-05-29_test_suite_migration_phase_3b.md`:
-the no-SITL staged-boundary proof passes and the staged path does not call
-`run_one.run_one(...)`; later self-review found staged construction, config,
-CLI, manifest, environment, control, monitor, stimulus, and analysis still
-depend on legacy runner modules. Do not claim generic runtime readiness from
-Phase 3B.
-
-### Stage 3C — legacy-runner import blocker / staged foundation
-- Move staged defaults, case IDs, path naming, manifest implementation, and
-  CLI bootstrap into test-suite-owned modules.
-- Generic core must not contain wind-specific legacy manifest behavior.
-- `attempt_strategy="staged"` must construct with legacy runner imports
-  blocked. Legacy mode may keep the delegate fallback.
-
-Implemented on 2026-05-29 for no-SITL foundation scope only. Staged
-`WindMatrixConfig`, case generation, plugin construction,
-`plugin.attempt_runner()`, manifest setup, and CLI parser/bootstrap now work
-while imports of `run_one.py`, `run_matrix.py`, and
-`run_matrix_round_robin.py` are blocked. The wind-compatible manifest
-implementation and wind/square completion monitor are plugin-owned; generic
-core does not contain wind-matrix manifest, monitor, or legacy status-string
-fallback logic. Staged auto construction defaults to `before-arm`, while
-explicit staged `after-takeoff` remains blocked. Runtime/environment, MAVLink
-control/monitor, wind stimulus, artifacts, analysis, summary, and live
-zero-legacy staged execution remain Stage 3D-3G work.
-
-### Stage 3D — zero-legacy runtime/environment
-
-Implemented 2026-05-31: `plugins/wind_matrix/runtime.py` owns
-`cleanup_stack`, `tail_text`, `ensure_process_alive`, `launch_process`,
-`launch_sitl`, `launch_gazebo`, and `write_static_wind_world`. Constants
-`SIM_VEHICLE`, `PLANE_WIND_WORLD`, `STACK_CLEANUP_TIMEOUT_S` and
-`preferred_python()` (now in `defaults.py`) are test-suite-owned.
-`WindMatrixEnvironment.launch()` and `.cleanup()` now call `runtime.*` only;
-neither resolves `run_matrix.*` or `run_one.*`. `assert_ready()` readiness
-(heartbeat / vehicle readiness / slot timeout) was Phase 3E work and is now
-resolved — see Stage 3E below.
-Evidence: `evidence/reports/features/2026-05-31_test_suite_migration_phase_3d.md`.
-
-### Stage 3E — zero-legacy MAVLink control and monitor
-
-Implemented 2026-06-01: `plugins/wind_matrix/mavlink_control.py` owns
-`wait_for_heartbeat`, `wait_for_vehicle_ready`, `settle_after_arm_before_auto`,
-`wait_for_relative_altitude`, `mission_item_count`, `mission_item_int`,
-`upload_mission`, `verify_mission`, `arm_vehicle`, `set_auto_mode`, and
-`monitor_until_disarm`. Constants `FORCE_ARM_MAGIC`, `READY_HEARTBEATS_REQUIRED`,
-`PASSED_WAYPOINT_RE`, and `coerce_int` added to `defaults.py`.
-`WindMatrixEnvironment.assert_ready()` (staged path) now calls
-`mavlink_control.*` and `analysis_helpers.clamp_timeout_to_slot`;
-`_LazyLegacyAutoMissionControl` and `_LazyLegacyDisarmMonitor` are renamed
-`WindMatrixAutoMissionControl` and `WindMatrixDisarmMonitor` and call
-`mavlink_control.*` only. The only remaining staged legacy dependency is
-`WindMatrixStimulus` runtime wind injection (`run_one.inject_wind` /
-`preloaded_wind_artifact`), owned by Stage 3F.
-Evidence: `evidence/reports/features/2026-06-01_test_suite_migration_phase_3e.md`.
-
-Original scope:
-
-- Move heartbeat/readiness, mission upload/verification, arm/mode control, and
-  mission monitoring into test-suite-owned modules.
-- Staged control/monitor must not inject legacy helper functions.
-
-### Stage 3F — zero-legacy stimulus, artifacts, analysis, and summary
-- Move wind injection/echo verification, preloaded wind artifacts, BIN
-  collection, analysis invocation, run summary, terminal rows, and exception
-  formatting into test-suite-owned modules.
-- Staged stimulus/analyzer must not call legacy runner helpers.
-
-Partial progress (2026-05-31): the analysis substage (BIN collection,
-`run_analysis`, `build_run_summary`, analysis cleanup, run-alias linking,
-slot-timeout clamp) is test-suite-owned in
-`plugins/wind_matrix/analysis_helpers.py`; the staged analyzer no longer imports
-`run_one`. Terminal/running manifest rows record the canonical `attempt_NNN`
-directory. Evidence:
-`evidence/reports/features/2026-05-31_test_suite_phase3c_followup_fixes.md`.
-
-Complete (2026-06-01): runtime wind injection (`inject_wind` /
-`preloaded_wind_artifact`, gz-topic echo verification, preloaded SDF artifact
-handling) is now test-suite-owned in `plugins/wind_matrix/wind_injection.py`;
-`WindMatrixStimulus` no longer imports `legacy`. With this the staged attempt
-path is fully zero-legacy (environment, MAVLink control/monitor, and wind
-injection). A first live completed staged run (`success_full`, strict gz echo
-verified) was captured. Evidence:
-`evidence/reports/features/2026-06-01_test_suite_migration_phase_3f.md`. The
-only remaining staged-path use of `run_one` is the legacy-strategy delegate
-(`_legacy_run_one_body`), which is intended. Stage 3G (matched live legacy
-comparison) is the remaining gate before Phase 4.
-
-### Stage 3G — full zero-legacy staged wind proof — ACCEPTED 2026-06-01
-- The zero-legacy staged wind system was run live and compared against the
-  retained legacy tool invoked directly (`compat_scripts/run_matrix.py` →
-  `run_one.run_one`, no `test_suite` code in that baseline). Both `success_full`;
-  flight metrics within SITL run-to-run noise (square RMS Δ0.14 m); `run_config`
-  schema and shared manifest legacy fields match; differences are the documented
-  intended ones.
-- Hard no-SITL import-blocker tests pass with `run_one.py`, `run_matrix.py`,
-  `run_matrix_round_robin.py` imports/calls blocked across the staged path.
-- Evidence:
-  `evidence/reports/features/2026-06-01_test_suite_migration_phase_3g.md`;
-  curated staged `evidence/curated_logs/test_suite_phase3f_staged_live_20260601/`
-  and legacy `evidence/curated_logs/test_suite_phase3g_legacy_compare_20260601/`.
-
-### Stage 4 — second plugin proof — UNBLOCKED 2026-06-01
-- Phase 3G is accepted, so this stage is authorized.
-- The selected planned second-plugin candidate is airspeed
-  failure/degradation behavior, documented in
-  `governance/runbooks/features/airspeed_failure_behavior/`. This runbook
-  locks candidate scope and acceptance gates; it does not claim implementation
-  or runtime evidence.
-- If it requires editing `core/`, the boundaries are still wrong.
-- Do not use a second plugin as architecture theater. A second plugin proves
-  nothing if the first plugin is still secretly a wind-specific legacy wrapper.
-
-### Stage 5 — retire legacy scripts, gated
-- Begins only after Phase 4 is accepted.
-- Once the first plugin and a second plugin are stable with evidence-backed
-  replacement paths, the legacy `run_one.py` etc. become thin wrappers that
-  import and call `test_suite/cli/*.py`. Eventually they can be removed.
-
-## CLI compatibility
-
-The new CLI entry points accept the legacy argparse flags so existing
-scripted callers (`launch.sh` recipes, ops runbooks, README examples)
-keep working when the entry point is swapped in:
-
-| Legacy                           | New                                  |
-|----------------------------------|--------------------------------------|
-| `python run_one.py --x ... --y ... --rep ...` | `python -m test_suite.cli.run_case --x ... --y ...` |
-| `python run_matrix.py --x-values ... --y-values ...` | `python -m test_suite.cli.run_suite --x-values ... --y-values ...` |
-| `python run_matrix_round_robin.py ...`        | `python -m test_suite.cli.run_round_robin ...`      |
-
-During Phase 1 these new entry points exist in addition to the legacy
-ones, not in place of them.
-
-Feature Phase 3 added `--attempt-strategy {legacy,staged}` to the new
-`test_suite.cli.*` entry points. The default is `legacy`; `staged` is an
-explicit opt-in for the extracted wind-matrix stage adapters.
-
-## Risks
-
-- **Hidden coupling in `run_one.run_one`.** The 400-line function has
-  intricate ordering between stack-readiness, wind injection, mission
-  upload, arm, monitor, and cleanup. Splitting it prematurely (Phase 3
-  before the wrapper layer is well-exercised) risks regressions. Phase 1
-  intentionally avoids touching it.
-- **Manifest schema drift.** Adding generic fields in Phase 2 must be
-  additive. Any rename of an existing field invalidates campaign log
-  history for fixed-harness comparator datasets such as
-  `logs/017_params_old_009_matrix_r3_plugin_fixed/`.
-- **Process leaks across attempts.** The legacy `cleanup_stack()` is the
-  authoritative kill path. The framework must never short-circuit it; the
-  `finally` block in `AttemptRunner.run` is the contract.
-- **Round-robin starvation.** The legacy round-robin uses bounded slot
-  deadlines (`remaining_deadline_s`, `clamp_timeout_to_slot`). The
-  scheduler policy must propagate these into `AttemptContext`, not each
-  plugin.
-- **Plugin discovery.** Phase 1 hard-wires the wind_matrix plugin in the
-  CLI. Phase 4 may introduce a plugin registry (entry points or a
-  simple `plugins/__init__.py` mapping), but only after Phase 3B proves the
-  first plugin is real. Premature dynamic discovery is out of scope.
-- **Architecture theater.** A second plugin can hide the real problem if
-  `wind_matrix` still depends on wind-specific legacy lifecycle delegation.
-  Phase 4 is blocked until Phase 3G accepts a zero-legacy staged wind system
-  with live proof.
-- **Path assumptions.** Plugins must not hard-code workspace-relative
-  paths inside the framework layer. All paths flow through plugin config
-  so a new plugin can pick its own scenario and analyzers.
-
-## Assumptions
-
-- The `env/` venv layout, `WORKSPACE_ROOT` discovery, and `runtime_env()`
-  are stable and shared by all current and near-future plugins.
-- `gz`, `sim_vehicle.py`, and MAVProxy continue to be the launch surface
-  for SITL+Gazebo plugins. Plugins that target a different simulator
-  (e.g., pure SITL only, or a hardware-in-the-loop bench) will provide
-  their own `EnvironmentAdapter`.
-- Each attempt produces at most one `.BIN` log; the `collect_bin_log`
-  contract (newest matching log after the attempt's wall-clock start)
-  remains correct.
-- The existing manifest is the source of truth for acceptance counts.
-
-## Validation steps
-
-Current no-SITL validation coverage lives in
-`tests/parity/test_phase1_parity.py` and checks CLI flag parity,
-legacy default propagation, round-robin pass ordering, static wind
-world round-trip, workspace-plugin-only enforcement, and the
-square-only acceptance policy. The SITL/Gazebo checks below are still
-the runtime acceptance gate.
-
-1. **Static smoke.** `python -c "import test_suite.cli.run_case"` and the
-   matching imports for `run_suite` / `run_round_robin` succeed without
-   side effects.
-2. **CLI parity.** `python -m test_suite.cli.run_case --help` matches the
-   flag surface of `run_one.py --help`. Same for the other two.
-3. **Single-attempt parity (manual).** Run a single attempt through the
-   new CLI on a known wind combo and diff the resulting attempt
-   directory against an attempt produced by `run_one.py` for the same
-   combo. Expect identical artifacts (allowing for timestamp/PID drift).
-4. **Sequential matrix parity.** Run a tiny `--x-values 0 --y-values 0
-   --runs-per-combo 1` campaign through `run_suite` and confirm the
-   manifest acceptance count increments exactly as it does with
-   `run_matrix.py`.
-5. **Round-robin parity.** Run the same campaign through
-   `run_round_robin` with a single `--slot-minutes` value and confirm
-   bounded-slot behavior matches the legacy script.
-6. **Cleanup contract.** Kill the new CLI mid-attempt with SIGINT and
-   confirm `EnvironmentAdapter.cleanup` runs (look for the cleanup log
-   marker and absence of orphaned `arducopter`/`gz`/MAVProxy procs).
-7. **Phase 3B dependency audit.** Prove staged is not hidden behind
-   `run_one.run_one(...)`, and record every remaining legacy runner
-   dependency as a blocker.
-8. **Phase 3C-3G zero-legacy staged system.** Replace construction, runtime,
-   control, monitor, stimulus, artifact, analysis, manifest, and CLI helper
-   dependencies with test-suite-owned modules, then prove live staged wind
-   beside legacy.
-9. **Plugin isolation.** Only after Phase 3G acceptance, add a stub or real
-   second plugin (for example `plugins/example_noop/`) and prove it can run a
-   one-attempt suite without touching wind_matrix files.
-
-## Example: porting to a non-wind sensor
-
-A GPS-dropout suite would override **only** the plugin layer:
-
-```python
-# plugins/gps_dropouts/case_generator.py
-class GpsDropoutCaseGenerator(CaseGenerator):
-    def iter_cases(self):
-        for hz in (1, 2, 5):
-            for window_s in (5, 10, 20):
-                yield TestCase(
-                    suite_name="gps_dropouts",
-                    case_id=f"gps_dropout_{hz}hz_{window_s}s",
-                    parameters={"dropout_rate_hz": hz, "dropout_window_s": window_s},
-                    scenario_name="lane_hold_mission",
-                    stimulus_name="gps_fault_injector",
-                    acceptance_target_runs=3,
-                )
-
-# plugins/gps_dropouts/stimulus.py
-class GpsFaultInjector(StimulusAdapter):
-    def apply(self, case, ctx):
-        # publish fault pattern over the SITL GPS injection interface
-        ...
-
-# plugins/gps_dropouts/analyzers.py
-class EkfInnovationAnalyzer(Analyzer): ...
-class HorizontalDriftAnalyzer(Analyzer): ...
-
-# plugins/gps_dropouts/verdicts.py
-class GpsDropoutVerdict(VerdictPolicy):
-    def classify(self, case, monitor, analyses):
-        # pass if drift_p95_m < 4.0 and no EKF lane switches recorded
-        ...
+```bash
+python -m pytest tests/unit -q
+python -m pytest tests/integration -q
 ```
 
-Reused without change: `core/attempt_runner.py`, `core/suite_runner.py`,
-`core/scheduler.py`, `core/manifest.py`, `core/artifacts.py`,
-`core/control.py`, `cli/run_case.py` (with `--plugin gps_dropouts`).
+Use `make doctor` after documentation, governance, evidence, structure,
+runtime-path, or local-overlay-policy changes.
+
+## Historical Crosswalk
+
+Older feature runbooks refer to architecture "Stage" labels. Those labels are
+historical implementation milestones, not current operating modes:
+
+| Historical label | Record home |
+| --- | --- |
+| Stage 1 — wrappers | `governance/runbooks/features/test_suite_migration/phase_1_wrapper_parity.md` |
+| Stage 2 — generic manifest | `governance/runbooks/features/test_suite_migration/phase_2_generic_manifest.md` |
+| Stage 3A-3G — staged wind extraction and proof | `governance/runbooks/features/test_suite_migration/phase_3_staged_attempt_runner.md` plus the Phase 3B-3G reports in `evidence/reports/features/` |
+| Stage 4 — second plugin proof | Airspeed and GPS plugin runbooks under `governance/runbooks/features/` |
+| Stage 5 — wind-matrix strategy retirement | `evidence/reports/migration/WIND_MATRIX_LEGACY_STRATEGY_RETIREMENT_2026-06-30.md` |
+
+Stage 3G compared the staged framework path against the retained direct
+wind-matrix runner path; the deleted `compat_scripts/` wrapper layer is not a
+current comparison entry point.

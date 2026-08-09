@@ -4,13 +4,17 @@ Status as of 2026-06-01: **Phases 3A–3G are accepted. The staged wind_matrix
 path is fully zero-legacy and live-proven against the retained legacy tool, and
 Phase 4 (second plugin) is now unblocked.** Phases 3D (environment), 3E (MAVLink
 control/monitor), and 3F (wind injection) moved every staged runtime stage into
-plugin-owned modules; the only remaining `run_one` use is the intended
-legacy-strategy delegate. Phase 3G ran the staged path live and compared it
-against `compat_scripts/run_matrix.py` invoked directly (no `test_suite` code in
-that baseline): both `success_full`, flight metrics within SITL noise, schema
-and shared manifest fields matching. Evidence:
+plugin-owned modules. Phase 3G ran the staged path live and compared it against
+`compat_scripts/run_matrix.py` invoked directly (no `test_suite` code in that
+baseline): both `success_full`, flight metrics within SITL noise, schema and
+shared manifest fields matching. Evidence:
 `evidence/reports/features/2026-06-01_test_suite_migration_phase_3g.md`.
 Phase 5 (legacy retirement) still requires Phase 4 acceptance.
+
+2026-08-06 cleanup note: the migration-era attempt-strategy choice and delegate
+strategy scaffolding are retired from live `test_suite` code. Historical Phase
+3 sections below retain the old field and flag names as dated review
+provenance, not as current command or API guidance.
 
 Earlier status (2026-05-29): Phase 3C was accepted for the legacy-runner import
 blocker and core/plugin foundation boundary only; staged foundation no longer

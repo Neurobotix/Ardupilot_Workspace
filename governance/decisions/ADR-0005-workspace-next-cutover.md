@@ -4,6 +4,15 @@ Date: 2026-05-24
 
 Status: Accepted
 
+> **Correction (2026-06-30 final-removal audit):** the Phase 8 compatibility
+> boundary retained by this ADR was later fully retired. The
+> `src/sim_ard_gaw/compat_scripts/` wrapper layer was deleted and reproved on
+> 2026-06-30; see
+> `evidence/reports/migration/PHASE_8_COMPAT_FINAL_REMOVAL_AUDIT_2026-06-30.md`.
+> The retained `run_one.py`, `run_matrix.py`, and `run_matrix_round_robin.py`
+> operator runners are separate live entry points, not `compat_scripts/`
+> wrappers.
+
 ## Context
 
 Phase 7 decides whether `/home/ahmed/ardupilot_workspace_next` can become the

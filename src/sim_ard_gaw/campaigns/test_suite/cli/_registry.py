@@ -1,7 +1,11 @@
-"""Phase-1 plugin registry.
+"""Plugin registry.
 
-A flat dict keeps things blunt. Phase 4 will introduce real plugin
-discovery (entry points or package iteration).
+A flat dict keeps things blunt; real discovery (entry points or package
+iteration) is not needed while the lane set is this small.
+
+This is the single source of truth for which lane names the CLI accepts.
+`cli/_plugin_select.py` resolves names through it, so a lane is reachable
+as soon as it is registered here.
 """
 from __future__ import annotations
 

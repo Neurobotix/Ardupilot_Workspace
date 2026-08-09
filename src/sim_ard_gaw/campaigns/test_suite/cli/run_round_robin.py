@@ -1,14 +1,9 @@
 """Run an automated suite — round-robin scheduler.
 
-Mirrors the flag surface of the historical `run_matrix_round_robin.py`,
-including bounded slot timing, analysis-required acceptance, focus-combo
-filtering, and isolated SITL state for BIN selection. With `--plugin
-wind_matrix`, the default `--attempt-strategy staged` body uses the
-extracted stage adapters. The `legacy` strategy (delegating to the retained
-`run_one` monolith) is being retired; staged became the default on the
-strength of the Phase 3F/3G single-combo live parity comparison. Campaign-
-scale round-robin staged-vs-legacy parity is not separately evidenced; see
-the retirement evidence report for the accepted-risk note.
+Mirrors the flag surface of the historical `run_matrix_round_robin.py` where
+that surface is still live, including bounded slot timing, analysis-required
+acceptance, focus-combo filtering, and isolated SITL state for BIN selection.
+The wind-matrix attempt pipeline uses the extracted stage adapters.
 """
 from __future__ import annotations
 
@@ -19,6 +14,16 @@ from pathlib import Path
 from ..core.scheduler import RoundRobinScheduler
 from ..core.suite_runner import SuiteRunner, SuiteRunSettings
 from ..plugins.wind_matrix import defaults
+from ._plugin_select import (
+    add_common_actions,
+    emit_case_list,
+    emit_dry_run,
+    resolve_runner_plugin_or_exit,
+)
+from .deprecated_flags import (
+    add_deprecated_attempt_strategy,
+    consume_deprecated_attempt_strategy,
+)
 
 
 def _parse_int_list(text: str) -> list[int]:
@@ -30,8 +35,8 @@ def _parse_int_list(text: str) -> list[int]:
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plugin", default="wind_matrix")
-    p.add_argument("--attempt-strategy", choices=("staged",),
-                   default="staged")
+    add_common_actions(p)
+    add_deprecated_attempt_strategy(p)
     p.add_argument("--x-values", type=_parse_int_list, default=[0, 4, 8, 12])
     p.add_argument("--y-values", type=_parse_int_list, default=[0, 4, 8, 12])
     p.add_argument("--runs-per-combo", type=int, default=4)
@@ -70,6 +75,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--rebuild", action="store_true")
     p.add_argument("--focus-combo", metavar="KEY", default=None)
     args = p.parse_args()
+    consume_deprecated_attempt_strategy(args, p)
     if args.runs_per_combo < 1:
         p.error("--runs-per-combo must be >= 1")
     if args.slot_minutes <= 0:
@@ -91,17 +97,22 @@ def _parse_args() -> argparse.Namespace:
         args.y_values = [fy]
     if args.auto_wind_phase is None:
         args.auto_wind_phase = defaults.default_auto_wind_phase(
-            args.attempt_strategy,
             auto_control=True,
         )
     return args
 
 
-def main() -> None:
-    args = _parse_args()
-    if args.plugin != "wind_matrix":
-        sys.exit(f"Phase-1 supports only wind_matrix; got {args.plugin}")
+def run_from_args(
+    args: argparse.Namespace,
+    *,
+    title: str = "test_suite.cli.run_round_robin",
+) -> None:
+    """Execute a round-robin suite from parsed args.
 
+    Shared by the flag path (`main`) and the interactive wizard, so both
+    resolve settings — including the slot/monitor budget — through exactly
+    one code path.
+    """
     from ..plugins.wind_matrix import build_plugin
     from ..plugins.wind_matrix.config import WindMatrixConfig
     from sim_ard_gaw.campaigns.mission_contract import (
@@ -110,6 +121,43 @@ def main() -> None:
 
     args.campaign_root = args.campaign_root.resolve()
     args.mission_file = args.mission_file.resolve()
+
+    # Inspection actions resolve settings but never touch the stack or the
+    # campaign manifest, so they run before contract validation side effects.
+    if getattr(args, "list_cases", False) or getattr(args, "dry_run", False):
+        preview = WindMatrixConfig(
+            x_values=tuple(args.x_values),
+            y_values=tuple(args.y_values),
+            runs_per_combo=args.runs_per_combo,
+            campaign_root=args.campaign_root,
+            mission_file=args.mission_file,
+        )
+        cases = list(build_plugin(preview).case_generator.iter_cases())
+        if args.list_cases:
+            emit_case_list(cases)
+        else:
+            emit_dry_run(
+                "wind_matrix",
+                {
+                    "x_values": list(args.x_values),
+                    "y_values": list(args.y_values),
+                    "runs_per_combo": args.runs_per_combo,
+                    "campaign_root": args.campaign_root,
+                    "mission_file": args.mission_file,
+                    "mavlink": args.mavlink,
+                    "slot_minutes": args.slot_minutes,
+                    "monitor_minutes": args.monitor_minutes,
+                    "max_passes": args.max_passes,
+                    "require_analysis": args.require_analysis,
+                    "wind_world_mode": args.wind_world_mode,
+                    "auto_wind_phase": args.auto_wind_phase,
+                    "accept_square_only": args.accept_square_only,
+                    "scheduler": "round_robin",
+                },
+                cases,
+            )
+        return
+
     validate_square_wind_mission_contract(args.mission_file)
     param_files = defaults.resolve_param_files(
         param_base=args.param_base,
@@ -170,7 +218,7 @@ def main() -> None:
 
     print()
     defaults.log("=" * 60)
-    defaults.log("Square Wind Matrix - test_suite.cli.run_round_robin")
+    defaults.log(f"Square Wind Matrix - {title}")
     defaults.log(f"  Campaign root : {args.campaign_root}")
     defaults.log(f"  Mission       : {args.mission_file}")
     defaults.log(f"  X values      : {args.x_values}")
@@ -218,7 +266,6 @@ def main() -> None:
         stack_log_subdir="round_robin_logs",
         isolated_sitl_state=True,
         slot_deadline_margin_s=defaults.CLEANUP_TIMEOUT_S + args.retry_delay_s,
-        attempt_strategy=args.attempt_strategy,
     )
 
     plugin = build_plugin(config)
@@ -237,6 +284,12 @@ def main() -> None:
         ),
     )
     suite.run()
+
+
+def main() -> None:
+    args = _parse_args()
+    resolve_runner_plugin_or_exit(args.plugin, "run_round_robin")
+    run_from_args(args)
 
 
 if __name__ == "__main__":

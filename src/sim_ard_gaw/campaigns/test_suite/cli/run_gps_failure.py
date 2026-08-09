@@ -312,6 +312,86 @@ def main(argv: Iterable[str] | None = None) -> None:
         return
 
 
+def run_suite_from_args(args: argparse.Namespace) -> None:
+    """Execute the safe GPS action subset from an interactive namespace.
+
+    The confirmation gates are re-asserted here rather than trusted from the
+    caller, so the wizard cannot reach a live campaign by a path the flag
+    surface would have refused. Case-set restrictions stay owned by
+    run_live_round_robin_campaign.
+    """
+    config = GpsFailureConfig(
+        campaign_root=(
+            Path(args.gps_campaign_root).expanduser().resolve()
+            if str(args.gps_campaign_root).strip()
+            else defaults.default_campaign_root()
+        ),
+        envelope_name=args.gps_envelope,
+        mission_file=defaults.mission_file_for_envelope(args.gps_envelope),
+        mavlink_addr=args.mavlink,
+        launch_stack=args.gps_action == "campaign",
+        mission_timeout_s=args.gps_mission_timeout,
+        force_arm=not args.gps_no_force_arm,
+        runs_per_case=args.gps_runs_per_case,
+    )
+    plugin = build_plugin(config)
+
+    if args.gps_action == "list_cases":
+        for case in plugin.case_generator.iter_cases():
+            print(case.case_id)
+        return
+
+    if args.gps_action == "preflight":
+        print(json.dumps(build_readiness_report(plugin),
+                         indent=2, sort_keys=True, allow_nan=False))
+        return
+
+    if args.gps_action == "dry_run":
+        generator = GpsFailureCaseGenerator(config)
+        try:
+            case = generator.get_case(args.gps_case_id)
+        except ValueError as exc:
+            sys.exit(f"ERROR: {exc}")
+        print(json.dumps(
+            {
+                "phase": "no_sitl_dry_run",
+                "plugin_constructed": True,
+                "effective_param_stack": [
+                    str(path) for path in config.effective_param_stack
+                ],
+                "case": {
+                    "case_id": case.case_id,
+                    "suite_name": case.suite_name,
+                    "mission_file": str(case.mission_file),
+                    "parameters": case.parameters,
+                },
+                "injection_artifact": build_injection_artifact(case),
+                "parameter_schema": defaults.parameter_schema(),
+                "launch_performed": False,
+                "live_readback_performed": False,
+            },
+            indent=2, sort_keys=True, allow_nan=False,
+        ))
+        return
+
+    if args.gps_action == "campaign":
+        if not getattr(args, "gps_confirm_live_phase2", False):
+            sys.exit("ERROR: live Phase 2 GPS runs require live-phase2 confirmation")
+        if not getattr(args, "gps_confirm_live_campaign", False):
+            sys.exit("ERROR: live GPS campaigns require live-campaign confirmation")
+        run_live_round_robin_campaign(
+            config,
+            list(args.gps_campaign_cases),
+            runs_per_case=args.gps_runs_per_case,
+            inter_attempt_delay_s=args.gps_inter_attempt_delay,
+            title="GPS Failure Behavior - Phase 2 protected round-robin campaign",
+            campaign_mode="round_robin",
+        )
+        return
+
+    sys.exit(f"ERROR: unknown GPS action {args.gps_action!r}")
+
+
 def run_live_cases(
     config: GpsFailureConfig,
     cases: list[str],

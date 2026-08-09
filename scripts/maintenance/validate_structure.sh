@@ -320,7 +320,7 @@ allowed_stale_reference_reason() {
   allow_exact "$file" "$label" "$text" \
     ".ai/current.md" \
     "old absolute production workspace path" \
-    'workspace `/home/ahmed/ardupilot_workspace` is deprecated fallback/reference' \
+    'under `.private/`. The old workspace `/home/ahmed/ardupilot_workspace` is' \
     "records the ADR-0005 deprecated fallback workspace" && return 0
 
   allow_exact "$file" "$label" "$text" \
@@ -328,12 +328,6 @@ allowed_stale_reference_reason() {
     "old absolute production workspace path" \
     '- Phase 0 production reference was `/home/ahmed/ardupilot_workspace`; after' \
     "records the Phase 0 reference superseded by ADR-0005" && return 0
-
-  allow_exact "$file" "$label" "$text" \
-    "docs/operations/migration_status.md" \
-    "old absolute production workspace path" \
-    '`/home/ahmed/ardupilot_workspace` is deprecated fallback/reference and must not' \
-    "records the ADR-0005 deprecated fallback workspace" && return 0
 
   allow_exact "$file" "$label" "$text" \
     "governance/decisions/ADR-0005-workspace-next-cutover.md" \
@@ -482,7 +476,7 @@ allowed_stale_reference_reason() {
   allow_exact "$file" "$label" "$text" \
     "docs/operations/launch_targets.md" \
     "retired launch target" \
-    '- `wind-check-altitude` is retired in this workspace because production' \
+    '- `wind-check-altitude` is retired because the historical target referenced a' \
     "documents retired target status" && return 0
 
   allow_exact "$file" "$label" "$text" \
@@ -561,19 +555,18 @@ allow_exact() {
   return 1
 }
 
-check_migration_links() {
-  section "migration-plan links"
+check_workspace_status_links() {
+  section "workspace-status links"
   local required_refs=(
-    "governance/runbooks/migration/full_migration_plan.md"
     "governance/standards/change_control.md"
-    "docs/operations/migration_status.md"
+    "docs/operations/workspace_status.md"
   )
   local required_sources=(
     "README.md"
     ".ai/index.md"
     ".ai/current.md"
     "docs/onboarding/quick_start.md"
-    "docs/operations/migration_status.md"
+    "docs/operations/workspace_status.md"
   )
   local failed=0
   local path source
@@ -604,9 +597,9 @@ check_migration_links() {
   done
 
   if [[ "$failed" -eq 0 ]]; then
-    pass "required migration-plan targets and entry-point references exist"
+    pass "required workspace-status targets and entry-point references exist"
   else
-    fail "required migration-plan targets or entry-point references are missing"
+    fail "required workspace-status targets or entry-point references are missing"
   fi
 }
 
@@ -651,7 +644,7 @@ check_nested_private
 check_private_policy
 check_gitignore
 check_stale_references
-check_migration_links
+check_workspace_status_links
 check_naming_policy_guidance
 
 printf '\n'

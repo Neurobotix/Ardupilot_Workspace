@@ -20,6 +20,7 @@ from ..plugins.airspeed_failure import defaults
 from ..plugins.airspeed_failure.environment import build_reference_wind_artifact
 from ..plugins.airspeed_failure.wind_profiles import WIND_PROFILES
 from ..plugins.airspeed_failure.stimulus import build_injection_artifact
+from ._plugin_select import unsupported_operation
 
 
 def _parse_biases(text: str) -> tuple[int, ...]:
@@ -33,6 +34,15 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list-cases", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--round-robin",
+        action="store_true",
+        help=(
+            "Not supported on this lane; airspeed cases are ordered by the "
+            "sequential scheduler. Present so the flag reports its own "
+            "absence rather than failing as an unknown argument."
+        ),
+    )
     parser.add_argument("--case", dest="case_id")
     parser.add_argument("--full-ratio-sweep", action="store_true")
     parser.add_argument("--bias-percent", type=_parse_biases, default=None)
@@ -94,6 +104,13 @@ def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--no-wipe-eeprom", action="store_true")
     parser.add_argument("--rebuild", action="store_true")
     args = parser.parse_args(argv)
+    if args.round_robin:
+        unsupported_operation(
+            "airspeed_failure",
+            "--round-robin",
+            "cases run under the sequential scheduler; use --live-case or the "
+            "sim-test wizard suite path",
+        )
     if (
         not args.list_cases
         and not args.dry_run
@@ -267,6 +284,89 @@ def run_live_cases(
         )
         if index < len(cases):
             time.sleep(2.0)
+
+
+def run_suite_from_args(args: argparse.Namespace) -> None:
+    """Execute an airspeed suite through the framework SuiteRunner.
+
+    The flag path above drives individual cases directly; this is the
+    campaign path used by the interactive wizard. Both build their config
+    from an argparse namespace so settings resolution stays in one module.
+    """
+    from ..core.scheduler import SequentialScheduler
+    from ..core.suite_runner import SuiteRunner, SuiteRunSettings
+
+    campaign_root = (
+        defaults.default_campaign_root()
+        if not str(args.campaign_root).strip()
+        else args.campaign_root.resolve()
+    )
+
+    # Fixed cases keep FIXED_CASE_ORDER ordering; ratio-bias cases follow.
+    selected_fixed = set(args.af_fixed_cases)
+    ordered_fixed = [c for c in defaults.FIXED_CASE_ORDER if c in selected_fixed]
+    bias_percents = tuple(args.af_bias_percents)
+
+    config = AirspeedFailureConfig(
+        ratio_bias_percents=bias_percents,
+        runs_per_case=args.af_runs_per_case,
+        campaign_root=campaign_root,
+        mission_file=args.mission_file.resolve(),
+        vehicle_arspd_ratio=args.af_vehicle_arspd_ratio,
+        vehicle_arspd_ratio_verified=args.af_verified_vehicle_ratio,
+        mavlink_addr=args.mavlink,
+        launch_stack=False,
+        mission_timeout_s=args.mission_timeout,
+        ready_timeout_s=args.ready_timeout,
+        upload_timeout_s=args.upload_timeout,
+        arm_timeout_s=args.arm_timeout,
+        mode_timeout_s=args.mode_timeout,
+        wind_profile_id=args.af_wind_profile,
+        continuous_speed_source=args.af_speed_source,
+        mechanism_tier=args.af_mechanism_tier,
+        expected_ahrs_wind_max=args.af_expected_ahrs_wind_max,
+    )
+
+    print()
+    print("=" * 60)
+    print("Airspeed Failure Behavior - suite")
+    print(f"  Campaign root : {campaign_root}")
+    print(f"  Mission       : {config.mission_file}")
+    print(f"  Fixed cases   : {ordered_fixed}")
+    print(f"  Ratio biases  : {bias_percents}")
+    print(f"  Runs/case     : {config.runs_per_case}")
+    print(f"  Max attempts  : {args.af_max_attempts_per_case}")
+    print(f"  Wind profile  : {config.wind_profile_id}")
+    print(f"  Speed source  : {config.continuous_speed_source}")
+    print(f"  MAVLink       : {config.mavlink_addr}")
+    print("=" * 60)
+    print()
+
+    plugin = build_plugin(config)
+
+    class _FilteredGenerator(AirspeedFailureCaseGenerator):
+        """Keep only wizard-selected fixed cases; all bias cases stay."""
+
+        def iter_cases(self):
+            for case in super().iter_cases():
+                if (
+                    case.case_id in defaults.FIXED_CASE_ORDER
+                    and case.case_id not in selected_fixed
+                ):
+                    continue
+                yield case
+
+    SuiteRunner(
+        case_generator=_FilteredGenerator(config),
+        scheduler=SequentialScheduler(),
+        attempt_runner=plugin.attempt_runner(),
+        manifest=plugin.manifest,
+        attempt_dir_factory=plugin.attempt_dir_factory(),
+        settings=SuiteRunSettings(
+            max_attempts_per_case=args.af_max_attempts_per_case,
+            inter_attempt_delay_s=0.0,
+        ),
+    ).run()
 
 
 def next_available_attempt_index(plugin, case) -> int:

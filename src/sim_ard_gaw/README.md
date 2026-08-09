@@ -1,7 +1,7 @@
 # sim_ard_gaw Runtime
 
-Phase 8 retired the old root bridge from runtime path resolution and then moved
-runtime implementation ownership into the organized homes:
+`sim_ard_gaw` is the owned runtime package for this workspace's ArduPilot +
+Gazebo launch, bridge, analysis, campaign, and test-suite code:
 
 - `launch/` owns launch and cleanup shell entrypoints.
 - `bridges/` owns bridge and wind-publisher scripts.
@@ -9,5 +9,6 @@ runtime implementation ownership into the organized homes:
 - `campaigns/wind_matrix/` owns the wind-matrix runners.
 - `campaigns/test_suite/` owns the campaign test-suite package.
 
-`compat_scripts/` remains only as a thin compatibility-wrapper layer for old
-imports and script paths. Do not add new runnable implementation logic there.
+The former `compat_scripts/` wrapper layer was fully removed on 2026-06-30 and
+is preserved only in dated migration evidence. The retained wind-matrix runner
+modules under `campaigns/wind_matrix/` are live operator entry points.

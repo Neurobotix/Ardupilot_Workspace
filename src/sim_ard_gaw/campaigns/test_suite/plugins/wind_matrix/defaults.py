@@ -1,8 +1,7 @@
 """Foundation defaults and naming helpers for the wind_matrix plugin.
 
-These values mirror the retained legacy wind-matrix runners, but they live in
-the test_suite plugin so staged construction can happen without importing the
-legacy runner modules.
+These values define the CTE wind campaign's default missions, paths, timeouts,
+parameter stacks, and Gazebo wind-topic settings for framework-driven attempts.
 """
 from __future__ import annotations
 
@@ -104,12 +103,8 @@ def preferred_python() -> str:
     return str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
 
 
-def default_auto_wind_phase(
-    attempt_strategy: str,
-    *,
-    auto_control: bool,
-) -> str:
-    if attempt_strategy == "staged" and auto_control:
+def default_auto_wind_phase(*, auto_control: bool) -> str:
+    if auto_control:
         return DEFAULT_STAGED_AUTO_WIND_PHASE
     return DEFAULT_AUTO_WIND_PHASE
 

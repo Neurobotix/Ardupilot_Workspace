@@ -1,16 +1,15 @@
 # Wind Matrix Campaign
 
-This page is the canonical status note for the wind-matrix campaign. The
-archived wind-matrix script study under `docs/archive/src_docs/` remains useful
-historical analysis, but it is not the operating truth for `workspace_next`.
+This page is the canonical status note for the wind-matrix campaign. Archived
+wind-matrix studies remain useful historical analysis, but they are not the
+operating truth for the current workspace.
 
 ## Current boundary
 
-The migrated campaign runtime now owns the wind-matrix runners under
+The campaign runtime owns the wind-matrix runners under
 `src/sim_ard_gaw/campaigns/wind_matrix/` and the campaign test-suite package
-under `src/sim_ard_gaw/campaigns/test_suite/`. Old `compat_scripts/` imports and
-script paths are thin wrappers into those owned homes. Phase 5 hardening helpers
-remain under `src/sim_ard_gaw/campaigns/` for manifest locking,
+under `src/sim_ard_gaw/campaigns/test_suite/`. Campaign hardening helpers live
+under `src/sim_ard_gaw/campaigns/` for manifest locking,
 terminal-status taxonomy, mission-contract validation, XML/SDF wind handling,
 and input provenance. Mission, world, parameter, analysis, and campaign-output
 defaults resolve through owned `assets/`, `config/`, `src/sim_ard_gaw/analysis/`,
@@ -26,13 +25,12 @@ workspace-plugin recheck restored the known-good estimated wind behavior.
 Current policy forbids that fallback. That is still a bounded comparison, not a
 full matrix or cutover claim.
 
-Phase 7 cutover passed on 2026-05-24 with a fresh x=4, y=4 square-and-loiter
+The 2026-05-24 cutover accepted a fresh x=4, y=4 square-and-loiter
 campaign proof under
 `var/runs/phase7_final_20260524/tiny_rr_x4_y4_square/`, recorded in
 `evidence/reports/migration/CUTOVER_2026-05-24.md` and accepted by
-`governance/decisions/ADR-0005-workspace-next-cutover.md`. This closes the
-representative campaign gate for Phase 7 only. It does not claim full
-wind-matrix readiness or full landing/disarm completion.
+`governance/decisions/ADR-0005-workspace-next-cutover.md`. It does not claim
+full wind-matrix readiness or full landing/disarm completion.
 
 ## What is trusted now
 
@@ -43,7 +41,7 @@ wind-matrix readiness or full landing/disarm completion.
   `evidence/indexes/evidence_catalog.md` when a campaign result needs a
   reviewed manifest, report, raw-output reference, and review status.
 - Treat archived wind-matrix investigations as design and history references
-  only when reconciling the compatibility runtime.
+  only when reconciling historical results.
 
 ## Parameter Stack Boundary
 
@@ -52,9 +50,8 @@ The current CTE launch and campaign callers use the shared stack
 `config/overlays/plane_airspeed.parm`. The launcher and current
 `run_one.py` / `run_matrix.py` path append
 `.private/config/plane_params.local.parm` when that local file exists unless a
-campaign caller opts out. The retained legacy `run_one_og.py` peer appends the
-same local override when it is invoked. That file is a local override, not
-canonical campaign config.
+campaign caller opts out. That file is a local override, not canonical campaign
+config.
 
 Historical comparisons must keep the effective parameter file list and
 parameter content hashes with their run evidence. Recovered production-era
@@ -77,19 +74,50 @@ sim-test
 Or pass sub-commands to use the existing flag surface directly:
 
 ```bash
-sim-test case   --x 0 --y 4 --rep 1
-sim-test suite  --x-values 0,4,8,12 --y-values 0,4,8,12
-sim-test rr     --x-values 0,4,8,12
+sim-test case      --x 0 --y 4 --rep 1
+sim-test suite     --x-values 0,4,8,12 --y-values 0,4,8,12
+sim-test rr        --x-values 0,4,8,12
+sim-test airspeed  --list-cases
+sim-test gps       --list-cases
 ```
 
-The wizard selects sensor family (`wind_matrix` or `airspeed_failure`), run
-mode, case parameters, and optionally advanced timeouts. For `wind_matrix` it
-mirrors the full flag surface of `run_case`, `run_suite`, and `run_round_robin`.
-For `airspeed_failure` it asks which fixed fault cases to include, ratio bias
-percents, vehicle `ARSPD_RATIO`, and whether the ratio is already verified.
+The wizard selects sensor family (`wind_matrix`, `airspeed_failure`, or
+`gps_failure`), run mode, case parameters, and optionally advanced timeouts.
+For `wind_matrix` it mirrors the full flag surface of `run_case`, `run_suite`,
+and `run_round_robin`. For `airspeed_failure` it asks which fixed fault cases
+to include, ratio bias percents, vehicle `ARSPD_RATIO`, whether the ratio is
+already verified, and the max attempts per case. For `gps_failure` it asks for
+an action rather than a run mode; see
+`docs/operations/gps_failure_runbook.md`.
 
-Source: `src/sim_ard_gaw/campaigns/test_suite/cli/run.py` and
-`src/sim_ard_gaw/campaigns/test_suite/cli/interactive.py`.
+The wizard does not reimplement any runner. It builds an argparse namespace and
+hands it to the same `run_from_args` function the flag path calls, so the two
+paths cannot resolve settings differently.
+
+### Inspection actions
+
+Every lane supports the same two no-SITL actions. Neither launches a stack,
+writes a manifest, or validates the mission contract:
+
+```bash
+sim-test suite --x-values 0,4 --y-values 0 --list-cases
+sim-test suite --x-values 0,4 --y-values 0 --dry-run
+```
+
+`--list-cases` prints the case ids the invocation would run. `--dry-run` prints
+a resolved-settings dump plus that case list, which is also how to compare a
+wizard run against a flag run.
+
+`--plugin` on `run_case`, `run_suite`, and `run_round_robin` accepts
+`wind_matrix` only. Those runners take wind case coordinates
+(`--x`/`--y`/`--x-values`/`--y-values`) and validate the square-wind mission
+contract, so they cannot drive another lane. Passing `--plugin gps_failure`
+exits non-zero and names the entry point that works. Use `sim-test airspeed`
+and `sim-test gps` for the other lanes.
+
+Source: `src/sim_ard_gaw/campaigns/test_suite/cli/run.py`,
+`src/sim_ard_gaw/campaigns/test_suite/cli/interactive.py`, and
+`src/sim_ard_gaw/campaigns/test_suite/cli/_plugin_select.py`.
 
 ## Phase 5 Safety Policy
 
@@ -106,21 +134,14 @@ Source: `src/sim_ard_gaw/campaigns/test_suite/cli/run.py` and
   remain readable through the generic view and the legacy wind-specific fields
   remain the compatibility surface. Framework additive writes use the same
   campaign manifest lock as the legacy unsafe manifest transactions.
-- Feature Phase 3 adds an opt-in staged attempt path for the new
-  `test_suite.cli.*` entry points through `--attempt-strategy staged`.
-  The default remains `--attempt-strategy legacy`, which delegates to the
-  proven `run_one.run_one(...)` body. Do not treat staged mode as campaign
-  parity evidence until a dated live SITL/Gazebo comparison exists. Feature
-  Phase 3B proved the staged wind boundary is not hidden behind
-  `run_one.run_one(...)`, but it also found staged mode still depends on
-  legacy runner helper code. Phase 3C-3G must build the full zero-legacy
-  staged wind system before staged mode is treated as replacement or generic
-  runtime proof. The 2026-05-31 Phase 3C follow-up restored atomic plugin
-  manifest writes, staged `running`/terminal manifest persistence, stale
-  running-record reconciliation, and plugin-owned stimulus run-config/path
-  helpers; staged environment launch/readiness, MAVLink control/monitoring,
-  runtime wind injection, analysis, summary, and terminal helper execution
-  still remain Phase 3D-3G legacy-dependency work.
+- The `test_suite.cli.*` wind-matrix entry points now use the staged attempt
+  pipeline directly. The retired attempt-strategy choice is retained only as a
+  deprecated CLI compatibility surface:
+  older commands that still pass `--attempt-strategy staged` are accepted with
+  a deprecation warning, and `legacy` is rejected with a retired-flag message.
+  Phase 3G accepted the zero-legacy staged wind proof on 2026-06-01; retained
+  direct wind runners remain separate operator entry points, not a `test_suite`
+  strategy choice.
 - The square campaign validates its mission contract before a matrix launcher
   starts a stack and again before the delegated attempt relies on square,
   loiter, and landing sequence assumptions. The contract includes the
@@ -148,5 +169,5 @@ The detailed Gazebo plugin fallback incident record is:
 
 `governance/audits/2026-05-21_phase5_gazebo_plugin_fallback_incident.md`
 
-Full-matrix evidence still requires later governed evidence. The open migration
-blocker list lives in `.ai/issues/open.md`.
+Full-matrix evidence still requires later governed evidence. Current platform
+status lives in `docs/operations/workspace_status.md`.
