@@ -15,11 +15,14 @@ import math
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable, Iterable, cast
+from typing import Any, Callable, Iterable, Iterator
 
 from ...provenance import file_provenance, parameter_file_provenance, source_tree_snapshot
+from ..core.case_generator import CaseGenerator
 from ..core.manifest import attempt_record_to_generic_fields
 from ..core.models import AttemptRecord
+from ..core.scheduler import RoundRobinScheduler
+from ..core.suite_runner import SuiteRunner, SuiteRunSettings
 from ..plugins.gps_failure import build_plugin
 from ..plugins.gps_failure import defaults, glitch
 from ..plugins.gps_failure.case_generator import GpsFailureCaseGenerator
@@ -493,62 +496,127 @@ def run_live_round_robin_campaign(
         campaign_mode=campaign_mode,
     )
 
-    round_index = 0
-    while True:
-        active = [
-            case
-            for case in cases
-            if _workflow_complete_count(plugin, case) < runs_per_case
-        ]
-        if not active:
-            defaults.log("[gps_campaign] done: all workflow-complete targets met")
-            return
-        round_index += 1
-        defaults.log(f"[gps_campaign] round {round_index} active={len(active)}")
-        for case in active:
-            target_run_index = _workflow_complete_count(plugin, case) + 1
-            attempt_index = next_available_attempt_index(plugin, case)
-            attempt_dir = plugin.attempt_dir_factory()(
-                plugin.manifest,
-                case,
-                attempt_index,
+    # No slot budget: GPS attempt length is governed by the lane's mission
+    # timeout, and publishing a deadline here would clamp live phase timeouts
+    # that the hand-rolled campaign loop never clamped.
+    SuiteRunner(
+        case_generator=_FixedCaseGenerator(cases),
+        scheduler=RoundRobinScheduler(
+            per_attempt_budget_s=None,
+            max_passes=runs_per_case,
+        ),
+        attempt_runner=_GpsCampaignRunner(
+            runner,
+            campaign_mode=campaign_mode,
+            workflow_target_runs=runs_per_case,
+        ),
+        manifest=plugin.manifest,
+        attempt_dir_factory=_gps_attempt_dir_factory(plugin),
+        settings=SuiteRunSettings(
+            max_attempts_per_case=None,
+            inter_attempt_delay_s=inter_attempt_delay_s,
+            on_attempt_complete=_gps_stop_rule(),
+        ),
+        log=defaults.log,
+    ).run()
+
+
+class _FixedCaseGenerator(CaseGenerator):
+    """Serve exactly the operator-selected campaign cases, in order.
+
+    The campaign runs a caller-chosen subset in a caller-chosen order, which
+    the plugin's own generator does not express.
+    """
+
+    def __init__(self, cases: list[Any]) -> None:
+        self._cases = list(cases)
+
+    def iter_cases(self) -> Iterator[Any]:
+        return iter(self._cases)
+
+
+def _gps_attempt_dir_factory(plugin: Any) -> Callable[[Any, Any, int], Path]:
+    """Wrap the plugin factory so a used directory is never reused.
+
+    `next_available_attempt_index` skipped occupied directories in the old
+    loop; SuiteRunner asks the manifest for the index directly, so the skip
+    has to live in the factory to keep attempt-directory naming identical.
+    """
+    factory = plugin.attempt_dir_factory()
+
+    def _make(manifest: Any, case: Any, attempt_index: int) -> Path:
+        while factory(manifest, case, attempt_index).exists():
+            attempt_index += 1
+        return factory(manifest, case, attempt_index)
+
+    return _make
+
+
+class _GpsCampaignRunner:
+    """Re-attach the campaign attempt metadata the old loop passed by hand.
+
+    The scheduler supplies `pass_index`; these three keys are campaign facts
+    the scheduler has no reason to know, so the lane merges them in. Keys the
+    scheduler already set win, and `campaign_round_index` keeps its old name
+    for the pass number so attempt context is unchanged.
+    """
+
+    def __init__(
+        self,
+        inner: Any,
+        *,
+        campaign_mode: str,
+        workflow_target_runs: int,
+    ) -> None:
+        self._inner = inner
+        self._campaign_mode = campaign_mode
+        self._workflow_target_runs = workflow_target_runs
+
+    def run(self, **kwargs: Any) -> AttemptRecord:
+        metadata = dict(kwargs.pop("attempt_metadata", None) or {})
+        merged = {
+            "campaign_mode": self._campaign_mode,
+            "campaign_round_index": metadata.get("pass_index"),
+            "workflow_target_runs": self._workflow_target_runs,
+        }
+        merged.update(metadata)
+        return self._inner.run(attempt_metadata=merged, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+def _gps_stop_rule() -> Callable[[AttemptRecord], str | None]:
+    """GPS campaign stop rule: fatal on workflow failure, tolerant otherwise.
+
+    A workflow failure ends the campaign with zero automatic retries. A
+    workflow-complete run whose behavior was not accepted is preserved and
+    the campaign continues, because the physical repetition was still spent.
+    """
+
+    def _classify(record: AttemptRecord) -> str | None:
+        if not _workflow_complete_live_record(record):
+            return (
+                "ERROR: GPS round-robin campaign stopped after workflow "
+                "failure: "
+                f"case={record.case_id} status={record.status.value} "
+                f"workflow_status="
+                f"{record.plugin_manifest_fields.get('workflow_status')}"
             )
+        if not _accepted_live_record(record):
             defaults.log(
-                f"[gps_campaign] {case.case_id}: workflow_run={target_run_index} "
-                f"attempt={attempt_index} root={attempt_dir}"
+                "[gps_campaign] accepted repetition not recorded; workflow "
+                "run is preserved and campaign continues: "
+                f"case={record.case_id} verdict="
+                f"{record.verdict.reason if record.verdict else 'missing'} "
+                f"accepted_observation="
+                f"{accepted_observation_from_attempt(_record_manifest_fields(record))} "
+                f"stimulus_fidelity_status="
+                f"{record.plugin_manifest_fields.get('stimulus_fidelity_status')}"
             )
-            record = runner.run(
-                case=case,
-                target_run_index=target_run_index,
-                attempt_index=attempt_index,
-                attempt_dir=attempt_dir,
-                attempt_metadata={
-                    "campaign_mode": campaign_mode,
-                    "campaign_round_index": round_index,
-                    "workflow_target_runs": runs_per_case,
-                },
-            )
-            if not _workflow_complete_live_record(record):
-                raise SystemExit(
-                    "ERROR: GPS round-robin campaign stopped after workflow "
-                    "failure: "
-                    f"case={case.case_id} status={record.status.value} "
-                    f"workflow_status="
-                    f"{record.plugin_manifest_fields.get('workflow_status')}"
-                )
-            if not _accepted_live_record(record):
-                defaults.log(
-                    "[gps_campaign] accepted repetition not recorded; workflow "
-                    "run is preserved and campaign continues: "
-                    f"case={case.case_id} verdict="
-                    f"{record.verdict.reason if record.verdict else 'missing'} "
-                    f"accepted_observation="
-                    f"{accepted_observation_from_attempt(_record_manifest_fields(record))} "
-                    f"stimulus_fidelity_status="
-                    f"{record.plugin_manifest_fields.get('stimulus_fidelity_status')}"
-                )
-            if inter_attempt_delay_s > 0:
-                time.sleep(inter_attempt_delay_s)
+        return None
+
+    return _classify
 
 
 def _workflow_complete_live_record(record: AttemptRecord) -> bool:
@@ -562,14 +630,6 @@ def _record_manifest_fields(record: AttemptRecord) -> dict[str, Any]:
     fields.setdefault("status", record.status.value)
     fields.setdefault("artifacts", dict(record.artifacts))
     return fields
-
-
-def _workflow_complete_count(plugin: Any, case: Any) -> int:
-    counter = getattr(plugin.manifest, "workflow_complete_count", None)
-    if callable(counter):
-        typed_counter = cast(Callable[[Any], int], counter)
-        return int(typed_counter(case))
-    return 0
 
 
 def _write_campaign_contract(

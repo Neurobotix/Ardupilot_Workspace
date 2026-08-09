@@ -82,6 +82,16 @@ class GpsFailureManifest(Manifest):
                 count += 1
         return count
 
+    def progress_count(self, case: TestCase) -> int:
+        """Schedule on workflow completion, not behavior acceptance.
+
+        A GPS run that flew and injected cleanly is a spent physical
+        repetition even when the observed behavior was not accepted, so it
+        counts toward the campaign target. Scheduling on `accepted_count`
+        would re-fly those runs.
+        """
+        return self.workflow_complete_count(case)
+
     def workflow_complete_count(self, case: TestCase) -> int:
         count = 0
         for attempt in self.load().get("attempts", []):
