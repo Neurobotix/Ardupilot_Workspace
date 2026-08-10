@@ -12,7 +12,9 @@
 - Evidence standard: `governance/standards/evidence.md`
 - Records lifecycle standard: `governance/standards/records_lifecycle.md`
 - Human evidence workflow: `docs/operations/evidence_workflow.md`
-- Presentation template: `docs/presentations/README.md`
+- Presentation template (local-only; `docs/presentations/` is untracked and
+  absent from a fresh clone):
+  `governance/runbooks/features/presentation_template/plan.md`
 - Evidence catalog: `evidence/indexes/evidence_catalog.md`
 - Evidence report templates: `evidence/templates/`
 - Runbook layout overview: `governance/runbooks/README.md`

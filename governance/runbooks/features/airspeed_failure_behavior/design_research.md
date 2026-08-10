@@ -422,7 +422,10 @@ record:
 - CTE wind-envelope evidence (envelope edge ~14–17 m/s resultant wind; supports
   keeping fixed wind at 5 m/s):
   `evidence/reports/features/2026-06-02_cte_wind_envelope_result.md`,
-  `docs/presentations/platform_briefing/cte_result_brief.md`.
+  and the derived briefing deck
+  `docs/presentations/platform_briefing/cte_result_brief.md` (local-only:
+  `docs/presentations/` is untracked, so this path does not resolve in a
+  clone — the evidence report above is the citable source).
 - Default lane overlay (no `SIM_ARSPD_*` set):
   `config/overlays/plane_airspeed.parm`.
 

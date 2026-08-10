@@ -4,7 +4,9 @@ Human-facing current documentation belongs here. Use this tree for operating,
 configuring, troubleshooting, and understanding the workspace.
 
 Presentation templates for human-facing project communication live under
-`docs/presentations/`.
+`docs/presentations/`, which is local-only and deliberately untracked. That
+tooling is not distributed with the repository and is absent from a fresh
+clone. See `governance/runbooks/features/presentation_template/plan.md`.
 
 ## Naming
 

@@ -2,6 +2,34 @@
 
 ## 2026-08-10
 
+- The workspace cutover rollback runbook no longer sends an operator to a file
+  that does not exist. Steps 2 and "Status After Rollback" named
+  `docs/operations/migration_status.md`, which was removed and replaced by
+  `docs/operations/workspace_status.md`; both now name the current file. This
+  was a live operational instruction, not tidiness — the stale path would have
+  been followed mid-incident. Found by the 2026-08-10 document inventory audit.
+  Not fixed here: the same runbook lists `make test-parity` as a rollback
+  signal, and that target does not exist in the `Makefile` (reported, out of
+  scope). `evidence/indexes/evidence_catalog.md` carries the same stale
+  reference and was deliberately left alone pending an evidence-index policy
+  decision.
+- `docs/presentations/` is documented as local-only and deliberately untracked,
+  which it always was. `.gitignore` is correct and unchanged; the documents
+  describing that tree as canonical were wrong. The presentation-template
+  feature plan now states that the tooling exists only on an operator's machine
+  and is absent from a fresh clone, keeping the `npm` steps as local workflow
+  rather than repository build steps. `docs/README.md` and `.ai/index.md` said
+  the same thing implicitly and were corrected; the `.ai/index.md` entry pointed
+  at `docs/presentations/README.md`, a file no clone contains, and now points at
+  the plan.
+- The CTE wind-envelope brief cited from
+  `governance/runbooks/features/airspeed_failure_behavior/design_research.md` is
+  labelled local-only rather than repointed. Its content is already carried by
+  the tracked evidence report cited beside it, and the brief is a derived
+  briefing artifact of that report; dropping the citation would have erased
+  provenance. This follows the existing labelling precedent in
+  `evidence/reports/features/2026-06-02_pillar_a_flight_results.md`.
+
 - Campaign-lane unit tests now follow one naming convention,
   `test_<lane>_<subject>.py`, where `<lane>` is the registered plugin name in
   `cli/_registry.py`. Previously both `test_gps_failure_*` and `test_gps_*`
