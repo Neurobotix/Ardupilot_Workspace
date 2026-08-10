@@ -60,7 +60,7 @@ status docs when practical. Do not promote raw runtime trees blindly.
 
 1. Stop the failing `workspace_next` run without editing the old workspace.
 2. Preserve the proof above and mark the production claim as under rollback
-   review in `.ai/current.md` and `docs/operations/migration_status.md`.
+   review in `.ai/current.md` and `docs/operations/workspace_status.md`.
 3. Use the old workspace only for the bounded production fallback run needed to
    restore service.
 4. Keep `workspace_next` evidence and runtime output in their governed homes so
@@ -73,7 +73,7 @@ After fallback, update:
 
 - the cutover ADR status or a superseding decision record;
 - the cutover evidence report or a new rollback report;
-- `docs/operations/migration_status.md`;
+- `docs/operations/workspace_status.md`;
 - `.ai/current.md` and `.ai/issues/open.md`;
 - any README, onboarding, launch-target, vehicle, or campaign status page that
   named the rolled-back production truth.
