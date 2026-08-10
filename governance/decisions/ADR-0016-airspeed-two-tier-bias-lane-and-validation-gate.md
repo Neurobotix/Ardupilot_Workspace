@@ -65,7 +65,7 @@ its BIN proves all of:
 
 A run failing any check is classed `mechanism_unverified` and is not an accepted
 observation. The gate is implemented analysis-side
-(`tests/unit/test_airspeed_mechanism_gate.py` plus the gate module) and runs on
+(`tests/unit/test_airspeed_failure_mechanism_gate.py` plus the gate module) and runs on
 the BIN of every cell before interpretation. The gate is built and unit-tested
 before any new flight.
 

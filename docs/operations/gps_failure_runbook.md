@@ -231,9 +231,9 @@ PYTHONPATH=src ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_gps
 PYTHONPATH=src ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure --live-phase2-round-robin-campaign --confirm-live-phase2
 PYTHONPATH=src ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_gps_failure --dry-run --case slow_drift_0p5_mps --reference-latitude-deg -35.363262 --preview-elapsed-s 90
 PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_failure_mavlink.py
-PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_failure_phase2_path.py
-PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_failure_phase1.py
-PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_mechanism_gate.py
+PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_failure_runtime_path.py
+PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_failure_campaign_contract.py
+PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_failure_mechanism_gate.py
 PYTHONPATH=src ./env/bin/python3 -m pytest tests/unit/test_gps_failure_readiness.py
 ```
 

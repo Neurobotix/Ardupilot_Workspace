@@ -33,7 +33,7 @@ PHASE_H_GATE_PROOFS: dict[str, dict[str, Any]] = {
         "proof_refs": [
             "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/monitor.py",
             "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/stimulus.py",
-            "tests/unit/test_gps_failure_phase2_path.py",
+            "tests/unit/test_gps_failure_runtime_path.py",
             "docs/operations/gps_failure_runbook.md",
         ],
         "proof_summary": (
@@ -48,7 +48,7 @@ PHASE_H_GATE_PROOFS: dict[str, dict[str, Any]] = {
         "proof_refs": [
             "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py",
             "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/analyzers.py",
-            "tests/unit/test_gps_failure_phase2_path.py",
+            "tests/unit/test_gps_failure_runtime_path.py",
         ],
         "proof_summary": (
             "Post-cleanup BIN analysis writes stimulus_fidelity.json and "
@@ -62,8 +62,8 @@ PHASE_H_GATE_PROOFS: dict[str, dict[str, Any]] = {
         "proof_refs": [
             "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/manifest.py",
             "src/sim_ard_gaw/campaigns/test_suite/core/manifest.py",
-            "tests/unit/test_gps_failure_phase1.py",
-            "tests/unit/test_gps_failure_phase2_path.py",
+            "tests/unit/test_gps_failure_campaign_contract.py",
+            "tests/unit/test_gps_failure_runtime_path.py",
         ],
         "proof_summary": (
             "Terminal rows keep workflow_status, stimulus_fidelity_status, "
@@ -77,7 +77,7 @@ PHASE_H_GATE_PROOFS: dict[str, dict[str, Any]] = {
         "proof_refs": [
             "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py",
             "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/analyzers.py",
-            "tests/unit/test_gps_failure_phase2_path.py",
+            "tests/unit/test_gps_failure_runtime_path.py",
         ],
         "proof_summary": (
             "gps_lifecycle_windows.json is required and is the ordered evidence "
@@ -90,7 +90,7 @@ PHASE_H_GATE_PROOFS: dict[str, dict[str, Any]] = {
         "label": "hard-denial transient visibility gate",
         "proof_refs": [
             "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py",
-            "tests/unit/test_gps_failure_phase2_path.py",
+            "tests/unit/test_gps_failure_runtime_path.py",
             "docs/architecture/gps_failure_lane.md",
         ],
         "proof_summary": (
@@ -103,7 +103,7 @@ PHASE_H_GATE_PROOFS: dict[str, dict[str, Any]] = {
         "label": "source-proof label gate",
         "proof_refs": [
             "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/source_contract.py",
-            "tests/unit/test_gps_failure_phase2_path.py",
+            "tests/unit/test_gps_failure_runtime_path.py",
             "docs/architecture/gps_failure_lane.md",
         ],
         "proof_summary": (
@@ -118,7 +118,7 @@ PHASE_H_GATE_PROOFS: dict[str, dict[str, Any]] = {
         "proof_refs": [
             "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/bin_analysis.py",
             "src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/monitor.py",
-            "tests/unit/test_gps_failure_phase2_path.py",
+            "tests/unit/test_gps_failure_runtime_path.py",
         ],
         "proof_summary": (
             "attitude_altitude_envelope.json declares live telemetry as runtime "

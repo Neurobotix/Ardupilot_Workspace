@@ -210,7 +210,7 @@ def _accepted_attempt(**updates: Any) -> dict[str, Any]:
     return attempt
 
 
-class GpsFailurePhase1Tests(unittest.TestCase):
+class GpsFailureCampaignContractTests(unittest.TestCase):
     def test_mission_asset_uses_final_science_observation_geometry(self) -> None:
         mission_path = ROOT / "assets/missions/gps_failure_behavior_mission.waypoints"
         self.assertTrue(mission_path.is_file())

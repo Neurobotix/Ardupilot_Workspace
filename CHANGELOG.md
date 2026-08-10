@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-08-10
+
+- Campaign-lane unit tests now follow one naming convention,
+  `test_<lane>_<subject>.py`, where `<lane>` is the registered plugin name in
+  `cli/_registry.py`. Previously both `test_gps_failure_*` and `test_gps_*`
+  named the same lane, so no glob could answer "which tests cover lane X";
+  `test_<lane>_*` is now a complete answer, which the planned per-lane
+  conformance check consumes. Renames (via `git mv`, history preserved):
+  - `test_airspeed_failure_phase1.py` → `test_airspeed_failure_campaign_contract.py`
+  - `test_airspeed_mechanism_gate.py` → `test_airspeed_failure_mechanism_gate.py`
+  - `test_airspeed_tailwind_phase2.py` → `test_airspeed_failure_tailwind.py`
+  - `test_gps_failure_phase1.py` → `test_gps_failure_campaign_contract.py`
+  - `test_gps_failure_phase2_path.py` → `test_gps_failure_runtime_path.py`
+  - `test_gps_mechanism_gate.py` → `test_gps_failure_mechanism_gate.py`
+  - `test_gps_launch_targets.py` → `test_gps_failure_launch_targets.py`
+  - `test_wind_world_safety.py` → `test_wind_matrix_world_safety.py`
+- Migration-phase names are replaced by subject names, because a phase number
+  records when a file was written, not what it tests. The phase-labelled test
+  classes inside the renamed files were renamed to match.
+- The convention is recorded as a "must" in `tests/README.md`.
+- `PHASE_H_GATE_PROOFS` in `plugins/gps_failure/readiness.py` cites test files
+  by path as proof references; those strings were updated so the readiness
+  report keeps pointing at files that exist. No behavior change.
+- No test was added, removed, weakened, or skipped: 553 passed / 506 subtests
+  before and after.
+
 ## 2026-08-09
 
 - Round-robin scheduling is reachable through one path for every campaign

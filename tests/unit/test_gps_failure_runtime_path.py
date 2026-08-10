@@ -487,7 +487,7 @@ def _ctx(tmp: Path):
     )
 
 
-class GpsFailurePhase2SourceContractTests(unittest.TestCase):
+class GpsFailureSourceContractTests(unittest.TestCase):
     def test_required_live_readbacks_include_injected_knee_and_source_params(self) -> None:
         names = required_live_readback_names({"SIM_GPS1_JAM": 1.0})
 
@@ -718,7 +718,7 @@ class GpsFailurePhase2SourceContractTests(unittest.TestCase):
             pos_test_ratio_from_xkf4_sp(-1)
 
 
-class GpsFailurePhase2MavlinkTelemetryTests(unittest.TestCase):
+class GpsFailureMavlinkTelemetryTests(unittest.TestCase):
     def test_connect_mavlink_uses_factory_only_when_supplied(self) -> None:
         calls: list[tuple[str, float]] = []
 
@@ -1077,7 +1077,7 @@ class GpsFailurePhase2MavlinkTelemetryTests(unittest.TestCase):
                 self.assertEqual(expected, fields["drift_cmd"])
 
 
-class GpsFailurePhase2BinAnalysisTests(unittest.TestCase):
+class GpsFailureBinAnalysisTests(unittest.TestCase):
     def test_xkf4_primary_core_comes_from_pi_and_sp_squares_to_ratio(self) -> None:
         result = extract_xkf4_mechanism(
             [
@@ -2618,7 +2618,7 @@ class GpsFailurePhase2BinAnalysisTests(unittest.TestCase):
             )
 
 
-class GpsFailurePhase2CliTests(unittest.TestCase):
+class GpsFailureCliTests(unittest.TestCase):
     def test_live_cli_requires_explicit_confirmation(self) -> None:
         with self.assertRaises(SystemExit):
             _parse_args(["--live-case", "nominal"])
@@ -3018,7 +3018,7 @@ class GpsFailurePhase2CliTests(unittest.TestCase):
                 )
 
 
-class GpsFailurePhase2MonitorTests(unittest.TestCase):
+class GpsFailureMonitorTests(unittest.TestCase):
     def test_source_contract_uses_pre_injection_flags_not_post_fault_flags(self) -> None:
         ctx = _ctx(ROOT / "var" / "tmp_test_gps_phase2_pre_source_contract")
         live = _LiveGpsMonitor(
@@ -3882,7 +3882,7 @@ class GpsFailurePhase2MonitorTests(unittest.TestCase):
         self.assertTrue(observation["source_contract_ok"])
 
 
-class GpsFailurePhase2AdapterTests(unittest.TestCase):
+class GpsFailureAdapterTests(unittest.TestCase):
     def test_gps_plugin_does_not_depend_on_sibling_plugins(self) -> None:
         plugin_dir = (
             ROOT

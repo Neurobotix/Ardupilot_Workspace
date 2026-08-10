@@ -86,7 +86,7 @@ interpretable. The per-window verdicts, the separate source-rejection and
 parameter-disable thresholds, and the full window list are unchanged.
 
 Regression test (fails pre-fix, passes post-fix):
-`tests/unit/test_airspeed_mechanism_gate.py::MechanismGateScheduleExtractionTests::test_ramp_verified_window_not_erased_by_later_rejection`.
+`tests/unit/test_airspeed_failure_mechanism_gate.py::MechanismGateScheduleExtractionTests::test_ramp_verified_window_not_erased_by_later_rejection`.
 
 The fix was not made to match the frozen expectations; it corrects a verified
 window being masked by a later rejected window, which the Chunk 3 contract

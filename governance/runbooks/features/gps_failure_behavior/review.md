@@ -127,11 +127,11 @@ claim was performed for this work; every fix is no-SITL.
 
 Checks actually run for this work (all exit 0):
 
-- `pytest tests/unit/test_gps_failure_phase1.py tests/unit/test_gps_mechanism_gate.py
+- `pytest tests/unit/test_gps_failure_campaign_contract.py tests/unit/test_gps_failure_mechanism_gate.py
   tests/unit/test_gps_failure_mavlink.py tests/unit/test_gps_failure_readiness.py`
   → 123 passed.
-- Airspeed regression `pytest tests/unit/test_airspeed_failure_phase1.py
-  tests/unit/test_airspeed_mechanism_gate.py` → passed (164 total with the GPS
+- Airspeed regression `pytest tests/unit/test_airspeed_failure_campaign_contract.py
+  tests/unit/test_airspeed_failure_mechanism_gate.py` → passed (164 total with the GPS
   suite).
 - `pyright` over the GPS plugin, CLI, and four test files → 0 errors, 0 warnings.
 - `run_gps_failure --list-cases | --probe-schema | --preflight |
@@ -272,12 +272,12 @@ readback, BIN/log parsing, or evidence claim was performed.
 
 Checks actually run for this HIGH-finding work (all exit 0):
 
-- `pytest tests/unit/test_gps_failure_phase1.py tests/unit/test_gps_mechanism_gate.py
+- `pytest tests/unit/test_gps_failure_campaign_contract.py tests/unit/test_gps_failure_mechanism_gate.py
   tests/unit/test_gps_failure_mavlink.py tests/unit/test_gps_failure_readiness.py`
   → **150 passed, 178 subtests passed** (132 → 150 with the new H1
   regression tests, including the trigger-metadata follow-up below).
-- Airspeed regression `pytest tests/unit/test_airspeed_failure_phase1.py
-  tests/unit/test_airspeed_mechanism_gate.py` → **41 passed**.
+- Airspeed regression `pytest tests/unit/test_airspeed_failure_campaign_contract.py
+  tests/unit/test_airspeed_failure_mechanism_gate.py` → **41 passed**.
 - Focused `pyright` over the GPS plugin, CLI, and four test files →
   **0 errors, 0 warnings, 0 informations** (a new-pyright-version notice is not a
   code failure).
@@ -359,7 +359,7 @@ identities:
   duplicating an SDF only to produce a GPS filename was unnecessary.
 - Shared `build_plane_param_args()` and all existing targets are unchanged;
   `plane-cte` remains the airspeed/CTE lane.
-- Coverage: `tests/unit/test_gps_launch_targets.py` (10 no-SITL structural
+- Coverage: `tests/unit/test_gps_failure_launch_targets.py` (10 no-SITL structural
   tests). Governance: ADR-0021 2026-07-13 amendment and `design_adrs.md`.
 
 This is structural only. `plane-gps` / `gazebo-plane-gps` have not been
@@ -467,8 +467,8 @@ no-SITL acceptance: it gates the plugin foundation, not any live result.
   import (Chunk 5).
 - [x] Lane wired into the shared suite path; `--preflight` readiness report with
   explicit live blockers and `ready_for_live_run=false` (Chunk 6).
-- [x] No-SITL unit suite green (`test_gps_failure_phase1`,
-  `test_gps_mechanism_gate`, `test_gps_failure_mavlink`,
+- [x] No-SITL unit suite green (`test_gps_failure_campaign_contract`,
+  `test_gps_failure_mechanism_gate`, `test_gps_failure_mavlink`,
   `test_gps_failure_readiness`).
 - [x] Code review of Chunks 4–6 recorded and findings resolved. The six
   confirmed BLOCKERs are resolved (see "Phase 1 Strict-Review Blocker Resolution
@@ -533,11 +533,11 @@ Checks actually run for this review (all exit 0):
 
 - `bash -n src/sim_ard_gaw/launch/launch.sh`, `bash -n scripts/ops/launch.sh`,
   `scripts/ops/launch.sh help` — no launch target invoked.
-- `pytest test_gps_failure_phase1 test_gps_mechanism_gate test_gps_failure_mavlink
+- `pytest test_gps_failure_campaign_contract test_gps_failure_mechanism_gate test_gps_failure_mavlink
   test_gps_failure_readiness` → **153 passed, 178 subtests**; plus discovered
-  `test_gps_launch_targets` → **10 passed** (163 GPS tests total).
-- Airspeed regression `pytest test_airspeed_failure_phase1
-  test_airspeed_mechanism_gate` → **41 passed**.
+  `test_gps_failure_launch_targets` → **10 passed** (163 GPS tests total).
+- Airspeed regression `pytest test_airspeed_failure_campaign_contract
+  test_airspeed_failure_mechanism_gate` → **41 passed**.
 - Focused `pyright` over the GPS plugin, CLI, and four test files →
   **0 errors, 0 warnings, 0 informations**.
 - `run_gps_failure --list-cases | --probe-schema | --preflight |

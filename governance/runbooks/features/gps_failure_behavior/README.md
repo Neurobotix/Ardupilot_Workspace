@@ -62,8 +62,8 @@ through live Phase-2 measurement.
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/readiness.py` | No-SITL integration-readiness report (Chunk 6) |
 | `src/sim_ard_gaw/campaigns/test_suite/cli/run_gps_failure.py` | CLI entry point (`--list-cases`, `--dry-run`, `--probe-schema`, `--preflight`) |
 | `src/sim_ard_gaw/campaigns/test_suite/cli/_registry.py` | Registry key `gps_failure` |
-| `tests/unit/test_gps_failure_phase1.py` | No-SITL unit tests |
-| `tests/unit/test_gps_mechanism_gate.py` | Synthetic mechanism-gate unit tests |
+| `tests/unit/test_gps_failure_campaign_contract.py` | No-SITL unit tests |
+| `tests/unit/test_gps_failure_mechanism_gate.py` | Synthetic mechanism-gate unit tests |
 | `tests/unit/test_gps_failure_mavlink.py` | No-SITL MAVLink/runtime contract tests with fake connections |
 | `tests/unit/test_gps_failure_readiness.py` | No-SITL integration-readiness and `--preflight` CLI tests |
 

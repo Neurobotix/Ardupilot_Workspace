@@ -64,7 +64,7 @@ records in `governance/decisions/`.
 | `src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure/` | Plugin package (config, defaults, case_generator, environment, stimulus, control, monitor, analyzers, manifest, plugin, mavlink, runtime) |
 | `src/sim_ard_gaw/campaigns/test_suite/cli/run_airspeed_failure.py` | CLI entry point (`--list-cases`, `--dry-run`, `--probe-schema`, `--live-smoke`, `--live-measurement-probes`, `--live-case`) |
 | `src/sim_ard_gaw/campaigns/test_suite/cli/_registry.py` | Registry key `airspeed_failure` |
-| `tests/unit/test_airspeed_failure_phase1.py` | No-SITL unit tests (27 tests as of the ramp/pulse implementation) |
+| `tests/unit/test_airspeed_failure_campaign_contract.py` | No-SITL unit tests (27 tests as of the ramp/pulse implementation) |
 
 ## Mission and Config
 

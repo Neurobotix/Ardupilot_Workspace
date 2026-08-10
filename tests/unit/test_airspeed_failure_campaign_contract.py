@@ -90,7 +90,7 @@ def _cases(config: AirspeedFailureConfig | None = None):
     return list(AirspeedFailureCaseGenerator(config or AirspeedFailureConfig()).iter_cases())
 
 
-class AirspeedFailurePhase1Tests(unittest.TestCase):
+class AirspeedFailureCampaignContractTests(unittest.TestCase):
     def test_stimulus_verification_distinguishes_no_sitl_and_live_terminal(self) -> None:
         case = _cases()[0]
         no_sitl = AirspeedFailureStimulus(AirspeedFailureConfig()).verify(

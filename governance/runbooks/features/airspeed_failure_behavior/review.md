@@ -161,11 +161,11 @@ Implemented gates:
 
 Checks:
 
-- `./env/bin/python3 -m compileall -q src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure src/sim_ard_gaw/campaigns/test_suite/cli/run_airspeed_failure.py tests/unit/test_airspeed_failure_phase1.py`:
+- `./env/bin/python3 -m compileall -q src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure src/sim_ard_gaw/campaigns/test_suite/cli/run_airspeed_failure.py tests/unit/test_airspeed_failure_campaign_contract.py`:
   PASS.
-- `./env/bin/python3 -m unittest tests.unit.test_airspeed_failure_phase1`:
+- `./env/bin/python3 -m unittest tests.unit.test_airspeed_failure_campaign_contract`:
   PASS, 18 tests.
-- `/home/ahmed/.local/bin/pyright src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure src/sim_ard_gaw/campaigns/test_suite/cli/run_airspeed_failure.py tests/unit/test_airspeed_failure_phase1.py`:
+- `/home/ahmed/.local/bin/pyright src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure src/sim_ard_gaw/campaigns/test_suite/cli/run_airspeed_failure.py tests/unit/test_airspeed_failure_campaign_contract.py`:
   PASS, 0 errors.
 - `python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_airspeed_failure --list-cases`:
   PASS.
@@ -341,11 +341,11 @@ Fixes:
 
 Checks:
 
-- `./env/bin/python3 -m unittest tests.unit.test_airspeed_failure_phase1`:
+- `./env/bin/python3 -m unittest tests.unit.test_airspeed_failure_campaign_contract`:
   PASS, 19 tests.
-- `/home/ahmed/.local/bin/pyright src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure src/sim_ard_gaw/campaigns/test_suite/cli/run_airspeed_failure.py tests/unit/test_airspeed_failure_phase1.py`:
+- `/home/ahmed/.local/bin/pyright src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure src/sim_ard_gaw/campaigns/test_suite/cli/run_airspeed_failure.py tests/unit/test_airspeed_failure_campaign_contract.py`:
   PASS, 0 errors.
-- `./env/bin/python3 -m compileall -q src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure src/sim_ard_gaw/campaigns/test_suite/cli/run_airspeed_failure.py tests/unit/test_airspeed_failure_phase1.py`:
+- `./env/bin/python3 -m compileall -q src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure src/sim_ard_gaw/campaigns/test_suite/cli/run_airspeed_failure.py tests/unit/test_airspeed_failure_campaign_contract.py`:
   PASS.
 - `source setup.bash && ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_airspeed_failure --list-cases`:
   PASS.
@@ -378,9 +378,9 @@ surface after remediation.
 
 Checks:
 
-- `./env/bin/python3 -m unittest tests.unit.test_airspeed_failure_phase1`:
+- `./env/bin/python3 -m unittest tests.unit.test_airspeed_failure_campaign_contract`:
   PASS, 15 tests.
-- `/home/ahmed/.local/bin/pyright src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure src/sim_ard_gaw/campaigns/test_suite/cli/run_airspeed_failure.py tests/unit/test_airspeed_failure_phase1.py`:
+- `/home/ahmed/.local/bin/pyright src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure src/sim_ard_gaw/campaigns/test_suite/cli/run_airspeed_failure.py tests/unit/test_airspeed_failure_campaign_contract.py`:
   PASS, 0 errors.
 - `source setup.bash >/tmp/airspeed_phase1_setup.out && ./env/bin/python3 -m sim_ard_gaw.campaigns.test_suite.cli.run_airspeed_failure --list-cases`:
   PASS; listed `healthy_reference`, fixed fault cases, and v1 ratio cases.

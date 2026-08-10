@@ -337,7 +337,7 @@ The clean-run and workspace-built plugin policy is in
 ## Unit Tests
 
 ```bash
-./env/bin/python3 -m unittest tests.unit.test_airspeed_failure_phase1
+./env/bin/python3 -m unittest tests.unit.test_airspeed_failure_campaign_contract
 ```
 
 Covers case generation, parameter schema, injection trigger metadata,
