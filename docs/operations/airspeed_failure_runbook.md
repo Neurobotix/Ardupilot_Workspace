@@ -10,10 +10,13 @@ The fixed-case repetition matrix remains open as Phase 4B. **Live SITL runs are
 gated by ADR-0004 and require explicit operator authorization** — see the
 live-run section below.
 
-Tailwind counterpart support is currently **no-SITL only**. The named profile,
-36 km missions, distinct case IDs, and 17-attempt recipe are implemented, but
-healthy live validation has not been authorized or run. Do not describe the
-tailwind lane as verified.
+Tailwind counterpart support is no longer no-SITL only: the healthy DO15 gate
+passed on 2026-06-22, recorded in
+`governance/runbooks/features/airspeed_failure_behavior/review.md`. The two DO15
+P130 pulse attempts were reanalyzed on 2026-06-23 and are `clamp_verified` in
+`evidence/reports/features/2026-06-23_tailwind_pulse_evaluator_correction.md`.
+The remaining tailwind counterpart matrix is still open and not verified; do not
+describe the overall tailwind counterpart campaign lane as verified.
 
 Architecture doc:
 [docs/architecture/airspeed_failure_lane.md](../architecture/airspeed_failure_lane.md)
