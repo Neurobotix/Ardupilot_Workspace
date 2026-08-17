@@ -199,3 +199,117 @@ plugin-fixed reference BIN.
 - Keep an open migration issue until evidence-producing wind-matrix runs fail
   closed or are otherwise governed when the workspace Gazebo plugin build is
   missing and only the installed fallback remains.
+
+## Follow-Up Resolution
+
+Resolution date: 2026-08-17
+
+Disposition: Closed for the governed campaign-lane and operator-launcher paths
+listed below. The original incident narrative and consequences remain retained
+history under `governance/standards/records_lifecycle.md`, which keeps audits
+and incidents in `governance/audits/` while they are referenced and treats ADRs,
+audits, and evidence reports as records that are not deleted or rewritten simply
+because follow-up work finished.
+
+ADR-0004 now makes the policy explicit:
+`governance/decisions/ADR-0004-clean-run-and-workspace-plugin-policy.md:12`
+through
+`governance/decisions/ADR-0004-clean-run-and-workspace-plugin-policy.md:22`
+allow only `build/ardupilot_gazebo/libArduPilotPlugin.so`, forbid installed
+plugin fallback paths, and require launchers and wind-matrix runtime to fail
+closed when the workspace plugin binary is missing.
+
+Code verification:
+
+- `src/sim_ard_gaw/launch/launch.sh:54` through
+  `src/sim_ard_gaw/launch/launch.sh:55` define the workspace plugin build
+  directory and file. `src/sim_ard_gaw/launch/launch.sh:140` through
+  `src/sim_ard_gaw/launch/launch.sh:143` set
+  `GZ_SIM_SYSTEM_PLUGIN_PATH` to the workspace build directory only.
+  `src/sim_ard_gaw/launch/launch.sh:305` through
+  `src/sim_ard_gaw/launch/launch.sh:311` print a hard error and `exit 1` when
+  `build/ardupilot_gazebo/libArduPilotPlugin.so` is absent, and
+  `src/sim_ard_gaw/launch/launch.sh:314` through
+  `src/sim_ard_gaw/launch/launch.sh:317` abort if the plugin path is anything
+  other than the workspace build directory.
+- The operator launcher `scripts/ops/launch.sh:1` through
+  `scripts/ops/launch.sh:5` does not duplicate plugin checks, but it sets
+  `ARDUPILOT_WORKSPACE` and execs `src/sim_ard_gaw/launch/launch.sh`. The
+  relevant plane and Gazebo commands run `setup_environment` and
+  `check_environment` before launch, including `plane-cte`
+  (`src/sim_ard_gaw/launch/launch.sh:1063` through
+  `src/sim_ard_gaw/launch/launch.sh:1067`), `plane-gps`
+  (`src/sim_ard_gaw/launch/launch.sh:1075` through
+  `src/sim_ard_gaw/launch/launch.sh:1079`), `gazebo-plane-cte`
+  (`src/sim_ard_gaw/launch/launch.sh:1121` through
+  `src/sim_ard_gaw/launch/launch.sh:1124`),
+  `gazebo-plane-gps` (`src/sim_ard_gaw/launch/launch.sh:1131` through
+  `src/sim_ard_gaw/launch/launch.sh:1134`), and
+  `gazebo-plane-gps-airspeed`
+  (`src/sim_ard_gaw/launch/launch.sh:1136` through
+  `src/sim_ard_gaw/launch/launch.sh:1139`). Therefore operator-facing evidence
+  launches fail closed through the delegated governed launcher rather than
+  through a separate check in `scripts/ops/launch.sh`.
+- `wind_matrix` campaign-lane runs are covered. The plugin declares
+  `WORKSPACE_GAZEBO_PLUGIN_FILE` at
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/wind_matrix/defaults.py:32`
+  through
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/wind_matrix/defaults.py:35`.
+  Its `runtime_env()` raises `RuntimeError` before returning an environment when
+  the file is absent
+  (`src/sim_ard_gaw/campaigns/test_suite/plugins/wind_matrix/defaults.py:263`
+  through
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/wind_matrix/defaults.py:279`)
+  and otherwise sets `GZ_SIM_SYSTEM_PLUGIN_PATH` to the workspace build
+  directory only
+  (`src/sim_ard_gaw/campaigns/test_suite/plugins/wind_matrix/defaults.py:283`
+  through
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/wind_matrix/defaults.py:284`).
+  The wind-matrix runtime uses that environment for process launch
+  (`src/sim_ard_gaw/campaigns/test_suite/plugins/wind_matrix/runtime.py:56`
+  through
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/wind_matrix/runtime.py:70`).
+- `airspeed_failure` campaign-lane runs are covered. The plugin declares
+  `WORKSPACE_GAZEBO_PLUGIN_FILE` at
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure/defaults.py:24`
+  through
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure/defaults.py:25`.
+  Its `runtime_env()` raises `RuntimeError` before returning an environment when
+  the file is absent
+  (`src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure/defaults.py:266`
+  through
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure/defaults.py:272`)
+  and otherwise sets `GZ_SIM_SYSTEM_PLUGIN_PATH` to the workspace build
+  directory only
+  (`src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure/defaults.py:287`
+  through
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure/defaults.py:288`).
+  The airspeed-failure runtime uses that environment for process launch
+  (`src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure/runtime.py:97`
+  through
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/airspeed_failure/runtime.py:113`).
+- `gps_failure` campaign-lane runs are covered through the governed operator
+  launcher path. The plugin declares `WORKSPACE_GAZEBO_PLUGIN_FILE` at
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/defaults.py:22`
+  through
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/defaults.py:25`.
+  For live stack launches, `build_launch_plan()` uses
+  `scripts/ops/launch.sh` for both SITL and Gazebo
+  (`src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/environment.py:92`
+  through
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/environment.py:103`),
+  restricts GPS launch targets before launching
+  (`src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/environment.py:134`
+  through
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/environment.py:142`),
+  then launches the governed commands
+  (`src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/environment.py:165`
+  through
+  `src/sim_ard_gaw/campaigns/test_suite/plugins/gps_failure/environment.py:182`).
+  Because those commands exec `src/sim_ard_gaw/launch/launch.sh`, a missing
+  workspace plugin reaches the hard `exit 1` checks cited above instead of an
+  installed fallback.
+
+The follow-up action is therefore closed for evidence-producing `wind_matrix`,
+`airspeed_failure`, and `gps_failure` campaign-lane runs and for the
+operator-facing launcher paths they use.
