@@ -1,6 +1,8 @@
-# Airspeed Failure Lane
+# Airspeed Failure Campaign Lane
 
-The airspeed failure lane deliberately degrades or corrupts the simulated
+## Purpose & Scope
+
+The airspeed failure campaign lane deliberately degrades or corrupts the simulated
 airspeed signal on a Mini Talon ArduPlane SITL + Gazebo stack, then records
 what the aircraft does. The goal is **behavior characterization** — not
 safety certification and not recovery-controller design.
@@ -9,7 +11,10 @@ This is the second `test_suite` plugin family alongside the CTE wind-matrix
 lane. CTE is not the primary score here; it can be retained only as optional
 supporting path-quality context when an attempt completes enough route geometry.
 
-Current status:
+This is a fault-injection profile campaign lane; see
+`governance/standards/lane_documentation.md`.
+
+## Status
 
 - Phase 0 (design lock): accepted 2026-06-03.
 - Phase 1 (no-SITL plugin foundation): accepted 2026-06-05.
@@ -36,7 +41,13 @@ The 2026-06-14 acceptance is a bounded behavior-characterization claim, not a
 safety claim and not full fixed-case lane acceptance. Do not treat Phase 2 smoke
 as a complete behavior result; it is four-case raw measurement output only.
 
-## Default Stack
+## Simulation Lane & Stack
+
+This campaign lane runs on the CTE / airspeed simulation lane (`plane-cte` +
+`gazebo-plane-cte`). See `docs/architecture/campaign_lanes.md` for the registry
+row and `docs/architecture/simulation_lanes.md` for the simulation lane axis.
+
+### Default Stack
 
 | Item | Value |
 | --- | --- |
@@ -50,7 +61,9 @@ The aggressive high-wind CTE stress overlay lives separately in
 `config/overlays/plane_airspeed_cte_high_wind_aggressive.parm` and is not part
 of this lane's default stack.
 
-## Mission
+## Mission & Trigger
+
+### Mission
 
 The lane uses `assets/missions/airspeed_failure_behavior_mission.waypoints`, a
 purpose-built mission. The legacy `airspeed_validation_mission.waypoints` was
@@ -82,87 +95,14 @@ early RTL/failsafe (AUTO→RTL before the measurement legs finish) is classified
 `autopilot_contained`, not completion. The discriminator is the maximum mission
 seq reached at the AUTO→RTL transition.
 
-## Reference Wind
-
-Fixed Gazebo world-frame ENU: `x=-5, y=0, z=0` m/s. In Gazebo ENU
-(`+X=East, +Y=North`), `x=-5` is a westward-blowing wind — headwind on the
-Eastbound leg, tailwind on the Westbound leg. Expected healthy steady-state:
-Eastbound `ARSP≈15, GPS≈10, ARSP−GPS≈+5`; Westbound `ARSP≈15, GPS≈20,
-ARSP−GPS≈−5`.
-
-The wind is published via `gz topic` before mission start and must be strictly
-echo-verified before arming. Unverified wind = not an accepted observation.
-The fixed wind is kept well inside the CTE wind-envelope edge (~14–17 m/s
-resultant) so wind remains a controlled constant, not the independent variable.
-Decisions in ADR-0010.
-
-New continuous-study cases select a named profile instead of mutating that
-historical default:
-
-| Profile | Gazebo ENU vector | Eastbound expected `ARSP-GPS` |
-| --- | --- | --- |
-| `headwind_eastbound` | `x=-5,y=0,z=0` | approximately `+5 m/s` |
-| `tailwind_eastbound` | `x=+5,y=0,z=0` | approximately `-5 m/s` |
-
-The direction-neutral expectation is
-`-(wind_vector_enu dot measurement_track_unit_enu)`. Historical headwind case
-IDs and mission defaults remain unchanged.
-
-## Tailwind Counterpart Missions
-
-The no-SITL tailwind implementation adds one 36 km Eastbound geometry with two
-speed-source variants:
-
-- `assets/missions/airspeed_failure_eastbound_long_speed_15_mission.waypoints`
-  retains the historical `DO_CHANGE_SPEED=15` behavior;
-- `assets/missions/airspeed_failure_eastbound_long_cruise_follow_mission.waypoints`
-  contains no speed command and follows the selected overlay's
-  `AIRSPEED_CRUISE`.
-
-Both preserve seq 1–4, inject on entering seq 4 at 100 m AGL, contain no RTL,
-and are monitor-complete. The approved recipe is
-`config/campaigns/airspeed_failure_tailwind_counterparts.json`: 17 tailwind
-attempts, with the incomplete 2026-06-09 predecessor excluded. This recipe is
-configuration only and does not authorize or launch live work.
-
-Tailwind case IDs are:
-
-- `healthy_reference_tailwind`;
-- `ratio_bias_ramp_p10_to_p100_tailwind`;
-- `ratio_bias_ramp_p10_to_p200_tailwind`;
-- `ratio_bias_pulse_p10_to_p130_tailwind`.
-
-## Mechanism Analysis Contract
-
-`airspeed_mechanism_gate.json` is required analysis for scheduled counterpart
-cases. Schedule windows are anchored to the logged `SIM_ARSPD_RATIO` `PARM`
-transitions in the BIN clock; wall-clock injection timestamps are provenance,
-not BIN window boundaries. Raw-to-believed checks use only `CTUN.AsT=1`
-(`AIRSPEED_SENSOR`) rows. `ARSP.U` is retained separately because it reports
-the parameter enable/disable state and can lag the AHRS source switch. The
-protected upper equivalent-airspeed bound follows the ArduPilot source
-arithmetic:
-
-```text
-upper_EAS = (GPS.Spd + AHRS_WIND_MAX) / CTUN.E2T
-```
-
-TECS demand is checked in true-airspeed units against
-`intended_EAS * CTUN.E2T`. Pulse ladders evaluate every fault window and report
-both the first AHRS source rejection (`CTUN.AsT != 1`) and the first airspeed
-parameter disable (`ARSP.U=0`).
-The mechanism vocabulary is `clamp_verified`,
-`unclamped_tracking_verified`, `clamp_not_exercised`,
-`sensor_rejected_before_verification`, and `mechanism_unverified`.
-
-## Injection Trigger
+### Injection Trigger
 
 The fault is injected on **entering seq 4**: the first `MISSION_CURRENT`
 message with `seq == 4` after confirmed front-half progress (seq has been 1, 2,
 and 3), first-edge latched, never re-fired. A missed or late trigger is a
 `pre_injection_failure`, not a late injection. Decisions in ADR-0009.
 
-## Case Set
+## Fault Set & Cases
 
 ### Fixed Cases
 
@@ -261,6 +201,52 @@ ratio cases are resolved after clean boot by recomputing `SIM_ARSPD_RATIO` from
 the measured MAVLink `ARSPD_RATIO` readback before injection. Full calibration is
 a Phase 3 matrix item.
 
+## Measurement & Validity
+
+This lane documents its measurement contract as a mechanism-analysis contract
+plus a required-artifact list. That is weaker than the GPS lane's
+`Evidence Contracts`, which additionally separates stimulus fidelity from
+behavior classification and names an ordered lifecycle-window authority. The
+asymmetry is a known gap on this lane's side, recorded here rather than closed
+by copying GPS wording that no airspeed evidence supports.
+
+### Mechanism Analysis Contract
+
+`airspeed_mechanism_gate.json` is required analysis for scheduled counterpart
+cases. Schedule windows are anchored to the logged `SIM_ARSPD_RATIO` `PARM`
+transitions in the BIN clock; wall-clock injection timestamps are provenance,
+not BIN window boundaries. Raw-to-believed checks use only `CTUN.AsT=1`
+(`AIRSPEED_SENSOR`) rows. `ARSP.U` is retained separately because it reports
+the parameter enable/disable state and can lag the AHRS source switch. The
+protected upper equivalent-airspeed bound follows the ArduPilot source
+arithmetic:
+
+```text
+upper_EAS = (GPS.Spd + AHRS_WIND_MAX) / CTUN.E2T
+```
+
+TECS demand is checked in true-airspeed units against
+`intended_EAS * CTUN.E2T`. Pulse ladders evaluate every fault window and report
+both the first AHRS source rejection (`CTUN.AsT != 1`) and the first airspeed
+parameter disable (`ARSP.U=0`).
+The mechanism vocabulary is `clamp_verified`,
+`unclamped_tracking_verified`, `clamp_not_exercised`,
+`sensor_rejected_before_verification`, and `mechanism_unverified`.
+
+### Required Attempt Artifacts
+
+Each live attempt must produce:
+
+- `run_config.json`
+- `reference_wind.json`
+- `airspeed_injection.json`
+- `airspeed_behavior_summary.json`
+- `airspeed_signal_metrics.json`
+- `mission_progress.json`
+- `mode_timeline.json`
+- `altitude_speed_envelope.json`
+- `tecs_response.json` (optional when log fields unavailable, must be noted)
+
 ## Key `SIM_ARSPD_*` Semantics
 
 These are the most important caveats derived from reading the SITL source
@@ -293,6 +279,56 @@ directly. The case names can be misleading without them.
 For the full signal-chain derivation and parameter table, see
 [design_research.md](../../governance/runbooks/features/airspeed_failure_behavior/design_research.md).
 
+## Reference Wind
+
+Fixed Gazebo world-frame ENU: `x=-5, y=0, z=0` m/s. In Gazebo ENU
+(`+X=East, +Y=North`), `x=-5` is a westward-blowing wind — headwind on the
+Eastbound leg, tailwind on the Westbound leg. Expected healthy steady-state:
+Eastbound `ARSP≈15, GPS≈10, ARSP−GPS≈+5`; Westbound `ARSP≈15, GPS≈20,
+ARSP−GPS≈−5`.
+
+The wind is published via `gz topic` before mission start and must be strictly
+echo-verified before arming. Unverified wind = not an accepted observation.
+The fixed wind is kept well inside the CTE wind-envelope edge (~14–17 m/s
+resultant) so wind remains a controlled constant, not the independent variable.
+Decisions in ADR-0010.
+
+New continuous-study cases select a named profile instead of mutating that
+historical default:
+
+| Profile | Gazebo ENU vector | Eastbound expected `ARSP-GPS` |
+| --- | --- | --- |
+| `headwind_eastbound` | `x=-5,y=0,z=0` | approximately `+5 m/s` |
+| `tailwind_eastbound` | `x=+5,y=0,z=0` | approximately `-5 m/s` |
+
+The direction-neutral expectation is
+`-(wind_vector_enu dot measurement_track_unit_enu)`. Historical headwind case
+IDs and mission defaults remain unchanged.
+
+## Tailwind Counterpart Missions
+
+The no-SITL tailwind implementation adds one 36 km Eastbound geometry with two
+speed-source variants:
+
+- `assets/missions/airspeed_failure_eastbound_long_speed_15_mission.waypoints`
+  retains the historical `DO_CHANGE_SPEED=15` behavior;
+- `assets/missions/airspeed_failure_eastbound_long_cruise_follow_mission.waypoints`
+  contains no speed command and follows the selected overlay's
+  `AIRSPEED_CRUISE`.
+
+Both preserve seq 1–4, inject on entering seq 4 at 100 m AGL, contain no RTL,
+and are monitor-complete. The approved recipe is
+`config/campaigns/airspeed_failure_tailwind_counterparts.json`: 17 tailwind
+attempts, with the incomplete 2026-06-09 predecessor excluded. This recipe is
+configuration only and does not authorize or launch live work.
+
+Tailwind case IDs are:
+
+- `healthy_reference_tailwind`;
+- `ratio_bias_ramp_p10_to_p100_tailwind`;
+- `ratio_bias_ramp_p10_to_p200_tailwind`;
+- `ratio_bias_pulse_p10_to_p130_tailwind`.
+
 ## Behavior Classification
 
 The plugin classifies observed behavior and observation quality, not safety.
@@ -312,20 +348,6 @@ readback, pre-injection failure, or incomplete artifacts do not count.
 
 Decisions in ADR-0011.
 
-## Required Attempt Artifacts
-
-Each live attempt must produce:
-
-- `run_config.json`
-- `reference_wind.json`
-- `airspeed_injection.json`
-- `airspeed_behavior_summary.json`
-- `airspeed_signal_metrics.json`
-- `mission_progress.json`
-- `mode_timeline.json`
-- `altitude_speed_envelope.json`
-- `tecs_response.json` (optional when log fields unavailable, must be noted)
-
 ## Output Paths
 
 Raw runtime output: `var/runs/airspeed_failure_behavior_<timestamp>/`
@@ -344,7 +366,9 @@ Future full-lane or fixed-case Phase 4B packages should use
 `evidence/reports/features/<date>_airspeed_failure_behavior.md` only when dated
 evidence supports that wider acceptance.
 
-## Accepted Decisions
+## Decisions & References
+
+### Accepted Decisions
 
 | ADR | Subject |
 | --- | --- |
@@ -355,9 +379,31 @@ evidence supports that wider acceptance.
 | [ADR-0010](../../governance/decisions/ADR-0010-airspeed-failure-reference-wind.md) | Fixed reference wind x=−5, y=0, z=0 ENU |
 | [ADR-0011](../../governance/decisions/ADR-0011-airspeed-failure-behavior-classification.md) | Behavior-class vocabulary and observation-quality gating |
 
-## Feature Runbook
+### Proposed And Corrected Decisions
+
+The envelope-sensitivity work is **not** accepted, and part of it was corrected
+after the data came in. A reader who finds ADR-0012 or ADR-0014 must follow
+ADR-0015 before acting on either.
+
+| ADR | Status | Subject |
+| --- | --- | --- |
+| [ADR-0012](../../governance/decisions/ADR-0012-airspeed-envelope-sensitivity-matrix.md) | Proposed — partially corrected by ADR-0015 (2026-06-16) | Airspeed envelope sensitivity matrix |
+| [ADR-0013](../../governance/decisions/ADR-0013-airspeed-envelope-overlay-mechanism.md) | Proposed | Envelope overlay mechanism implementing ADR-0012 |
+| [ADR-0014](../../governance/decisions/ADR-0014-airspeed-plateau-metric-and-preregistered-predictions.md) | Proposed — P1 withdrawn by ADR-0015 (2026-06-16) | Ramp plateau metric and pre-registered predictions |
+| [ADR-0015](../../governance/decisions/ADR-0015-airspeed-ahrs-wind-max-clamp-correction.md) | **Accepted** | `AHRS_WIND_MAX` clamp correction to ADR-0012 and ADR-0014 |
+| [ADR-0016](../../governance/decisions/ADR-0016-airspeed-two-tier-bias-lane-and-validation-gate.md) | Proposed | Two-tier bias lane and mechanism validation gate |
+
+ADR-0015 is the correction of record: the `AIRSPEED_MAX` axis of the envelope
+matrix did not test what it intended, because `AIRSPEED_MAX` bounds *demanded*
+airspeed rather than *believed* airspeed. The observed plateau is the
+`AHRS_WIND_MAX` clamp, held constant across every cell. No run was deleted; the
+max18/max28 campaigns remain valid data under a corrected interpretation.
+
+### Runbooks
 
 The complete planning, implementation notes, and review history live under
 [governance/runbooks/features/airspeed_failure_behavior/](../../governance/runbooks/features/airspeed_failure_behavior/).
 
 How to run the plugin: [docs/operations/airspeed_failure_runbook.md](../operations/airspeed_failure_runbook.md).
+
+Documentation shape: `governance/standards/lane_documentation.md`.
