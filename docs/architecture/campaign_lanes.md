@@ -1,8 +1,23 @@
 # Campaign Lanes
 
-A **campaign lane** is an end-to-end fault investigation: a fault is injected
-into a running simulation, cases are swept, behavior is classified into
-verdicts, and evidence is produced. Campaign lanes are `test_suite` plugins.
+A **campaign lane** is an end-to-end investigation run against a live
+simulation: a difficulty is applied, cases are swept, outcomes are classified
+into verdicts, and evidence is produced. Campaign lanes are `test_suite`
+plugins.
+
+Campaign lanes come in two profiles, distinguished by where the difficulty
+comes from:
+
+- **Fault injection** — a lie is injected into a sensor while the world stays
+  honest (`airspeed_failure`, `gps_failure`). Outcomes are behavior bands and
+  runs are characterized, never scored PASS/FAIL.
+- **Environment sweep** — the world is made harder while the aircraft's sensors
+  stay honest (`wind_matrix`). Outcomes are a scored metric with success,
+  failure, and retry semantics.
+
+Both profiles share the same plugin spine; that is the framework chassis, not
+evidence that they are the same experiment. The documentation shape required of
+each profile is in `governance/standards/lane_documentation.md`.
 
 This is the canonical registry for that axis. It does **not** cover simulation
 lanes — the aircraft + world + launcher + bridge combinations a campaign lane

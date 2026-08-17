@@ -141,6 +141,8 @@ Read:
 
 - `governance/standards/documentation.md`
 - `governance/standards/records_lifecycle.md`
+- `governance/standards/lane_documentation.md` when the change touches a
+  campaign lane architecture document
 - `governance/audits/2026-05-20_phase3_docs_errata.md`
 
 Rules:
