@@ -8,6 +8,10 @@ for development helpers.
 (`pdf.py`, `theme.md`, `report_template.md`). It is a development helper, not
 the governed evidence workflow.
 
+`scripts/dev/decision_page/` builds a self-contained HTML page from a JSON
+list of decisions (one card per decision, a recommended option each, and an
+export of the answers). See its README for the spec.
+
 ## Naming
 
 - Shell scripts use `lower_snake_case.sh`.

@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decisions</title>
+<style>
+:root {
+  --bg: #f6f5f1; --surface: #ffffff; --ink: #1d1d1b; --muted: #6b6a64; --line: #e3e1da;
+  --accent: #2f5d50; --accent-soft: #e4eee9; --del: #a3402f; --del-soft: #f6e6e2;
+  --move: #2d5a8c; --move-soft: #e3ecf6; --keep: #5c5b55; --keep-soft: #ecebe6;
+  --warn: #8a5a00; --warn-soft: #fbf0d9; --chosen-ring: #1d1d1b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161615; --surface: #1f1f1d; --ink: #ecebe6; --muted: #9c9b94; --line: #33322f;
+    --accent: #8cc4ae; --accent-soft: #23332d; --del: #e58f7d; --del-soft: #3a2420;
+    --move: #8db6e3; --move-soft: #1f2c3b; --keep: #b9b8b1; --keep-soft: #2a2a27;
+    --warn: #e6b45c; --warn-soft: #3a2f1a; --chosen-ring: #ecebe6;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161615; --surface: #1f1f1d; --ink: #ecebe6; --muted: #9c9b94; --line: #33322f;
+  --accent: #8cc4ae; --accent-soft: #23332d; --del: #e58f7d; --del-soft: #3a2420;
+  --move: #8db6e3; --move-soft: #1f2c3b; --keep: #b9b8b1; --keep-soft: #2a2a27;
+  --warn: #e6b45c; --warn-soft: #3a2f1a; --chosen-ring: #ecebe6;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.86em; }
+.wrap { max-width: 860px; margin: 0 auto; padding: 0 16px 120px; }
+
+header.top { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+header.top .wrap { padding-top: 14px; padding-bottom: 12px; }
+.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+.stat { color: var(--muted); font-size: 13px; }
+.stat b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 10px; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+.spacer { flex: 1; }
+button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); padding: 7px 12px; }
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+button.small { padding: 4px 9px; font-size: 13px; }
+
+.intro { margin: 22px 0 8px; color: var(--muted); }
+.intro ol { margin: 6px 0 0; padding-left: 20px; }
+.intro b { color: var(--ink); }
+
+section.group { margin-top: 30px; }
+section.group > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+  margin: 0 0 4px; display: flex; gap: 8px; align-items: baseline; }
+section.group > p { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px;
+  margin-bottom: 12px; transition: opacity .2s; }
+.card.decided { opacity: .62; }
+.card.decided:hover, .card.decided:focus-within { opacity: 1; }
+.card .head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.id { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+.card h3 { margin: 0; font-size: 16px; flex: 1; min-width: 200px; }
+.size { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; }
+.chips { display: flex; gap: 6px; margin: 6px 0 8px; flex-wrap: wrap; }
+.chip { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--keep-soft); color: var(--keep); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.ok { background: var(--accent-soft); color: var(--accent); }
+.card p { margin: 4px 0; }
+.paths { margin: 8px 0; padding: 0; list-style: none; }
+.paths li { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.ifs { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 14px; margin: 8px 0 4px; }
+.ifs dt { color: var(--muted); }
+.ifs dd { margin: 0; }
+table.map { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 12.5px; }
+table.map td { padding: 3px 6px; border-top: 1px solid var(--line); font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
+table.map td.arrow { color: var(--muted); width: 1%; }
+
+.opts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; align-items: center; }
+.opt { position: relative; }
+.opt.rec::after { content: "recommended"; position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
+  white-space: nowrap; font-size: 10px; background: var(--accent); color: var(--bg); padding: 0 6px;
+  border-radius: 999px; letter-spacing: .02em; }
+.opt.chosen { outline: 2px solid var(--chosen-ring); outline-offset: 1px; font-weight: 600; }
+.opt.chosen.t-del { background: var(--del-soft); color: var(--del); border-color: var(--del); }
+.opt.chosen.t-move { background: var(--move-soft); color: var(--move); border-color: var(--move); }
+.opt.chosen.t-keep { background: var(--keep-soft); color: var(--keep); border-color: var(--keep); }
+.opt.chosen.t-neutral { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.notebtn { color: var(--muted); background: none; border: none; padding: 4px; text-decoration: underline; font-size: 13px; }
+textarea { width: 100%; margin-top: 8px; font: inherit; font-size: 14px; padding: 8px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink); min-height: 56px; }
+
+details.full { margin-top: 40px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+details.full summary { cursor: pointer; font-weight: 600; }
+.tablewrap { overflow-x: auto; margin-top: 10px; }
+table.inv { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.inv th, table.inv td { text-align: left; padding: 5px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+table.inv th { color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--surface); }
+input.search { width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; margin-top: 10px; }
+
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+  padding: 8px 14px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.show { opacity: 1; }
+.done-panel { margin-top: 28px; padding: 16px 18px; border-radius: 12px; background: var(--accent-soft); display: none; }
+.done-panel.show { display: block; }
+@media (max-width: 560px) { .ifs { grid-template-columns: 1fr; } .ifs dt { margin-top: 4px; } }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <div class="row">
+    <h1 id="title"></h1>
+    <span class="stat"><b id="nDone">0</b> of <b id="nAll">0</b> decided<span id="tallyWrap"> · <span id="tallyLabel"></span> <b id="tally">0</b></span></span>
+    <span class="spacer"></span>
+    <button class="small" id="onlyOpen">Hide decided</button>
+    <button class="small" id="acceptAll">Accept all recommended</button>
+    <button class="small primary" id="save">Save decisions</button>
+  </div>
+  <div class="bar"><i id="prog"></i></div>
+</div></header>
+
+<div class="wrap">
+  <div class="intro"><ol id="introList"></ol><p id="note" style="margin-top:8px"></p></div>
+  <div id="groups"></div>
+  <div class="done-panel" id="donePanel"><b>All decided.</b> Press <b>Save decisions</b> and send the result.</div>
+  <details class="full" id="tableBox" hidden>
+    <summary id="tableTitle"></summary>
+    <input class="search" id="q" placeholder="Filter rows">
+    <div class="tablewrap"><table class="inv"><thead><tr id="thead"></tr></thead><tbody id="tbody"></tbody></table></div>
+  </details>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const DATA = /*DATA*/null;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const md = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+const fmt = n => n >= 1073741824 ? (n/1073741824).toFixed(2)+' GB' : n >= 1048576 ? (n/1048576).toFixed(0)+' MB' : n >= 1024 ? (n/1024).toFixed(0)+' KB' : n+' B';
+const TONE = { delete: 'del', remove: 'del', move: 'move', track: 'move', merge: 'move', rename: 'move', keep: 'keep', skip: 'keep', later: 'keep' };
+const toneOf = o => o[2] || TONE[o[0]] || 'neutral';
+
+let state = {};
+try { state = JSON.parse(localStorage.getItem(DATA.storage_key) || '{}') || {}; } catch (e) { state = {}; }
+const persist = () => { try { localStorage.setItem(DATA.storage_key, JSON.stringify(state)); } catch (e) {} };
+let hideDone = false;
+
+$('#title').textContent = DATA.title;
+$('#introList').innerHTML = DATA.intro.map(li => `<li>${li}</li>`).join('');
+if (DATA.note) $('#note').innerHTML = md(DATA.note); else $('#note').remove();
+if (!DATA.tally) $('#tallyWrap').remove(); else $('#tallyLabel').textContent = DATA.tally.label || 'total';
+
+function render() {
+  const g = $('#groups'); g.innerHTML = '';
+  for (const s of DATA.sections) {
+    const cards = DATA.cards.filter(c => c.section === s.id);
+    if (!cards.length) continue;
+    const done = cards.filter(c => state[c.id]?.choice).length;
+    const sec = document.createElement('section'); sec.className = 'group';
+    sec.innerHTML = `<h2>${esc(s.title)} <span>${done}/${cards.length}</span></h2>${s.subtitle ? `<p>${md(s.subtitle)}</p>` : ''}`;
+    for (const c of cards) {
+      const st = state[c.id] || {};
+      if (hideDone && st.choice) continue;
+      const el = document.createElement('article');
+      el.className = 'card' + (st.choice ? ' decided' : '');
+      const map = c.mapping ? `<table class="map">${c.mapping.map(([o,n]) => `<tr><td>${esc(o)}</td><td class="arrow">→</td><td>${esc(n)}</td></tr>`).join('')}</table>` : '';
+      const ifs = (c.if_yes || c.if_no) ? `<dl class="ifs">${c.if_yes ? `<dt>If you approve</dt><dd>${md(c.if_yes)}</dd>` : ''}${c.if_no ? `<dt>If not</dt><dd>${md(c.if_no)}</dd>` : ''}</dl>` : '';
+      const dest = c.dest ? `<p><span style="color:var(--muted)">Destination:</span> <code>${esc(c.dest)}</code></p>` : '';
+      el.innerHTML = `
+        <div class="head"><span class="id">${esc(c.id)}</span><h3>${esc(c.title)}</h3><span class="size">${esc(c.size_label)}</span></div>
+        ${c.chips.length ? `<div class="chips">${c.chips.map(([l,t]) => `<span class="chip ${t}">${esc(l)}</span>`).join('')}</div>` : ''}
+        <p>${md(c.what)}</p>${c.why ? `<p>${md(c.why)}</p>` : ''}
+        ${map}${dest}${ifs}
+        ${c.paths.length ? `<ul class="paths">${c.paths.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
+        <div class="opts">
+          ${c.options.map(o => `<button class="opt t-${toneOf(o)} ${o[0]===c.rec?'rec':''} ${st.choice===o[0]?'chosen':''}" data-id="${esc(c.id)}" data-k="${esc(o[0])}">${esc(o[1])}</button>`).join('')}
+          <button class="notebtn" data-note="${esc(c.id)}">${st.note ? 'edit note' : 'add note'}</button>
+        </div>
+        ${st.noteOpen || st.note ? `<textarea data-ta="${esc(c.id)}" placeholder="Anything to add about this one">${esc(st.note||'')}</textarea>` : ''}`;
+      sec.appendChild(el);
+    }
+    g.appendChild(sec);
+  }
+  stats();
+}
+
+function stats() {
+  const all = DATA.cards.length;
+  const done = DATA.cards.filter(c => state[c.id]?.choice).length;
+  $('#nDone').textContent = done; $('#nAll').textContent = all;
+  if (DATA.tally) {
+    const sum = DATA.cards.filter(c => state[c.id]?.choice === DATA.tally.choice).reduce((a,c) => a + (c.size||0), 0);
+    $('#tally').textContent = fmt(sum);
+  }
+  $('#prog').style.width = (100*done/all) + '%';
+  $('#donePanel').classList.toggle('show', done === all);
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.k) {
+    const id = b.dataset.id; state[id] = state[id] || {};
+    state[id].choice = state[id].choice === b.dataset.k ? undefined : b.dataset.k;
+    persist(); render();
+  } else if (b.dataset.note) {
+    const id = b.dataset.note; state[id] = state[id] || {}; state[id].noteOpen = true; persist(); render();
+    const ta = document.querySelector(`textarea[data-ta="${CSS.escape(id)}"]`); if (ta) ta.focus();
+  }
+});
+document.addEventListener('input', e => {
+  const id = e.target.dataset?.ta; if (!id) return;
+  state[id] = state[id] || {}; state[id].note = e.target.value; persist();
+});
+$('#acceptAll').onclick = () => {
+  for (const c of DATA.cards) { state[c.id] = state[c.id] || {}; if (!state[c.id].choice) state[c.id].choice = c.rec; }
+  persist(); render(); toast('Recommended options filled in for every open card');
+};
+$('#onlyOpen').onclick = () => { hideDone = !hideDone; $('#onlyOpen').textContent = hideDone ? 'Show all' : 'Hide decided'; render(); };
+
+function toast(t) { const x = $('#toast'); x.textContent = t; x.classList.add('show'); setTimeout(() => x.classList.remove('show'), 2200); }
+
+$('#save').onclick = async () => {
+  const out = DATA.cards.map(c => {
+    const st = state[c.id] || {};
+    return { id: c.id, title: c.title, choice: st.choice || 'UNDECIDED', recommended: c.rec, note: st.note || '' };
+  });
+  const text = DATA.title + '\n' + out.map(o => `${o.id} ${o.choice}${o.note ? ' — ' + o.note.replace(/\n/g, ' ') : ''}`).join('\n');
+  const blob = new Blob([JSON.stringify({ title: DATA.title, saved: new Date().toISOString(), decisions: out }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = DATA.export_name;
+  document.body.appendChild(a); a.click(); a.remove();
+  try { await navigator.clipboard.writeText(text); toast('Saved to Downloads and copied to clipboard'); }
+  catch (e) { toast('Saved to Downloads'); }
+};
+
+if (DATA.table) {
+  const T = DATA.table;
+  $('#tableBox').hidden = false;
+  $('#tableTitle').textContent = `${T.title || 'Reference table'} (${T.rows.length} rows, reference only)`;
+  $('#thead').innerHTML = T.columns.map(c => `<th>${esc(c)}</th>`).join('');
+  const draw = q => {
+    q = (q || '').toLowerCase();
+    $('#tbody').innerHTML = T.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q))
+      .map(r => `<tr>${T.columns.map(c => `<td>${md(r[c])}</td>`).join('')}</tr>`).join('');
+  };
+  $('#q').oninput = e => draw(e.target.value);
+  draw('');
+}
+render();
+</script>
+</body>
+</html>

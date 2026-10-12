@@ -1,0 +1,44 @@
+{
+  "title": "Example cleanup decisions",
+  "note": "Nothing changes until the answers are sent back. Cards marked **not in backup** are deleted for good.",
+  "tally": {"choice": "delete", "label": "frees"},
+  "sections": [
+    {"id": "disk", "title": "Free disk space", "subtitle": "Big, regenerable, or duplicated files."},
+    {"id": "tidy", "title": "Tidy up", "subtitle": "Small, low-risk changes."}
+  ],
+  "cards": [
+    {
+      "id": "D01",
+      "section": "disk",
+      "title": "Old simulator scratch logs",
+      "paths": ["var/runs/sitl/plane/logs"],
+      "size": 3328599654,
+      "chips": [["not in backup", "warn"]],
+      "what": "Numbered BIN files SITL writes on every launch.",
+      "why": "Each campaign run keeps its own copy.",
+      "if_yes": "{size} freed.",
+      "if_no": "Nothing changes.",
+      "options": [["delete", "Delete"], ["keep", "Keep"]],
+      "rec": "delete"
+    },
+    {
+      "id": "D02",
+      "section": "tidy",
+      "title": "Rename the flight-log folder",
+      "paths": ["var/Real-Flights"],
+      "chips": [["in backup", "ok"]],
+      "what": "Folder and file names contain spaces.",
+      "mapping": [["2026-07-29 10-53-34(B73-2).bin", "2026-07-29_105334_b73_2.bin"]],
+      "options": [["move", "Rename"], ["keep", "Keep as is"]],
+      "rec": "move"
+    }
+  ],
+  "table": {
+    "title": "Full inventory",
+    "columns": ["path", "action", "reason"],
+    "rows": [
+      {"path": "`var/runs`", "action": "KEEP", "reason": "raw campaign data"},
+      {"path": "`var/tmp`", "action": "DELETE", "reason": "superseded prompts"}
+    ]
+  }
+}
