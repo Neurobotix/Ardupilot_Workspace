@@ -69,6 +69,14 @@ confirmation. Current contracts and guarded commands live in
 `docs/operations/gps_failure_runbook.md`; lane architecture lives in
 `docs/architecture/gps_failure_lane.md`.
 
+### GPS-Denied Navigation Study
+
+Home created on 2026-10-12:
+`governance/runbooks/features/gps_denied_navigation/`. The study plan is
+pending. The August INS-only implementation is preserved, unmerged and
+unreviewed, on the branch `archive/ins-only-stash`. No GPS-denied result or
+evidence exists.
+
 ## Current Pointers
 
 - Workspace status: `docs/operations/workspace_status.md`
@@ -78,6 +86,7 @@ confirmation. Current contracts and guarded commands live in
 - Wind matrix campaign: `docs/campaigns/wind_matrix.md`
 - Airspeed failure runbook: `docs/operations/airspeed_failure_runbook.md`
 - GPS failure runbook: `docs/operations/gps_failure_runbook.md`
+- GPS-denied navigation study: `governance/runbooks/features/gps_denied_navigation/`
 - Historical migration plan and records:
   `governance/runbooks/migration/full_migration_plan.md` and
   `evidence/reports/migration/`

@@ -51,6 +51,14 @@
   framework was live-validated on v4/v5 on 2026-07-16; mission v6 is active
   but unflown; Phase 2 remains open with no curated evidence promoted):
   `governance/runbooks/features/gps_failure_behavior/`
+- GPS-denied navigation study feature runbook (home created 2026-10-12; plan
+  pending; INS-only plan, IMU source validation, BMI270 extract, and paper
+  notes; recovered INS-only implementation on branch `archive/ins-only-stash`):
+  `governance/runbooks/features/gps_denied_navigation/`
+- Real-flight IMU analysis feature runbook (five-flight vibration/EKF baseline,
+  2026-09-01; code in `src/sim_ard_gaw/analysis/real_flight/`, raw logs in
+  ignored `var/real_flights/`):
+  `governance/runbooks/features/real_flight_imu_analysis/`
 - GPS failure behavior design decisions (Proposed 2026-07-06; full reasoning in
   `governance/runbooks/features/gps_failure_behavior/design_adrs.md` and
   `design_research.md`):

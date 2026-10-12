@@ -1,6 +1,6 @@
 # GPS-Denied Navigation Implementation
 
-## Current State
+## Mainline State
 
 No GPS-denied implementation is on the current mainline. The tracked inputs
 are the INS-only overlay, world, and model listed in `README.md`. No launch

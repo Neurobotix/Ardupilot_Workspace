@@ -31,6 +31,11 @@ Historical recovered parameter stacks stay under
 not runtime defaults. Local overrides stay under `.private/`; they may affect a
 local run only when a launcher explicitly appends them.
 
+Raw real-flight DataFlash logs live in ignored `var/real_flights/`, and their
+analysis code in `src/sim_ard_gaw/analysis/real_flight/`. Runtime output for
+the GPS-denied navigation study goes under `var/runs/gps_denied_navigation/`.
+`scripts/dev/report_generation/` holds the Markdown-to-PDF report renderer.
+
 Launch, bridge, analysis, wind-matrix runner, and campaign `test_suite`
 implementations live under organized homes in `src/sim_ard_gaw/`. Runtime
 paths resolve directly to `assets/`, `config/`, `var/`, and owned runtime

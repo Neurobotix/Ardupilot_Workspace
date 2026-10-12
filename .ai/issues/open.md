@@ -43,6 +43,28 @@
 - The old workspace is deprecated fallback/reference after ADR-0005. Do not
   edit it without explicit operator authorization.
 
+## Open After 2026-10-12 Workspace Cleanup
+
+- `env/` has no `pymavlink`, although `requirements.txt` lists it. Eleven
+  `tests/unit` modules fail at import, and `analyze_flights.py` and the
+  campaign plugins cannot run in this venv. Five further unit tests fail
+  (`test_airspeed_failure_mechanism_gate` real-BIN case and four
+  `test_test_suite_phase3c_zero_legacy_foundation` cases). All of this
+  predates the cleanup; the same counts were measured before and after it.
+- `make doctor` fails its `.private` policy group because of local notes
+  (duplicate headings, fenced commands, unmarked canonical links). This also
+  predates the cleanup.
+- The INS-only overlay, world, and model
+  (`config/overlays/plane_gps_ins_only.parm`,
+  `assets/worlds/mini_talon_gps_ins_only_runway.sdf`,
+  `assets/models/mini_talon_ins_only/`) are not listed in
+  `evidence/indexes/parameter_config_index.md` or
+  `evidence/indexes/asset_index.md`, and no launch target selects them on
+  the mainline.
+- The recovered INS-only implementation on `archive/ins-only-stash` is
+  unreviewed and unmerged. See
+  `governance/runbooks/features/gps_denied_navigation/implementation.md`.
+
 ## Tooling Notes
 
 - `make doctor` requires `ripgrep` (`rg`); the structure validator uses it for

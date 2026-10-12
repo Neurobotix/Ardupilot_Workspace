@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-10-12
+
+- Workspace cleanup on branch `chore/workspace-cleanup`, from an approved
+  inventory. Safety net first: stash `c873af0` (INS-only implementation) is
+  preserved as branch `archive/ins-only-stash`, the pre-cleanup state is
+  tagged `pre-cleanup-2026-10-12`, and untracked material was backed up
+  outside the workspace.
+- New feature bundle `governance/runbooks/features/gps_denied_navigation/`
+  gathers the INS-only plan (now `ins_only_plan.md`), the SITL IMU source
+  validation, the BMI270 extract, and the EKF paper notes (now
+  `design_research.md`). Pointers stay at the old `gps_failure_behavior/`
+  paths. `plan.md` is an outline awaiting the study plan.
+- Real-flight analysis code moved out of ignored `var/analysis/` into
+  `src/sim_ard_gaw/analysis/real_flight/`, with its test in
+  `tests/unit/test_real_flight_analysis_core.py`. Raw logs moved from
+  `var/Real-Flights/` to `var/real_flights/` with space-free names. The
+  `real_flight_imu_analysis` runbook bundle is now tracked.
+- The Markdown-to-PDF renderer moved from `var/reports/report generation/` to
+  `scripts/dev/report_generation/`.
+- Removed the seven compatibility symlinks at `config/` root; nothing live
+  used them.
+- Deleted about 4.9 GB of untracked or ignored output: SITL scratch BINs for
+  `plane-gps`, `plane-gps` MAVProxy telemetry, converted real-flight `.log`
+  dumps, presentation `node_modules/` and `dist/`, cheat-sheet drafts v1-v3,
+  July GPS planning prompts, `_audit/`, a stray image, Python caches, and
+  empty sandbox stub folders.
+
 ## 2026-08-10
 
 - The workspace cutover rollback runbook no longer sends an operator to a file
