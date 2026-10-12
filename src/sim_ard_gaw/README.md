@@ -6,6 +6,8 @@ Gazebo launch, bridge, analysis, campaign, and test-suite code:
 - `launch/` owns launch and cleanup shell entrypoints.
 - `bridges/` owns bridge and wind-publisher scripts.
 - `analysis/` owns analysis, logging, and probe helpers.
+  `analysis/real_flight/` analyzes real-flight DataFlash logs from
+  `var/real_flights/` (IMU vibration, redundant IMUs, EKF3).
 - `campaigns/wind_matrix/` owns the wind-matrix runners.
 - `campaigns/test_suite/` owns the campaign test-suite package.
 

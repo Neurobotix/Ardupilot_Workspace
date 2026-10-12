@@ -4,6 +4,10 @@ Workspace scripts live here. Use `scripts/ops/` for operator entrypoints,
 `scripts/maintenance/` for validators and maintenance checks, and `scripts/dev/`
 for development helpers.
 
+`scripts/dev/report_generation/` holds the Markdown-to-PDF report renderer
+(`pdf.py`, `theme.md`, `report_template.md`). It is a development helper, not
+the governed evidence workflow.
+
 ## Naming
 
 - Shell scripts use `lower_snake_case.sh`.
