@@ -8,7 +8,7 @@ QGC WPL 110
 # Platform positions:  X=250/350/450/550/650m East of home
 # Cruise altitude:     30m AGL
 # Intended world:      worlds/mini_talon_airspeed_lidar/wind_staircase.sdf
-# Intended params:     config/mini_talon_airspeed_lidar/plane_full.parm
+# Intended params:     config/campaigns/mini_talon_airspeed_lidar/plane_full.parm
 #
 # RACETRACK DESIGN — inherited from the wind-world eastbound takeoff frame:
 #
