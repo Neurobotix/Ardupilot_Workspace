@@ -55,7 +55,7 @@
   open):
   `governance/runbooks/features/gps_failure_behavior/`
 - GPS-denied navigation study feature runbook (home created 2026-10-12; plan
-  pending; INS-only plan, IMU source validation, BMI270 extract, and paper
+  written 2026-10-12, Phase 0 data collection open; INS-only plan, IMU source validation, BMI270 extract, and paper
   notes; recovered INS-only implementation on branch `archive/ins-only-stash`):
   `governance/runbooks/features/gps_denied_navigation/`
 - Real-flight IMU analysis feature runbook (five-flight vibration/EKF baseline,

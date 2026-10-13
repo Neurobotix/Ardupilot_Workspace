@@ -79,8 +79,8 @@ confirmation. Current contracts and guarded commands live in
 ### GPS-Denied Navigation Study
 
 Home created on 2026-10-12:
-`governance/runbooks/features/gps_denied_navigation/`. The study plan is
-pending. The August INS-only implementation is preserved, unmerged and
+`governance/runbooks/features/gps_denied_navigation/`. The study plan
+(`plan.md`, 2026-10-12) is written; Phase 0 data collection is open. The August INS-only implementation is preserved, unmerged and
 unreviewed, on the branch `archive/ins-only-stash`. No GPS-denied result or
 evidence exists.
 
