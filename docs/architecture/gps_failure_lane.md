@@ -34,6 +34,15 @@ This is a fault-injection profile campaign lane; see
   acceptance) are all in the current code. The condensed history lives in
   `docs/operations/gps_failure_runbook.md`; full narratives are in
   `.ai/current.md` and the feature runbook.
+- On 2026-07-20, raw runtime root `var/runs/gps_failure_behavior/` recorded
+  v6-geometry fault-case attempts: its manifest has 18 workflow-complete,
+  observation-accepted, repetition-accepted rows and 18 incomplete rows, with
+  exactly one accepted repetition for each non-jamming case. The attempt-local
+  `run_config.json` files record mission SHA-256
+  `ba22c669c895f694e8556e0e9573e9f9dd278d159086e46706eb30a3714d7261`, matching
+  the current v6 mission asset and the later 2026-07-22 commit `2051e83`; this
+  proves the v6 geometry was flown before it was committed, not that a curated
+  GPS evidence package or final science campaign claim exists.
 - The next live action is gated: `--preflight` reports the Phase A-G no-live
   gates (vehicle-time scheduling, BIN stimulus fidelity, three-verdict
   manifest semantics, lifecycle-window artifact authority, hard-denial
@@ -76,8 +85,11 @@ See ADR-0021 (2026-07-13 amendment) and
   straight fault-observation leg, 1000 m straight recovery/continuation, 30 s
   terminal loiter, seq-8 terminal gate, seq-9 RTL. The seq-4 trigger,
   front-half seq-1/3 evidence, and planned-RTL terminal contract are
-  unchanged. V6 is structurally tested only; it has not been flown, and no
-  curated evidence or final science campaign claim exists.
+  unchanged. V6 geometry is structurally tested and was flown in raw runtime
+  output on 2026-07-20 at `var/runs/gps_failure_behavior/`; that root remains
+  unpromoted `var/` output, with one accepted repetition per case, no
+  `evidence/curated_logs/gps*` package, no GPS report under
+  `evidence/reports/features/`, and no final science campaign claim.
 
 ## Fault Set & Cases
 
@@ -183,7 +195,9 @@ reveals a lie the filter itself believes is fine.
 
 ## Output Paths
 
-- Raw runtime output: `var/runs/gps_failure_behavior_*/` (not in git).
+- Raw runtime output: `var/runs/gps_failure_behavior/` (2026-07-20 v6-geometry
+  one-repetition non-jamming root, not promoted evidence) and
+  `var/runs/gps_failure_behavior_*/` (not in git).
 - Curated evidence (Phase 4): `evidence/curated_logs/gps_failure_behavior_<date>/`.
 
 ## Decisions & References

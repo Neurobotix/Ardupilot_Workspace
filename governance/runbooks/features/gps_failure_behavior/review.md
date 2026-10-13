@@ -2,8 +2,12 @@
 
 Status: Phase 1 no-SITL foundation is **Accepted** (2026-07-13, final no-SITL
 review). A corrected protected nominal completed reviewed raw validation on
-2026-07-14; Phase 2 remains open because no curated evidence was promoted and
-no fault case has run.
+2026-07-14. Raw root `var/runs/gps_failure_behavior/` records v6-geometry
+non-jamming fault-case runs from 2026-07-20 with one accepted repetition per
+case; Phase 2 remains open because that root is unpromoted `var/` output, no
+`evidence/curated_logs/gps*` package or GPS report under
+`evidence/reports/features/` exists as of 2026-08-17, and the full campaign
+requires more than one accepted repetition per case.
 
 ## Phase Acceptance Ledger
 
@@ -11,7 +15,7 @@ no fault case has run.
 | --- | --- | --- | --- |
 | Phase 0 — design lock | Accepted | 2026-07-06 | Full brainstorm; four faults, two-tier knee, seven bands, characterize-not-gate; five Proposed ADRs (0017–0021). |
 | Phase 1 — no-SITL plugin foundation | Accepted | 2026-07-13 | Chunks 1–6: scaffold, payload semantics, static mission/parameter-stack integration, synthetic mechanism-gate evaluation, runtime/MAVLink contract helpers, and integration-readiness wiring. All prior BLOCKER/HIGH/MEDIUM findings resolved and verified in code; a final no-SITL review (2026-07-13) found no new BLOCKER/HIGH/MEDIUM/substantiated-LOW issue. No-SITL acceptance of the plugin foundation only — no live result. Live connection, mission execution, and BIN/log extraction remain Phase 2. |
-| Phase 2 — live smoke | Open (protected nominal raw validation passed) | 2026-07-14 | Root `var/runs/gps_failure_behavior_20260714T120212630044Z/` completed seq 9, planned RTL stabilization, accepted source/BIN/behavior analysis, and clean cleanup. Raw output only: no evidence promotion, fault smoke, or Phase-2 acceptance. |
+| Phase 2 — live smoke | Open (raw validation and one-repetition v6-geometry fault-case root exist) | 2026-07-20 | Root `var/runs/gps_failure_behavior_20260714T120212630044Z/` completed seq 9, planned RTL stabilization, accepted source/BIN/behavior analysis, and clean cleanup. Root `var/runs/gps_failure_behavior/` records 18 v6-geometry accepted non-jamming rows from 2026-07-20, one per case, plus 18 incomplete rows. Raw output only: no evidence promotion, no Phase-2 acceptance, no Phase-4 curation, and no final science campaign claim. |
 | Phase 3 — full v1 campaign | Open | — | — |
 | Phase 4 — evidence curation | Open | — | — |
 

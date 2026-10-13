@@ -60,9 +60,16 @@ current doc cleanup.
 The `gps_failure` lane characterizes behavior under degraded or corrupted GPS.
 Phase 0 design lock was accepted on 2026-07-06 and Phase 1 no-SITL foundation
 was accepted on 2026-07-13. Corrected raw/live validation ran through bounded
-v4/v5 paths by 2026-07-16, but mission v6 is the active final-science candidate
-and has not been flown. No curated Phase 2 evidence or final science campaign
-claim has been promoted.
+v4/v5 paths by 2026-07-16. Raw runtime root
+`var/runs/gps_failure_behavior/` records v6-geometry non-jamming fault-case
+runs from 2026-07-20, with one accepted repetition per case; each attempt-local
+`run_config.json` records the v6 mission hash
+`ba22c669c895f694e8556e0e9573e9f9dd278d159086e46706eb30a3714d7261`, matching
+the current mission asset and the later 2026-07-22 commit `2051e83`. This is
+raw `var/` output, not promoted evidence: no `evidence/curated_logs/gps*`
+package or GPS report under `evidence/reports/features/` exists as of
+2026-08-17, so Phase 2 acceptance, Phase 4 curation, and final science
+campaign claims remain open.
 
 The next live action is gated by `--preflight` and explicit operator
 confirmation. Current contracts and guarded commands live in

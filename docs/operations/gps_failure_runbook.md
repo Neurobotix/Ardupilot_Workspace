@@ -5,9 +5,12 @@ accepted 2026-07-13 (final no-SITL review). The corrected protected nominal
 completed reviewed raw validation on 2026-07-14, and the corrected framework
 was live-validated on the bounded v4 mission and the longer v5 validation
 slice on 2026-07-16. Mission v6 is the active shorter final-science candidate;
-it has no-live structural coverage only and has not been flown. No curated
-Phase-2 evidence or fault-case result has been promoted, so Phase 2 remains
-open. Live cases remain explicit operator actions behind confirmation guards.
+raw runtime root `var/runs/gps_failure_behavior/` records v6-geometry
+non-jamming fault-case runs from 2026-07-20, with exactly one accepted
+repetition per case. The root is raw `var/` output, not promoted evidence: as
+checked 2026-08-17, no `evidence/curated_logs/gps*` package and no GPS report
+under `evidence/reports/features/` exists, so Phase 2 acceptance, Phase 4
+curation, and final science campaign claims remain open.
 
 ## Current Contracts
 
@@ -99,7 +102,17 @@ Full narratives: `.ai/current.md` and
   seq-4 injection onto a 6000 m fault-observation leg, 1000 m recovery,
   30 s terminal loiter, seq-8 terminal gate, seq-9 RTL; active hash
   `ba22c669c895f694e8556e0e9573e9f9dd278d159086e46706eb30a3714d7261`) became
-  the active shorter final-science candidate. V6 has not been flown.
+  the active shorter final-science candidate.
+- 2026-07-20: raw root `var/runs/gps_failure_behavior/` recorded
+  v6-geometry non-jamming fault-case attempts. The manifest has 36 rows:
+  18 workflow-complete, observation-accepted, repetition-accepted rows and
+  18 incomplete rows, with one accepted repetition for each of the 18
+  non-jamming cases. Each attempt-local `run_config.json` records mission
+  SHA-256 `ba22c669c895f694e8556e0e9573e9f9dd278d159086e46706eb30a3714d7261`,
+  matching the current mission asset and commit `2051e83` dated 2026-07-22;
+  the run date therefore precedes the commit date. This is raw `var/` output,
+  not curated or reported evidence, and it does not satisfy the repeated-run
+  or Phase 4 curation requirements for a final science campaign claim.
 
 ## Static Default Stack
 
@@ -170,7 +183,9 @@ sensor-neutral GPS world and no airspeed overlay, so achieved groundspeed stayed
 near the baseline. Treat it as commanded-fast only.
 
 These targets are covered by structural tests and were exercised by the
-governed raw validation runs above. No curated evidence has been promoted.
+governed raw validation runs above, including the 2026-07-20 raw
+`var/runs/gps_failure_behavior/` v6-geometry root. No curated evidence has been
+promoted under `evidence/curated_logs/` or `evidence/reports/features/`.
 
 ## CLI
 

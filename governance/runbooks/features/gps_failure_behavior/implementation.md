@@ -4,14 +4,17 @@ Status: Phase 1 no-SITL foundation (Chunks 1–6) is **Accepted** (2026-07-13,
 final no-SITL review). On 2026-07-14 the corrected protected nominal path also
 completed one governed raw validation through seq 9 and stabilized planned RTL,
 with accepted source/BIN/behavior analysis and clean cleanup. That raw run is
-not curated Phase-2 evidence, and no fault case has run.
+not curated Phase-2 evidence. Raw root `var/runs/gps_failure_behavior/`
+records v6-geometry non-jamming fault-case runs from 2026-07-20 with one
+accepted repetition per case; that root is also unpromoted `var/` output.
 On 2026-07-15, a no-live campaign-readiness update added the protected
 round-robin campaign command, workflow-complete counting, and pre-injection
 source-contract staging. On 2026-07-16, Phase H narrowed the next live step to
 a protected validation rerun: exactly `nominal`, `slow_drift_0p5_mps`, and
 `hard_denial_15s`, one run each, zero automatic retries, and strict
-stop-on-failure after all Phase A-G no-live gates pass. No new live result is
-claimed.
+stop-on-failure after all Phase A-G no-live gates pass. No curated GPS evidence
+package, GPS feature report, Phase-2 acceptance, or final science campaign
+claim is made as of 2026-08-17.
 
 ## Implemented In Phase 1 Chunk 1
 
@@ -375,7 +378,10 @@ recovery/continuation segment, 30 s terminal loiter, and enough observation time
 for `slow_drift_0p2_mps` to accumulate more than 75 m at the commanded 15 m/s
 speed. Active mission SHA-256 is
 `ba22c669c895f694e8556e0e9573e9f9dd278d159086e46706eb30a3714d7261`.
-No v6 live result or final science evidence is claimed.
+Raw root `var/runs/gps_failure_behavior/` records this v6 geometry flown on
+2026-07-20 with one accepted repetition per non-jamming case. That root remains
+unpromoted `var/` output; no curated GPS evidence package, GPS feature report,
+or final science campaign claim is made as of 2026-08-17.
 
 ## Current No-SITL Semantics
 

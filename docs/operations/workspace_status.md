@@ -24,7 +24,7 @@ Gazebo fault-injection and evidence workflows covered by
 | --- | --- | --- |
 | `wind_matrix` | Staged `test_suite` path is the supported framework path; the wind-matrix legacy attempt strategy was retired on 2026-06-30. Direct runner files remain live operator entry points. Full-matrix evidence beyond bounded proof still needs dated evidence. | `docs/campaigns/wind_matrix.md`, `docs/operations/launch_targets.md` |
 | `airspeed_failure` | Phase 2 measurement smoke and bounded Phase 4A ratio/ramp/pulse characterization are accepted; fixed-case repetition/full-lane acceptance remains open. | `docs/architecture/airspeed_failure_lane.md`, `docs/operations/airspeed_failure_runbook.md` |
-| `gps_failure` | Phase 1 no-SITL foundation is accepted; corrected raw/live validation exists through bounded v4/v5 paths; active mission v6 is structurally tested only and unflown, with no curated Phase 2 claim promoted. | `docs/architecture/gps_failure_lane.md`, `docs/operations/gps_failure_runbook.md` |
+| `gps_failure` | Phase 1 no-SITL foundation is accepted; corrected raw/live validation exists through bounded v4/v5 paths; raw `var/runs/gps_failure_behavior/` records v6-geometry one-repetition non-jamming runs from 2026-07-20, but no curated GPS evidence package or report exists as of 2026-08-17, so Phase 2/4 and final science campaign claims remain open. | `docs/architecture/gps_failure_lane.md`, `docs/operations/gps_failure_runbook.md` |
 
 ## Open Evidence Gaps
 
@@ -34,8 +34,9 @@ Gazebo fault-injection and evidence workflows covered by
 - `copter-lidar` has handshake and flight proof, but no captured obstacle
   return.
 - Wider wind-matrix campaign claims require new governed evidence.
-- Airspeed fixed-case Phase 4B and GPS v6 live campaign claims remain open
-  until dated evidence says otherwise.
+- Airspeed fixed-case Phase 4B and GPS v6 final science campaign claims remain
+  open until curated dated evidence says otherwise; the 2026-07-20 GPS
+  `var/runs/gps_failure_behavior/` root is raw output only.
 
 ## Historical Records
 

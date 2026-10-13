@@ -48,8 +48,11 @@
 - GPS failure behavior feature runbook (Phase 0 design lock accepted
   2026-07-06; Phase 1 no-SITL foundation accepted 2026-07-13; corrected
   protected nominal passed reviewed raw validation 2026-07-14 and the
-  framework was live-validated on v4/v5 on 2026-07-16; mission v6 is active
-  but unflown; Phase 2 remains open with no curated evidence promoted):
+  framework was live-validated on v4/v5 on 2026-07-16; raw
+  `var/runs/gps_failure_behavior/` records v6-geometry one-repetition
+  non-jamming runs from 2026-07-20, but no curated GPS evidence package or
+  report exists as of 2026-08-17, so Phase 2/4 and final science claims remain
+  open):
   `governance/runbooks/features/gps_failure_behavior/`
 - GPS-denied navigation study feature runbook (home created 2026-10-12; plan
   pending; INS-only plan, IMU source validation, BMI270 extract, and paper
@@ -149,7 +152,7 @@
   overlay, and CLI entry point each one uses):
   `docs/architecture/campaign_lanes.md`
 - Airspeed failure behavior lane (behavior characterization; Phase 2 measurement smoke accepted 2026-06-06; Phase 4A ratio/ramp/pulse characterization accepted 2026-06-14; fixed-case Phase 4B remains open): `docs/architecture/airspeed_failure_lane.md`
-- GPS failure behavior lane (behavior characterization under degraded/corrupted GPS; EKF innovation-gate "knee"; Phase 1 accepted 2026-07-13; framework raw/live-validated through v5; mission v6 active but unflown; Phase 2 open, no curated evidence): `docs/architecture/gps_failure_lane.md`
+- GPS failure behavior lane (behavior characterization under degraded/corrupted GPS; EKF innovation-gate "knee"; Phase 1 accepted 2026-07-13; framework raw/live-validated through v5; raw `var/runs/gps_failure_behavior/` records v6-geometry one-repetition non-jamming runs from 2026-07-20, but Phase 2/4 and final science claims remain open with no curated GPS evidence as of 2026-08-17): `docs/architecture/gps_failure_lane.md`
 - Launch target status: `docs/operations/launch_targets.md`
 - Airspeed failure behavior — verified no-SITL commands, stack, output paths, live-run gate: `docs/operations/airspeed_failure_runbook.md`
 - GPS failure behavior — current evidence contracts, stack, CLI, and live-run gate: `docs/operations/gps_failure_runbook.md`

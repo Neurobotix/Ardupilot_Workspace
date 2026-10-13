@@ -257,9 +257,11 @@ generator takes a rate list, so extending is a longer input, no code change.
     deterministic end path without mixing turns into the baseline/fault/recovery
     windows.
 
-  V6 is structurally tested only. Final science campaign language remains
-  blocked until the mission is live-validated and supported by curated evidence;
-  see the Mission Design ADR in `design_adrs.md`.
+  V6 geometry was flown in raw runtime root `var/runs/gps_failure_behavior/`
+  on 2026-07-20; the root has one accepted repetition per non-jamming case and
+  remains unpromoted `var/` output. Final science campaign language remains
+  blocked until repeated-run requirements and Phase 4 curation are satisfied by
+  curated evidence; see the Mission Design ADR in `design_adrs.md`.
 - SITL target: `plane-gps` (dedicated identity; loads `plane_base.parm ->
   plane_gps.parm` only, no airspeed overlay and no local override, wipes EEPROM).
   Corrected 2026-07-13 from `plane-cte`, which is the CTE/airspeed lane; see the

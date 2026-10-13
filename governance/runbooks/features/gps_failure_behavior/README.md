@@ -14,8 +14,12 @@ readiness report). All prior Phase-1 findings were resolved and verified in code
 live stack, parameter, mission, trigger and BIN paths, and corrected governed
 nominal runs now complete the full mission. Mission v3 was raw-validated at
 `var/runs/gps_failure_behavior_20260714T122459635208Z/` without the earlier
-pre-injection loop. No fault-case scientific result or curated evidence claim
-exists.
+pre-injection loop. Raw root `var/runs/gps_failure_behavior/` records
+v6-geometry non-jamming fault-case runs from 2026-07-20 with one accepted
+repetition per case, but it remains unpromoted `var/` output: no
+`evidence/curated_logs/gps*` package or GPS report under
+`evidence/reports/features/` exists as of 2026-08-17, so no final science
+campaign claim exists.
 
 ## Read Order for New Work
 
@@ -79,8 +83,10 @@ through live Phase-2 measurement.
 ## Launch Targets
 
 Dedicated identities `plane-gps` and `gazebo-plane-gps` (added structurally
-2026-07-13; not live-smoke verified). `plane-gps` loads `plane_base.parm ->
-plane_gps.parm` only (no airspeed overlay, no local override, wipes EEPROM);
+2026-07-13; exercised by raw validation roots including
+`var/runs/gps_failure_behavior/` on 2026-07-20, with no curated GPS evidence
+promoted). `plane-gps` loads `plane_base.parm -> plane_gps.parm` only (no
+airspeed overlay, no local override, wipes EEPROM);
 `gazebo-plane-gps` uses the dedicated sensor-neutral
 `mini_talon_gps_runway.sdf` world so the spawn heading matches the mission.
 These replaced the earlier incorrect `plane-cte` / `gazebo-plane-cte` references.
@@ -97,6 +103,7 @@ See ADR-0021's 2026-07-13 amendment and `design_adrs.md`.
 
 | Path | Phase | Status |
 | --- | --- | --- |
+| `var/runs/gps_failure_behavior/` | 2–3 | Raw v6-geometry non-jamming root from 2026-07-20; one accepted repetition per case; not promoted evidence |
 | `var/runs/gps_failure_behavior_*/` | 2–3 | Raw runtime output; not in git |
 | `evidence/curated_logs/gps_failure_behavior_<date>/` | 4 | Future curated package |
 | `evidence/reports/features/<date>_gps_failure_behavior.md` | 4 | Future evidence report |
