@@ -35,6 +35,17 @@ To inspect the recovered change against its base:
 git diff archive/ins-only-stash^1 archive/ins-only-stash
 ```
 
+## Shahin-E Model
+
+Stage 1 (2026-10-13) added the model, world, and parameter file; sources and
+validation gates are in `shahin_e_model_sources.md`. Stage 1b (2026-10-13)
+added the launch targets `plane-shahin-e` (loads `config/vehicles/shahin_e.parm`
+only, `--wipe-eeprom`, `-f JSON`, `udp:127.0.0.1:14551`, local override
+excluded) and `gazebo-plane-shahin-e` (`assets/worlds/shahin_e_runway.sdf`).
+Structural tests: `tests/unit/test_shahin_e_launch_targets.py`. Not flown;
+Gates 0-4 are open. Gate run records go to
+`var/analysis/shahin_e_model_validation/gate_results.md`.
+
 ## Runtime Output
 
 Study runs write under `var/runs/gps_denied_navigation/`.

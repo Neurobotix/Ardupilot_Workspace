@@ -50,6 +50,7 @@ PLANE_REBUILD_PARAM_FILE="$CONFIG_DIR/vehicles/plane_params_rebuild.parm"
 PLANE_PARAM_LOCAL_OVERRIDE="$PRIVATE_DIR/config/plane_params.local.parm"
 PLANE_STAIRCASE_PARAM_FILE="$CONFIG_DIR/overlays/staircase_plane_params.parm"
 COPTER_PARAM_FILE="$CONFIG_DIR/vehicles/copter_params.parm"
+SHAHIN_E_PARAM_FILE="$CONFIG_DIR/vehicles/shahin_e.parm"
 # Gazebo Path Variables
 GAZEBO_PLUGIN_BUILD_DIR="$WORKSPACE_DIR/build/ardupilot_gazebo"
 GAZEBO_PLUGIN_FILE="$GAZEBO_PLUGIN_BUILD_DIR/libArduPilotPlugin.so"
@@ -81,6 +82,7 @@ PLANE_AIRSPEED_LIDAR_WORLD="$WORLDS_DIR/mini_talon_airspeed_lidar/wind_staircase
 PLANE_ALTITUDE_WIND_WORLD="$WORLDS_DIR/mini_talon_altitude_wind/runway.sdf"
 PLANE_REBUILD_STILL_AIR_WORLD="$WORLDS_DIR/mini_talon_rebuild_still_air.sdf"
 PLANE_REBUILD_WIND_WORLD="$WORLDS_DIR/mini_talon_rebuild_wind.sdf"
+SHAHIN_E_WORLD="$WORLDS_DIR/shahin_e_runway.sdf"
 PLANE_AIRSPEED_LIDAR_MISSION="$MISSIONS_DIR/mini_talon_airspeed_lidar/staircase_sensor_validation.waypoints"
 
 
@@ -98,6 +100,7 @@ PLANE_AIRSPEED_LIDAR_MISSION="$MISSIONS_DIR/mini_talon_airspeed_lidar/staircase_
 # plane-airspeed-lidar	            plane_base.parm → mini_talon_airspeed_lidar/plane_full.parm → local override
 # plane-altitude-wind	            plane_base.parm → mini_talon_altitude_wind/plane_full.parm → local override
 # plane-rebuild	                    plane_params_rebuild.parm only
+# plane-shahin-e	                    shahin_e.parm only (NO plane_base, NO local override)
 
 # =============================================================================
 
@@ -387,6 +390,18 @@ build_plane_gps_param_args() {
     fi
 }
 
+# Shahin-E loads its own real-aircraft parameter file ONLY. It is not a Mini
+# Talon overlay: plane_base.parm would overwrite logged flight params, and the
+# local override must never perturb the model-validation gates.
+build_shahin_e_param_args() {
+    PLANE_PARAM_ARGS=()
+    append_plane_param_file "$SHAHIN_E_PARAM_FILE"
+
+    if [ -f "$PLANE_PARAM_LOCAL_OVERRIDE" ]; then
+        print_info "Shahin-E intentionally excludes the local plane override: $PLANE_PARAM_LOCAL_OVERRIDE"
+    fi
+}
+
 build_sitl_runtime_args() {
     local target="$1"
     local default_run_dir="$WORKSPACE_DIR/var/runs/sitl/$target"
@@ -614,6 +629,31 @@ launch_plane_gps() {
       --out=udp:127.0.0.1:14551
 }
 
+launch_plane_shahin_e() {
+    print_info "Launching ArduPlane SITL for the Shahin-E model..."
+    echo ""
+    echo "=========================================="
+    echo "  ArduPlane SITL (Shahin-E)"
+    echo "=========================================="
+    echo ""
+    print_info "STEP 1: Start Gazebo (in Terminal 2):"
+    print_cmd "$OPERATOR_LAUNCH gazebo-plane-shahin-e"
+    echo ""
+    print_info "Model sources and validation gates: governance/runbooks/features/gps_denied_navigation/shahin_e_model_sources.md"
+    print_info "Wind source: calm; local plane override is always excluded; EEPROM wiped on every launch."
+    print_info "Param stack: shahin_e.parm only (no plane_base.parm)."
+    echo ""
+
+    build_shahin_e_param_args
+    cd "$ARDUPILOT_DIR"
+    build_sitl_runtime_args "plane-shahin-e"
+    sim_vehicle.py -v ArduPlane -f JSON --console --map \
+      "${SITL_RUNTIME_ARGS[@]}" \
+      "${PLANE_PARAM_ARGS[@]}" \
+      --wipe-eeprom \
+      --out=udp:127.0.0.1:14551
+}
+
 launch_plane_lidar() {
     print_info "Launching ArduPlane with LiDAR..."
     echo ""
@@ -821,6 +861,14 @@ launch_gazebo_plane_gps_airspeed() {
     launch_gazebo_world "$PLANE_GPS_AIRSPEED_WORLD" "Starting dedicated Gazebo GPS airspeed envelope world..."
 }
 
+launch_gazebo_plane_shahin_e() {
+    # Calm east-facing runway (GPS-lane pose and airspeed system) with the
+    # Shahin-E model in place of the Mini Talon.
+    print_info "Launching Gazebo Shahin-E runway (east-facing, calm, airspeed)..."
+    print_info "Pair with: $OPERATOR_LAUNCH plane-shahin-e"
+    launch_gazebo_world "$SHAHIN_E_WORLD" "Starting Gazebo with Shahin-E on runway..."
+}
+
 launch_gazebo_plane_wind_sea_level() {
     print_info "Launching Gazebo with Mini Talon + Wind Effects at sea level..."
     print_info "Density test world: identical wind case, but spherical elevation is 0 m."
@@ -958,12 +1006,14 @@ show_help() {
     echo "  plane-airspeed-lidar - ArduPlane SITL + integrated airspeed/LiDAR lane"
     echo "  plane-altitude-wind - ArduPlane SITL + altitude-driven wind lane"
     echo "  plane-rebuild      - ArduPlane SITL + standalone rebuild params"
+    echo "  plane-shahin-e     - ArduPlane SITL Shahin-E model (shahin_e.parm only, no local override, wipes EEPROM)"
     echo "  gazebo-plane       - Gazebo with Mini Talon (base)"
     echo "  gazebo-plane-lidar - Gazebo with Mini Talon + LiDAR"
     echo "  gazebo-plane-cte   - Gazebo CTE lane world (Mini Talon wind world, calm by default)"
     echo "  gazebo-plane-wind  - Alias for gazebo-plane-cte"
     echo "  gazebo-plane-gps   - Gazebo GPS failure lane (east-facing sensor-neutral Mini Talon, calm, GPS/NavSat)"
     echo "  gazebo-plane-gps-airspeed - Gazebo GPS fast-cruise envelope lane (east-facing Mini Talon with airspeed, calm)"
+    echo "  gazebo-plane-shahin-e - Gazebo Shahin-E runway (east-facing, calm, airspeed)"
     echo "  gazebo-plane-wind-sea-level - Gazebo with Mini Talon + Wind Effects at elevation 0m"
     echo "  gazebo-plane-airspeed-lidar - Gazebo with the integrated wind + staircase lane"
     echo "  gazebo-plane-altitude-wind - Gazebo with Mini Talon altitude-driven wind lane"
@@ -1002,6 +1052,10 @@ show_help() {
     echo "QUICK START (GPS Failure Lane):"
     echo "  Terminal 1: $OPERATOR_LAUNCH plane-gps"
     echo "  Terminal 2: $OPERATOR_LAUNCH gazebo-plane-gps"
+    echo ""
+    echo "QUICK START (Shahin-E):"
+    echo "  Terminal 1: $OPERATOR_LAUNCH plane-shahin-e"
+    echo "  Terminal 2: $OPERATOR_LAUNCH gazebo-plane-shahin-e"
     echo ""
     echo "QUICK START (Plane + LiDAR):"
     echo "  Terminal 1: $OPERATOR_LAUNCH plane-lidar"
@@ -1078,6 +1132,12 @@ case "${1:-help}" in
         check_environment
         launch_plane_gps
         ;;
+    plane-shahin-e)
+        cleanup
+        setup_environment
+        check_environment
+        launch_plane_shahin_e
+        ;;
     plane-lidar)
         cleanup
         setup_environment
@@ -1137,6 +1197,11 @@ case "${1:-help}" in
         setup_environment
         check_environment
         launch_gazebo_plane_gps_airspeed
+        ;;
+    gazebo-plane-shahin-e)
+        setup_environment
+        check_environment
+        launch_gazebo_plane_shahin_e
         ;;
     gazebo-plane-wind-sea-level)
         setup_environment

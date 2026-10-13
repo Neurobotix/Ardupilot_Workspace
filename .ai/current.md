@@ -84,6 +84,11 @@ Home created on 2026-10-12:
 unreviewed, on the branch `archive/ins-only-stash`. No GPS-denied result or
 evidence exists.
 
+Shahin-E SITL model (2026-10-13): model, world, and standalone parameter file
+are in place with launch targets `plane-shahin-e` / `gazebo-plane-shahin-e`;
+not flown. Sources and Gates 0-5:
+`governance/runbooks/features/gps_denied_navigation/shahin_e_model_sources.md`.
+
 ## Current Pointers
 
 - Workspace status: `docs/operations/workspace_status.md`
