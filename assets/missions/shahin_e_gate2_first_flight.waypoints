@@ -1,0 +1,16 @@
+QGC WPL 110
+# SHAHIN-E GATE 2 FIRST FLIGHT
+# Brief: Gate 2 of the Shahin-E model validation (gps_denied_navigation feature).
+# Home = shahin_e_runway.sdf spherical coordinates. All legs on the home latitude (due East).
+# seq 1 takeoff: pitch 15 = TKOFF_LVL_PITCH, alt 50 m = TKOFF_ALT (real values, unchanged).
+# seq 2 climb to 200 m by 1500 m East; seq 3 settle level to 2000 m East.
+# seq 3 -> 4: 3 km straight level leg at 200 m (2000 m -> 5000 m East), the Gate 2 record window.
+# seq 4 -> 5: 180 deg turn and 3 km back West at 200 m.
+# seq 6: loiter over home at 200 m (radius WP_LOITER_RAD); no RTL and no landing (Gate 2 has none).
+0	1	0	16	0	0	0	0	-35.3632620	149.1652370	584.00	1
+1	0	3	22	15.0	0	0	0	-35.3632620	149.1685380	50.00	1
+2	0	3	16	0	0	0	0	-35.3632620	149.1817418	200.00	1
+3	0	3	16	0	0	0	0	-35.3632620	149.1872433	200.00	1
+4	0	3	16	0	0	0	0	-35.3632620	149.2202529	200.00	1
+5	0	3	16	0	0	0	0	-35.3632620	149.1872433	200.00	1
+6	0	3	17	0	0	0	0	-35.3632620	149.1652370	200.00	1

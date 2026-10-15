@@ -34,6 +34,12 @@ Active waypoint missions live directly in this directory.
   `DO_CHANGE_SPEED`, so the selected overlay's `AIRSPEED_CRUISE` is the sole
   cruise-speed source. Seq numbering and the seq-4 injection contract match
   the speed-15 variant.
+- `shahin_e_gate2_first_flight.waypoints`
+  Purpose: Shahin-E model validation Gate 2 first flight (gps_denied_navigation).
+  Takeoff to 50 m with the real takeoff values, climb to 200 m, a 3 km straight
+  level Eastbound record leg, a 180 deg turn and 3 km back, then an unlimited
+  loiter over home at 200 m. No RTL and no landing. See
+  `governance/runbooks/features/gps_denied_navigation/shahin_e_model_sources.md`.
 - `gps_failure_behavior_mission.waypoints`
   Purpose: active GPS failure behavior shorter final-science candidate. It uses a
   1000 m controlled baseline, injects on the first seq-4 edge, observes the
