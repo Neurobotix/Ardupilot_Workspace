@@ -42,7 +42,11 @@ validation gates are in `shahin_e_model_sources.md`. Stage 1b (2026-10-13)
 added the launch targets `plane-shahin-e` (loads `config/vehicles/shahin_e.parm`
 only, `--wipe-eeprom`, `-f JSON`, `udp:127.0.0.1:14551`, local override
 excluded) and `gazebo-plane-shahin-e` (`assets/worlds/shahin_e_runway.sdf`).
-Structural tests: `tests/unit/test_shahin_e_launch_targets.py`. Not flown;
+Structural tests: `tests/unit/test_shahin_e_launch_targets.py` and
+`tests/unit/test_shahin_e_model_assets.py` (parameter-file line length, flap input,
+rangefinder wiring). Gate 1 (2026-10-13/15): rudder sign flipped, all control surfaces
+checked; the model gained a downward rangefinder because the SITL rangefinder gets data
+only from a Gazebo range sensor under the JSON backend. Not flown;
 Gates 0-4 are open. Gate run records go to
 `var/analysis/shahin_e_model_validation/gate_results.md`.
 
