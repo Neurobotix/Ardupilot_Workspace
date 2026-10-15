@@ -138,7 +138,7 @@ EK3_SRC2_VELXY 0
 EK3_SRC2_VELZ 0
 EK3_SRC2_YAW 3
 EK3_SRC3_POSXY 0
-EK3_SRC3_POSZ 2
+# EK3_SRC3_POSZ 2  (real value; SITL exception below)
 EK3_SRC3_VELXY 0
 EK3_SRC3_VELZ 0
 EK3_SRC3_YAW 2
@@ -550,15 +550,13 @@ RC9_OPTION 208
 RC9_MIN 1100
 RC9_MAX 1900
 RC9_TRIM 1500
-# Rangefinder: the real aircraft has one (RNGFND1_TYPE 25) and EK3_SRC3_POSZ 2 needs it.
-# SITL rangefinder (type 100) with the real range, orientation and landing use.
-RNGFND1_TYPE 100
-RNGFND1_MIN 0.1
-RNGFND1_MAX 12
-RNGFND1_ORIENT 25
-RNGFND1_GNDCLR 0.25
-RNGFND_LANDING 1
-RNGFND_LND_ORNT 25
+# ===================== SITL exceptions to real values (documented) =====================
+# EKF source set 3 is a manual backup set (selected only by an RC switch) whose height source
+# is the rangefinder. Simulating that rangefinder broke Gazebo lock-step (Gate 1 run 3), so
+# set 3 uses the barometer here. Source set 1 (the one used in flight) is unchanged.
+EK3_SRC3_POSZ 1
+# Real battery capacity (24 Ah) so the SITL battery does not warn during long runs.
+BATT_CAPACITY 24000
 
 # ===================== SITL section (not from the real aircraft) =====================
 # Gazebo JSON backend, simulated airspeed sensor, calm SITL wind, SITL battery.

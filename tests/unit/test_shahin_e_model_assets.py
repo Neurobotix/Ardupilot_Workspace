@@ -6,8 +6,11 @@ These tests never launch SITL or Gazebo. They prove:
   reads defaults files with a 100-byte buffer (`char line[100]`) and parses
   each chunk of a longer line as its own `NAME value` pair; on 2026-10-13 this
   silently set `RC3_MAX` and `LOG_FILE_BUFSIZE` to 0.
-- The parameter file keeps the real aircraft's flap input and a SITL
-  rangefinder.
+- The parameter file keeps the real aircraft's flap input.
+- No EKF source set needs a rangefinder, since SITL has none: with the JSON
+  backend a rangefinder needs a Gazebo range sensor, and that sensor broke
+  lock-step at Gate 1 run 3. Arming would otherwise fail with
+  `AHRS: EK3 sources require RangeFinder`.
 """
 from __future__ import annotations
 
@@ -51,12 +54,17 @@ class ShahinEParameterFileTests(unittest.TestCase):
         self.assertEqual("1100", self.params["RC9_MIN"])
         self.assertEqual("1900", self.params["RC9_MAX"])
 
-    def test_sitl_rangefinder_matches_real_geometry(self) -> None:
-        self.assertEqual("100", self.params["RNGFND1_TYPE"])
-        self.assertEqual("25", self.params["RNGFND1_ORIENT"])
-        self.assertEqual("0.1", self.params["RNGFND1_MIN"])
-        self.assertEqual("12", self.params["RNGFND1_MAX"])
-        self.assertEqual("0.25", self.params["RNGFND1_GNDCLR"])
+    def test_no_rangefinder_and_no_ekf_source_needs_one(self) -> None:
+        self.assertEqual("0", self.params.get("RNGFND1_TYPE", "0"))
+        rangefinder_source = "2"  # EK3_SRCn_POSZ value for a rangefinder
+        for n in (1, 2, 3):
+            self.assertNotEqual(rangefinder_source, self.params[f"EK3_SRC{n}_POSZ"])
+
+    def test_flight_source_set_is_the_real_one(self) -> None:
+        # Only the RC-switched backup set 3 is a SITL exception.
+        self.assertEqual("1", self.params["EK3_SRC1_POSZ"])
+        self.assertEqual("3", self.params["EK3_SRC1_POSXY"])
+        self.assertEqual("3", self.params["EK3_SRC1_VELXY"])
 
 
 if __name__ == "__main__":

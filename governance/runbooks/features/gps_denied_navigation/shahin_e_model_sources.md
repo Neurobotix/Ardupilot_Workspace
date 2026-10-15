@@ -1,6 +1,7 @@
 # Shahin-E SITL Model: Where Every Number Comes From
 
-Status: Stage 1 written 2026-10-13. Not flown yet. Gates 0-5 below decide whether it is usable.
+Status: Stage 1 written 2026-10-13. Gate 1 control-surface checks done 2026-10-15; arming and
+throttle check pending. Not flown yet. Gates 0-5 below decide whether it is usable.
 
 Files:
 
@@ -71,7 +72,8 @@ motor (kV) and battery, knob 2 can be cross-checked: full speed in rad/s ~ kV x 
 | SERVO5 | Rudder | 950-2200, 1500 | rudder |
 | SERVO11 / SERVO12 | Throttle left / right | 1100-2000 | left / right motor |
 
-Joint directions are unverified until Gate 1. If a surface moves the wrong way, the fix is a sign
+Gate 1 (2026-10-13/15) checked every surface; the rudder `<multiplier>` was sign-flipped (results in
+`var/analysis/shahin_e_model_validation/gate_results.md`). If a surface moves the wrong way, the fix is a sign
 flip of that `<multiplier>` in the model. Never change SERVO params.
 
 ## 5. Parameters
@@ -79,7 +81,11 @@ flip of that `<multiplier>` in the model. Never change SERVO params.
 `config/vehicles/shahin_e.parm` = the 1104 log params minus 569 hardware-specific ones (compass
 and IMU calibration, sensor IDs, ports, OSD, battery wiring, fence, board trim; the full list is at
 the end of the file), plus a short SITL section (JSON backend, simulated airspeed, calm SITL wind,
-SITL battery). All flight, navigation, TECS, limits, takeoff, landing and servo params are unchanged.
+SITL battery). All flight, navigation, TECS, limits, takeoff, landing and servo params are unchanged,
+except one documented SITL exception: `EK3_SRC3_POSZ` 2 -> 1. Source set 3 is a backup selected only by
+an RC switch; its height source is the real aircraft's rangefinder, which SITL does not simulate (see
+change log, 2026-10-15). Source set 1, used in flight, is unchanged. The real flap input
+(`RC9_OPTION 208`) and battery capacity (`BATT_CAPACITY 24000`) are kept.
 
 Other observations: COMPASS_MOTCT is 0 (no motor-current compensation configured on the real aircraft),
 EK3_IMU_MASK is 1 (one IMU used), LOG_REPLAY is 1 but the log has no EKF3 messages.
@@ -100,6 +106,9 @@ EK3_IMU_MASK is 1 (one IMU used), LOG_REPLAY is 1 but the log has no EKF3 messag
 | Date | Change | Reason |
 | --- | --- | --- |
 | 2026-10-13 | Gate 3 target changed from whole-flight (56 %, 4.5-4.9 deg) to calm window (54 %, 4.1 deg). Knob start values updated to match. Made before any simulation run. | The calm window (minutes 30-45) matches the simulation conditions: no wind, constant 200 m, no climbs. The windy window needed +4.5 % throttle and about +1 deg pitch, but it also differs in altitude, climbs and battery state, so the cause is not isolated. |
+| 2026-10-13 | Rudder `<multiplier>` sign flipped (1.0471976 -> -1.0471976). | Gate 1 run 1: yaw right gave a nose-left rudder moment (fin LiftDrag upward +y, rad_to_cl -1.5). Allowed by the brief. |
+| 2026-10-14 | `shahin_e.parm` comment lines wrapped (max 93 chars); real flap input `RC9_OPTION 208` restored. | Long comment lines were split by ArduPilot's 100-byte reader and zeroed `RC3_MAX`, `LOG_FILE_BUFSIZE` and 6 other params. Reviewer change; no other value changed. |
+| 2026-10-15 | SITL rangefinder tried and dropped: `gpu_lidar` added (`ee6a8b0`), then reverted (`4891fc9`); rangefinder params removed; `EK3_SRC3_POSZ` 2 -> 1 (SITL exception); `BATT_CAPACITY 24000` (real value). | With the JSON backend a rangefinder needs a Gazebo range sensor, and that sensor broke lock-step (Gate 1 run 3: missed input frames, gyro 9 Hz, GPS bad fix, logger stuck). The study flies at 200-400 m, so a 12 m rangefinder adds nothing. Reviewer decision. |
 
 ## 8. Open questions
 
