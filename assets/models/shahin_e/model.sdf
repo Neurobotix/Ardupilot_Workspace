@@ -292,10 +292,10 @@
         <servo_min>1300</servo_min><servo_max>1800</servo_max>
         <type>COMMAND</type><cmd_topic>/shahin_e/right_flap_joint/cmd_pos</cmd_topic>
       </control>
-      <!-- SERVO5 Rudder 950-2200 trim 1500 -->
+      <!-- SERVO5 Rudder 950-2200 trim 1500; sign flipped at Gate 1 (2026-10-13): yaw right gave +joint = nose left -->
       <control channel="4">
         <jointName>rudder_joint</jointName>
-        <multiplier>1.0471976</multiplier><offset>-0.44</offset>
+        <multiplier>-1.0471976</multiplier><offset>-0.44</offset>
         <servo_min>950</servo_min><servo_max>2200</servo_max>
         <type>COMMAND</type><cmd_topic>/shahin_e/rudder_joint/cmd_pos</cmd_topic>
       </control>

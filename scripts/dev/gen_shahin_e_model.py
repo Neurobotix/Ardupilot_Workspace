@@ -198,7 +198,7 @@ out.append(control(1, "left_elevator_joint", 1.0471976, off(1433, 800, 2200), 80
 out.append(control(6, "right_elevator_joint", 1.0471976, off(1433, 800, 2200), 800, 2200, "SERVO7 Elevator 800-2200 trim 1433"))
 out.append(control(2, "left_flap_joint", 0.7, -1.0, 1300, 1800, "SERVO3 Flap 1300-1800 REVERSED 1: 1800 = retracted, 1300 = full (0.7 rad down)"))
 out.append(control(7, "right_flap_joint", 0.7, -1.0, 1300, 1800, "SERVO8 Flap 1300-1800 REVERSED 1"))
-out.append(control(4, "rudder_joint", 1.0471976, off(1500, 950, 2200), 950, 2200, "SERVO5 Rudder 950-2200 trim 1500"))
+out.append(control(4, "rudder_joint", -1.0471976, off(1500, 950, 2200), 950, 2200, "SERVO5 Rudder 950-2200 trim 1500; sign flipped at Gate 1 (2026-10-13): yaw right gave +joint = nose left"))
 out.append(control(10, "left_motor_joint", MOTOR_MULT, 0, 1100, 2000, "SERVO11 Throttle Left 1100-2000", kind="VELOCITY"))
 out.append(control(11, "right_motor_joint", MOTOR_MULT, 0, 1100, 2000, "SERVO12 Throttle Right 1100-2000", kind="VELOCITY"))
 out.append("    </plugin>\n  </model>\n</sdf>\n")
