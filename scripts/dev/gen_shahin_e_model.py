@@ -32,12 +32,6 @@ A0_HT = -0.06                   # approximates wing downwash at the tail
 MOTOR_Y, MOTOR_X, MOTOR_Z = 0.30, 0.19, 0.06    # wing leading edge, next to fuselage (photos)
 MOTOR_MULT = 1310               # KNOB 2 initial: rad/s at full throttle -> ~54% at cruise
 SMALL = 0.01                    # mass of each control-surface link
-GEAR_Z, GEAR_R = -0.22, 0.04    # gear contact spheres: bottom at z = -0.26 (ground on the gear)
-RNG_GNDCLR = 0.25               # rangefinder reading on the ground (LOG: RNGFND1_GNDCLR)
-RNG_MIN, RNG_MAX = 0.1, 12.0    # LOG: RNGFND1_MIN / RNGFND1_MAX
-# Downward rangefinder: 0.25 m above the gear bottom; 0.10 m to the side so the ray
-# clears the fuselage box (bottom z = -0.07). Position EST; reading matches the LOG.
-RNG_POS = (0.0, 0.10, round(GEAR_Z - GEAR_R + RNG_GNDCLR, 3))
 MOTOR_MASS = 0.025
 BASE_MASS = round(MASS - 7 * SMALL - 2 * MOTOR_MASS - 0.001, 3)   # 7 control-surface links
 
@@ -140,26 +134,15 @@ out.append(box("wing_visual", f"{CHORD:.3f} {SPAN} 0.03", f"{0.063 - CHORD/2:.4f
 out.append(box("htail_visual", f"{HT_CHORD} {HT_SPAN} 0.01", f"{HT_X - HT_CHORD/4:.4f} 0 0 0 0 0", "0.55 0.57 0.6 1"))
 out.append(box("fin_visual", f"{VT_CHORD} 0.01 {VT_H}", f"{VT_X - VT_CHORD/4:.4f} 0 {VT_Z} 0 0 0", "0.3 0.33 0.38 1"))
 out.append(box("fuselage_collision", "1.80 0.14 0.14", "-0.25 0 0 0 0 0", collision=True))
-out.append(sphere_col("nose_gear_collision", GEAR_R, f"0.55 0 {GEAR_Z} 0 0 0"))
-out.append(sphere_col("left_main_gear_collision", GEAR_R, f"-0.08 0.25 {GEAR_Z} 0 0 0"))
-out.append(sphere_col("right_main_gear_collision", GEAR_R, f"-0.08 -0.25 {GEAR_Z} 0 0 0"))
+out.append(sphere_col("nose_gear_collision", 0.04, "0.55 0 -0.22 0 0 0"))
+out.append(sphere_col("left_main_gear_collision", 0.04, "-0.08 0.25 -0.22 0 0 0"))
+out.append(sphere_col("right_main_gear_collision", 0.04, "-0.08 -0.25 -0.22 0 0 0"))
 out.append('''      <sensor name="imu_sensor" type="imu">
         <pose degrees="true">0 0 0 180 0 0</pose><always_on>1</always_on><update_rate>1000.0</update_rate>
       </sensor>
       <sensor name="navsat_sensor" type="navsat"><always_on>1</always_on><update_rate>1</update_rate></sensor>
-''')
-# Downward single-ray rangefinder; ArduPilotPlugin sends it to SITL as rng_1 (RNGFND1_TYPE 100).
-out.append(f'''      <sensor name="rangefinder" type="gpu_lidar">
-        <pose>{RNG_POS[0]} {RNG_POS[1]} {RNG_POS[2]} 0 1.5707963 0</pose>
-        <always_on>1</always_on><update_rate>20</update_rate><topic>/shahin_e/rangefinder</topic>
-        <ray>
-          <scan><horizontal><samples>1</samples><resolution>1</resolution><min_angle>0</min_angle><max_angle>0</max_angle></horizontal></scan>
-          <range><min>{RNG_MIN}</min><max>{RNG_MAX}</max><resolution>0.01</resolution></range>
-        </ray>
-      </sensor>
     </link>
-''')
-out.append('''
+
     <link name="pitot_link">
       <enable_wind>true</enable_wind>
       <pose>0.70 0 0 0 0 0</pose>
@@ -208,7 +191,6 @@ out.append('''    <plugin name="ArduPilotPlugin" filename="ArduPilotPlugin">
       <gazeboXYZToNED>0 0 0 3.141593 0 1.57079632</gazeboXYZToNED>
       <imuName>base_link::imu_sensor</imuName>
       <airspeed_topic>/airspeed</airspeed_topic>
-      <sensor><type>rangefinder</type><index>1</index><topic>/shahin_e/rangefinder</topic></sensor>
 ''')
 out.append(control(0, "left_aileron_joint", 1.0471976, off(1554, 1100, 1900), 1100, 1900, "SERVO1 Aileron 1100-1900 trim 1554 REVERSED 1 (assumed left)"))
 out.append(control(5, "right_aileron_joint", 1.0471976, off(1426, 900, 2150), 900, 2150, "SERVO6 Aileron 900-2150 trim 1426 REVERSED 0 (assumed right)"))

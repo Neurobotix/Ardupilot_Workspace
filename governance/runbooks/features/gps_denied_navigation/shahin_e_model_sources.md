@@ -1,7 +1,6 @@
 # Shahin-E SITL Model: Where Every Number Comes From
 
-Status: Stage 1 written 2026-10-13. Gate 1 control-surface checks done 2026-10-15; throttle check pending.
-Not flown yet. Gates 0-5 below decide whether it is usable.
+Status: Stage 1 written 2026-10-13. Not flown yet. Gates 0-5 below decide whether it is usable.
 
 Files:
 
@@ -40,7 +39,6 @@ Source labels: **LOG** = real flight log 2025-12-30 (Shahin-E). **ENG** = engine
 | Tail volumes | horizontal 0.57, vertical 0.044 | computed; both inside the normal range for this aircraft class |
 | Motors | 2 tractor, wing leading edge, y = +/-0.30 m | PHOTO, LOG (SERVO11/12 = throttle left/right, RUDD_DT_GAIN 10) |
 | Landing gear | 3 low-friction contact spheres (nose + 2 mains) | PHOTO (tricycle, fixed); simplified, no wheel steering |
-| Rangefinder | downward single-ray `gpu_lidar` at x 0, y +0.10, z -0.01 m; reads 0.25 m on the gear, range 0.1-12 m; sent to SITL as `rng_1` | LOG (RNGFND1 GNDCLR 0.25, MIN 0.1, MAX 12, ORIENT 25); position EST (0.10 m to the side so the ray clears the fuselage box) |
 | Inertia Ixx / Iyy / Izz | 1.4 / 1.2 / 2.5 kg m2 | EST (wing 2.5 kg spread over span, fuselage mass near CG) |
 
 ## 3. Aerodynamics (flat-plate LiftDrag surfaces)
@@ -73,8 +71,7 @@ motor (kV) and battery, knob 2 can be cross-checked: full speed in rad/s ~ kV x 
 | SERVO5 | Rudder | 950-2200, 1500 | rudder |
 | SERVO11 / SERVO12 | Throttle left / right | 1100-2000 | left / right motor |
 
-Gate 1 (2026-10-13/15) checked every surface; the rudder `<multiplier>` was sign-flipped (results in
-`var/analysis/shahin_e_model_validation/gate_results.md`). If a surface moves the wrong way, the fix is a sign
+Joint directions are unverified until Gate 1. If a surface moves the wrong way, the fix is a sign
 flip of that `<multiplier>` in the model. Never change SERVO params.
 
 ## 5. Parameters
@@ -103,9 +100,6 @@ EK3_IMU_MASK is 1 (one IMU used), LOG_REPLAY is 1 but the log has no EKF3 messag
 | Date | Change | Reason |
 | --- | --- | --- |
 | 2026-10-13 | Gate 3 target changed from whole-flight (56 %, 4.5-4.9 deg) to calm window (54 %, 4.1 deg). Knob start values updated to match. Made before any simulation run. | The calm window (minutes 30-45) matches the simulation conditions: no wind, constant 200 m, no climbs. The windy window needed +4.5 % throttle and about +1 deg pitch, but it also differs in altitude, climbs and battery state, so the cause is not isolated. |
-| 2026-10-13 | Rudder `<multiplier>` sign flipped (1.0471976 -> -1.0471976). | Gate 1 run 1: yaw right gave a nose-left rudder moment (fin LiftDrag upward +y, rad_to_cl -1.5). Allowed by the brief. |
-| 2026-10-14 | `shahin_e.parm` comment lines wrapped; real flap input (`RC9_OPTION 208`) and rangefinder geometry restored with a SITL rangefinder (`RNGFND1_TYPE 100`). | Long comment lines were split by ArduPilot's 100-byte reader and zeroed `RC3_MAX`, `LOG_FILE_BUFSIZE` and 6 other params. Reviewer change; no other value changed. |
-| 2026-10-15 | Downward rangefinder added to the model and the Sensors system to the world. | With the JSON backend the SITL rangefinder only receives data from a model range sensor (Gate 1 run 2: `Rangefinder 1: No Data`). Approved by Ahmed; outside the brief's allowed model edits. |
 
 ## 8. Open questions
 
