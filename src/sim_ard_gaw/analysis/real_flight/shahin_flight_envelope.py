@@ -352,6 +352,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("bin", type=Path)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--tmin", type=float, default=None,
+                    help="analyse only from this minute (same clock as the wind table)")
+    ap.add_argument("--tmax", type=float, default=None,
+                    help="analyse only up to this minute (same clock as the wind table)")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -359,6 +363,11 @@ def main():
     series, params, modes = read_log(args.bin)
     g = build_grid(series, modes)
     air = airborne_mask(g)
+    minute = (g["t"] - g["t"][0]) / 60.0
+    if args.tmin is not None:
+        air &= minute >= args.tmin
+    if args.tmax is not None:
+        air &= minute < args.tmax
 
     with (args.out / "params_full.parm").open("w") as f:
         for k in sorted(params):
@@ -378,6 +387,7 @@ def main():
 
     overview = {
         "log": args.bin.name,
+        "window_minutes": [args.tmin, args.tmax],
         "messages_found": sorted(series),
         "messages_missing": sorted(set(WANTED) - set(series) - {"PARM", "MODE"}),
         "params_found": len(params),
