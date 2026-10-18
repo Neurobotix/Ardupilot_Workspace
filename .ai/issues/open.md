@@ -45,12 +45,14 @@
 
 ## Open After 2026-10-12 Workspace Cleanup
 
-- `env/` has no `pymavlink`, although `requirements.txt` lists it. Eleven
-  `tests/unit` modules fail at import, and `analyze_flights.py` and the
-  campaign plugins cannot run in this venv. Five further unit tests fail
-  (`test_airspeed_failure_mechanism_gate` real-BIN case and four
-  `test_test_suite_phase3c_zero_legacy_foundation` cases). All of this
-  predates the cleanup; the same counts were measured before and after it.
+- Superseded 2026-10-13: the system Python moved from 3.12 to 3.14 and the old
+  `env/` lost `empy`, MAVProxy and the other 3.12 packages (SITL could not build).
+  Ahmed rebuilt `env/` on Python 3.14 from `requirements.txt` plus `pandas`,
+  `scipy`, `numexpr`, `bottleneck`, `pynmeagps`, `cairosvg`, `lxml` and an
+  editable install, and rebuilt `arduplane`. `tests/unit` passed in full on
+  2026-10-15 (576 passed). `requirements.txt` still omits `pandas` and `scipy`.
+  Runs from 2026-10-13 on use Python 3.14 / pymavlink 2.4.50; earlier evidence
+  used Python 3.12 / pymavlink 2.4.49.
 - `make doctor` fails its `.private` policy group because of local notes
   (duplicate headings, fenced commands, unmarked canonical links). This also
   predates the cleanup.
@@ -64,6 +66,18 @@
 - The recovered INS-only implementation on `archive/ins-only-stash` is
   unreviewed and unmerged. See
   `governance/runbooks/features/gps_denied_navigation/implementation.md`.
+
+## GPS Failure Lane (found by the Shahin-E Gate 0 regression, 2026-10-18)
+
+- During the baseline `nominal` live case the live `gps_monitor` printed a
+  constant `gap=31.0m` while the post-cleanup BIN analysis gives a maximum
+  truth-belief gap of 0.38 m (`truth_vs_belief.json`). The BIN analysis is
+  authoritative; whether the July runs showed the same live 31 m was not
+  checked (live monitor output is not saved). Run:
+  `var/runs/shahin_e_model_validation/gate0_mini_talon_nominal/`. Owner: GPS
+  failure lane, not the GPS-denied study.
+- The campaign `manifest.json` attempt stays `status: running` after a
+  completed `--live-case` run (also in the July v6 manifest).
 
 ## Tooling Notes
 

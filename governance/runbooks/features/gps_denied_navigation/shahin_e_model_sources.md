@@ -115,3 +115,15 @@ EK3_IMU_MASK is 1 (one IMU used), LOG_REPLAY is 1 but the log has no EKF3 messag
 - Why the windy window needs about +4.5 % throttle and +1 deg pitch: wind, altitude, gentle climbs, or battery
   voltage. Test later in simulation by adding wind alone and comparing.
 - Real CG position (ruler measurement), tail dimensions, motor kV and propeller, takeoff method.
+
+### Known limitations (reviewer decision 2026-10-18)
+
+- **Full-throttle thrust is not validated.** Gate 2 takeoff: 1.9 -> 19.3 m/s in 1.6 s (~11 m/s^2),
+  static thrust about equal to weight. KNOB 2 calibrates cruise thrust only. Likely cause: the
+  copied Mini Talon blade model gives a very steep thrust-vs-rpm curve.
+- **Pitch response at high speed / full throttle is not validated.** Gate 2: pitch rose to 53 deg
+  after rotation with the elevator at 87 % of down travel, then a pitch oscillation that settled in
+  about 20 s. Likely the same cause (excess thrust and speed). In level flight at 17 m/s the elevator
+  sits 4.6 % from trim.
+- Both are revisited when the engineers send the motor and propeller. If the propeller model
+  changes, Gate 3 is rerun. Gate 4 (climb at ~58 % throttle) shows whether this matters near cruise.
