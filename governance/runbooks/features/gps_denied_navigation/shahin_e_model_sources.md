@@ -1,7 +1,8 @@
 # Shahin-E SITL Model: Where Every Number Comes From
 
-Status: Stage 1 written 2026-10-13. Gates 1, 2, 0 passed 2026-10-15/18; Gate 3 passed 2026-10-18
-(run 1, a0 0.097). Gate 4 next. Results: `var/analysis/shahin_e_model_validation/gate_results.md`.
+Status: Stage 1 written 2026-10-13. Gates 0-4 passed 2026-10-15/18 (Gate 3 run 1, a0 0.097; Gate 4
+untuned: climb 58.1 % / 7.16 deg, descent 56.0 % / 2.08 deg). Gate 5 not run. Results (raw, not
+promoted): `var/analysis/shahin_e_model_validation/gate_results.md`.
 
 Files:
 
