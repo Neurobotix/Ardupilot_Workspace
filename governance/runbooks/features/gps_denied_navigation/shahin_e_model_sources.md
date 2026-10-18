@@ -1,7 +1,7 @@
 # Shahin-E SITL Model: Where Every Number Comes From
 
-Status: Stage 1 written 2026-10-13. Gate 1 control-surface checks done 2026-10-15; arming and
-throttle check pending. Not flown yet. Gates 0-5 below decide whether it is usable.
+Status: Stage 1 written 2026-10-13. Gates 1, 2, 0 passed 2026-10-15/18; Gate 3 passed 2026-10-18
+(run 1, a0 0.097). Gate 4 next. Results: `var/analysis/shahin_e_model_validation/gate_results.md`.
 
 Files:
 
@@ -47,14 +47,14 @@ Source labels: **LOG** = real flight log 2025-12-30 (Shahin-E). **ENG** = engine
 | Item | Value | Source |
 | --- | --- | --- |
 | Wing lift slope | 5.23 /rad | finite-wing formula, aspect ratio 9.9 |
-| Wing a0 | 0.116 rad | **KNOB 1**, start value: gives CL 0.98 at 4.1 deg pitch, 17 m/s, 11 kg |
+| Wing a0 | 0.097 rad (start 0.116) | **KNOB 1**: start value gave CL 0.98 at 4.1 deg pitch, 17 m/s, 11 kg; Gate 3 run 1 set 0.097 (pitch 4.07 deg, throttle 56.5 %) |
 | Wing drag slope (cda) | 0.60 | assumption L/D ~ 8.6 at cruise (drag ~12.5 N). Checked later by the power-off glide |
 | Wing stall | 0.25 rad incl. a0 (CLmax ~ 1.3) | EST; gives stall ~14.8 m/s at 11 kg, ~13.4 m/s at 9 kg (param AIRSPEED_STALL 13) |
 | Tail lift slope | 4.19 /rad | finite-wing formula, aspect ratio 4 |
 | Tail a0 | -0.06 rad | approximates wing downwash at the tail |
 | Control effectiveness | aileron 1.5, flap 1.8, elevator 1.8, rudder 1.5 per rad | EST (flap-effectiveness theory, reduced for 3D) |
 | Propeller | Mini Talon blade surfaces, unchanged | copied; real prop unknown |
-| Motor full-throttle speed | 1310 rad/s | **KNOB 2**, start value: ~54 % throttle for ~12.5 N at 17 m/s |
+| Motor full-throttle speed | 1310 rad/s | **KNOB 2**, start value: ~54 % throttle for ~12.5 N at 17 m/s; unchanged at Gate 3 (throttle 56.5 % inside 54 +/-5) |
 
 Change from the earlier plan: knob 2 is now motor thrust, not drag. Motor and propeller are both
 unknown, so thrust is the honest free value. Drag stays tied to a physical assumption (L/D) that the
@@ -109,6 +109,7 @@ EK3_IMU_MASK is 1 (one IMU used), LOG_REPLAY is 1 but the log has no EKF3 messag
 | 2026-10-13 | Rudder `<multiplier>` sign flipped (1.0471976 -> -1.0471976). | Gate 1 run 1: yaw right gave a nose-left rudder moment (fin LiftDrag upward +y, rad_to_cl -1.5). Allowed by the brief. |
 | 2026-10-14 | `shahin_e.parm` comment lines wrapped (max 93 chars); real flap input `RC9_OPTION 208` restored. | Long comment lines were split by ArduPilot's 100-byte reader and zeroed `RC3_MAX`, `LOG_FILE_BUFSIZE` and 6 other params. Reviewer change; no other value changed. |
 | 2026-10-15 | SITL rangefinder tried and dropped: `gpu_lidar` added (`ee6a8b0`), then reverted (`4891fc9`); rangefinder params removed; `EK3_SRC3_POSZ` 2 -> 1 (SITL exception); `BATT_CAPACITY 24000` (real value). | With the JSON backend a rangefinder needs a Gazebo range sensor, and that sensor broke lock-step (Gate 1 run 3: missed input frames, gyro 9 Hz, GPS bad fix, logger stuck). The study flies at 200-400 m, so a 12 m rangefinder adds nothing. Reviewer decision. |
+| 2026-10-18 | Gate 3: wing `<a0>` 0.116 -> 0.097 (KNOB 1); motor multiplier unchanged. | Gate 2 level pitch was 3.0 deg vs 4.1 target. Run 1 measured pitch 4.07 deg, throttle 56.5 % (16-18 m/s bins, envelope script): inside tolerance. Knobs frozen for Gate 4. |
 
 ## 8. Open questions
 
