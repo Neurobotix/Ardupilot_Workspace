@@ -34,6 +34,11 @@ Active waypoint missions live directly in this directory.
   `DO_CHANGE_SPEED`, so the selected overlay's `AIRSPEED_CRUISE` is the sole
   cruise-speed source. Seq numbering and the seq-4 injection contract match
   the speed-15 variant.
+- `shahin_e_gate4_climb_descent.waypoints`
+  Purpose: Shahin-E model validation Gate 4 independent check (no tuning). Same
+  takeoff and climb as Gate 3, then a 0.93 m/s climb 200 -> 300 m over 1830 m and,
+  after 1 km level, a 0.53 m/s descent 300 -> 200 m over 3200 m (AUTO glide slope
+  at 17 m/s), then 1 km level and a loiter. No RTL and no landing.
 - `shahin_e_gate3_level_cruise.waypoints`
   Purpose: Shahin-E model validation Gate 3 calibration flight. Same takeoff and
   climb as Gate 2, then one continuous 6 km straight level Eastbound leg at 200 m
