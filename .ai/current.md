@@ -85,8 +85,10 @@ unreviewed, on the branch `archive/ins-only-stash`. No GPS-denied result or
 evidence exists.
 
 Shahin-E SITL model (2026-10-13): model, world, and standalone parameter file
-are in place with launch targets `plane-shahin-e` / `gazebo-plane-shahin-e`;
-not flown. Sources and Gates 0-5:
+are in place with launch targets `plane-shahin-e` / `gazebo-plane-shahin-e`.
+Gates 0-4 passed in SITL 2026-10-15/18 (final knobs: wing a0 0.097, motor 1310);
+Gate 5 not run; results are raw, unpromoted notes in
+`var/analysis/shahin_e_model_validation/gate_results.md`. Sources and gates:
 `governance/runbooks/features/gps_denied_navigation/shahin_e_model_sources.md`.
 
 ## Current Pointers

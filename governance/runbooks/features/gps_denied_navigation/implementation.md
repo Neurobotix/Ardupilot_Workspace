@@ -46,8 +46,10 @@ Structural tests: `tests/unit/test_shahin_e_launch_targets.py` and
 `tests/unit/test_shahin_e_model_assets.py` (parameter-file line length, flap input, no
 rangefinder dependency). Gate 1 (2026-10-13/15): rudder sign flipped, all control surfaces
 checked. A SITL rangefinder was tried and dropped (it broke Gazebo lock-step); the backup EKF
-source set 3 uses the barometer in SITL instead. Not flown;
-Gates 0-4 are open. Gate run records go to
+source set 3 uses the barometer in SITL instead. Gates 0-4 passed in SITL
+2026-10-15/18 (Gate 3: wing a0 0.097; Gate 4 untuned). Missions:
+`assets/missions/shahin_e_gate{2_first_flight,3_level_cruise,4_climb_descent}.waypoints`.
+Gate 5 not run. Gate run records go to
 `var/analysis/shahin_e_model_validation/gate_results.md`.
 
 ## Runtime Output
