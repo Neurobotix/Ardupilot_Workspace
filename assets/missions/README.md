@@ -34,6 +34,11 @@ Active waypoint missions live directly in this directory.
   `DO_CHANGE_SPEED`, so the selected overlay's `AIRSPEED_CRUISE` is the sole
   cruise-speed source. Seq numbering and the seq-4 injection contract match
   the speed-15 variant.
+- `shahin_e_gate3_level_cruise.waypoints`
+  Purpose: Shahin-E model validation Gate 3 calibration flight. Same takeoff and
+  climb as Gate 2, then one continuous 6 km straight level Eastbound leg at 200 m
+  and 17 m/s (about 350 s, measured with `shahin_flight_envelope.py`), then a
+  loiter over the leg end. No RTL and no landing.
 - `shahin_e_gate2_first_flight.waypoints`
   Purpose: Shahin-E model validation Gate 2 first flight (gps_denied_navigation).
   Takeoff to 50 m with the real takeoff values, climb to 200 m, a 3 km straight
